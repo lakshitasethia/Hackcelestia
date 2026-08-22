@@ -1,0 +1,189 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Scroll-driven theme tokens, tweened by ScrollEffects.tsx via GSAP
+     ScrollTrigger. Two-tone system from sondaven.com — every theme pairs a
+     background with a foreground guaranteed readable against it. */
+  --bg-scroll: #2c2824;
+  --fg-scroll: #a89474;
+  --fg-muted-scroll: rgba(168, 148, 116, 0.62);
+  --line-scroll: rgba(168, 148, 116, 0.22);
+  --accent-scroll: #ffffff;
+  --surface-scroll: #211e1a;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    /* Lenis drives scrolling; native smooth would fight it. */
+    scroll-behavior: auto;
+    background-color: var(--bg-scroll);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--bg-scroll);
+    color: var(--fg-scroll);
+    font-family: var(--font-sans);
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    overflow-x: hidden;
+    transition: color 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  ::selection {
+    background-color: #a89474;
+    color: #2c2824;
+  }
+
+  /* Lenis */
+  html.lenis,
+  html.lenis body {
+    height: auto;
+  }
+  .lenis.lenis-smooth {
+    scroll-behavior: auto !important;
+  }
+  .lenis.lenis-stopped {
+    overflow: hidden;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* ---------- Typography ---------- */
+  /* Son Daven sets nearly everything uppercase. */
+  .eyebrow {
+    @apply font-sans uppercase text-label tracking-label font-normal text-muted mb-6 block;
+  }
+
+  .headline {
+    @apply font-display uppercase text-fg font-semibold;
+  }
+
+  .lead {
+    @apply text-body-lg text-muted max-w-[60ch];
+  }
+
+  /* ---------- Rules & surfaces ---------- */
+  .rule {
+    @apply w-full border-t;
+    border-color: var(--line-scroll);
+  }
+
+  .surface {
+    background-color: var(--surface-scroll);
+    border: 1px solid var(--line-scroll);
+    transition: background-color 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* ---------- Buttons: outline-first, uppercase, tracked ---------- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-3 font-sans uppercase
+           text-label tracking-label font-medium px-9 py-4 border transition-all duration-500;
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .btn-solid {
+    @apply btn;
+    background-color: var(--fg-scroll);
+    color: var(--bg-scroll);
+    border-color: var(--fg-scroll);
+  }
+  .btn-solid:hover {
+    background-color: transparent;
+    color: var(--fg-scroll);
+  }
+
+  .btn-outline {
+    @apply btn;
+    background-color: transparent;
+    color: var(--fg-scroll);
+    border-color: var(--line-scroll);
+  }
+  .btn-outline:hover {
+    border-color: var(--fg-scroll);
+    background-color: var(--fg-scroll);
+    color: var(--bg-scroll);
+  }
+
+  /* ---------- Link with animated underline ---------- */
+  .link-underline {
+    @apply relative inline-flex items-center gap-2 font-sans uppercase text-label tracking-label font-medium text-fg;
+  }
+  .link-underline::after {
+    content: "";
+    @apply absolute left-0 -bottom-1.5 h-px w-full origin-right scale-x-0;
+    background-color: currentColor;
+    transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .link-underline:hover::after {
+    @apply origin-left scale-x-100;
+  }
+
+  /* ---------- Marquee ---------- */
+  @keyframes marquee {
+    0% {
+      transform: translateX(0%);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+  .animate-marquee {
+    display: flex;
+    width: max-content;
+    animation: marquee 45s linear infinite;
+  }
+  .animate-marquee:hover {
+    animation-play-state: paused;
+  }
+
+  @keyframes twinkle {
+    0%,
+    100% {
+      opacity: 0.15;
+      transform: scale(0.8);
+    }
+    50% {
+      opacity: 0.9;
+      transform: scale(1.15);
+    }
+  }
+  .animate-twinkle {
+    animation: twinkle 4s ease-in-out infinite;
+  }
+}
+
+@layer utilities {
+  /* Reveal initial state, scoped under .gsap-ready so content stays visible
+     if JS never runs instead of being permanently hidden. */
+  .gsap-ready [data-reveal] {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
