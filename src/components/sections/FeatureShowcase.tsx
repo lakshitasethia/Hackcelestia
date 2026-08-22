@@ -12,15 +12,66 @@ export default function FeatureShowcase() {
     <section id="features" data-scroll-theme="tan" className="py-20 sm:py-28 border-b border-line">
       <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 flex flex-col gap-24 sm:gap-32">
         
-        {/* Section Header */}
-        <div data-reveal className="max-w-3xl">
-          <span className="eyebrow">· CAPABILITIES ·</span>
-          <h2 className="font-display text-display-lg font-semibold uppercase text-fg">
-            Designed for granular control, engineered for effortless flow.
-          </h2>
-          <p className="mt-4 text-base sm:text-lg text-muted font-medium">
-            Explore the core architectural breakthroughs powering bespoke travel on Voyage.
-          </p>
+        {/* Section Header — the statement holds the left, an index of what
+            follows holds the right, so the full-width container does not run
+            empty on wide screens. */}
+        <div
+          data-reveal
+          className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-end"
+        >
+          <div className="lg:col-span-7">
+            <span className="eyebrow">· CAPABILITIES ·</span>
+            <h2 className="font-display text-display-lg font-semibold uppercase text-fg">
+              Designed for granular control, engineered for effortless flow.
+            </h2>
+            <p className="mt-6 text-body-lg text-muted max-w-2xl">
+              Four architectural decisions separate a Voyage itinerary from a fixed
+              agency package — modular components, visible trade-offs, supplier-rate
+              pricing, and a plan that repairs itself.
+            </p>
+          </div>
+
+          {/* Index of the four capabilities detailed below. */}
+          <ol className="lg:col-span-5 lg:pl-12 lg:border-l border-line divide-y divide-line">
+            {[
+              {
+                n: "01",
+                name: "Modular planning",
+                note: "Start blank or from a blueprint, then swap any single component.",
+              },
+              {
+                n: "02",
+                name: "Transparent decisions",
+                note: "Compare stays side by side with live price deltas, not brochures.",
+              },
+              {
+                n: "03",
+                name: "Zero black box",
+                note: "Every line itemised at the rate the supplier actually quoted.",
+              },
+              {
+                n: "04",
+                name: "Adapt on the fly",
+                note: "One disruption re-routes every downstream booking automatically.",
+                flagship: true,
+              },
+            ].map((item) => (
+              <li key={item.n} className="flex gap-5 py-5 first:pt-0 last:pb-0">
+                <span className="font-display text-label tracking-label text-muted pt-1 shrink-0">
+                  {item.n}
+                </span>
+                <div>
+                  <span className="font-display uppercase text-label tracking-label text-fg">
+                    {item.name}
+                    {item.flagship && (
+                      <span className="ml-3 text-accent normal-case">— flagship</span>
+                    )}
+                  </span>
+                  <p className="mt-2 text-sm text-muted leading-relaxed">{item.note}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
         </div>
 
         {/* Feature 1: Build your own itinerary (Image Left, Text Right) */}
