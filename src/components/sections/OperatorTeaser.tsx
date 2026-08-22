@@ -60,7 +60,7 @@ export default function OperatorTeaser() {
                   <div className="w-10 h-10 border border-line bg-surface flex items-center justify-center text-accent group-hover:bg-fg group-hover:text-bg transition-colors">
                     <Icon className="w-5 h-5" />
                   </div>
-                  <span className="font-sans text-[10px] uppercase font-bold tracking-widest text-accent bg-surface px-2 py-0.5 border border-line">
+                  <span className="font-sans text-xs uppercase font-bold tracking-widest text-accent bg-surface px-2 py-0.5 border border-line">
                     {feat.tag}
                   </span>
                 </div>

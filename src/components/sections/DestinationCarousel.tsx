@@ -156,12 +156,12 @@ export default function DestinationCarousel() {
                 />
                 
                 {/* Top Badge */}
-                <div className="absolute top-3 left-3 bg-surface border border-line px-2.5 py-1 text-[10px] font-sans font-bold uppercase tracking-wider text-fg">
+                <div className="absolute top-3 left-3 bg-surface border border-line px-2.5 py-1 text-xs font-sans font-bold uppercase tracking-wider text-fg">
                   {dest.tag}
                 </div>
 
                 {/* Rating Badge */}
-                <div className="absolute top-3 right-3 bg-fg text-bg px-2 py-1 text-[11px] font-sans font-bold flex items-center gap-1">
+                <div className="absolute top-3 right-3 bg-fg text-bg px-2 py-1 text-sm font-sans font-bold flex items-center gap-1">
                   <Star className="w-3 h-3 text-accent fill-accent" />
                   {dest.rating}
                 </div>
@@ -193,9 +193,9 @@ export default function DestinationCarousel() {
                 {/* Pricing & CTA */}
                 <div className="flex items-center justify-between border-t border-line pt-3 mt-3">
                   <div>
-                    <span className="font-sans text-[10px] uppercase text-muted block">From</span>
+                    <span className="font-sans text-xs uppercase text-muted block">From</span>
                     <span className="font-sans text-base font-extrabold text-fg">{dest.price}</span>
-                    <span className="font-sans text-[10px] text-muted ml-1">/ person</span>
+                    <span className="font-sans text-xs text-muted ml-1">/ person</span>
                   </div>
 
                   <a

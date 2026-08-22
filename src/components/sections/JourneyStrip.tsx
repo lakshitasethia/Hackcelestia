@@ -216,7 +216,7 @@ export default function JourneyStrip() {
                   <span className="font-sans text-xs font-bold uppercase tracking-wider text-bg bg-fg px-2.5 py-1">
                     {step.num}
                   </span>
-                  <span className="font-sans text-[10px] uppercase font-bold tracking-widest text-muted bg-surface border border-line px-2 py-0.5">
+                  <span className="font-sans text-xs uppercase font-bold tracking-widest text-muted bg-surface border border-line px-2 py-0.5">
                     {step.tag}
                   </span>
                 </div>

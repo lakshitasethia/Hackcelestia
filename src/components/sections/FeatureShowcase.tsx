@@ -92,7 +92,7 @@ export default function FeatureShowcase() {
                     <span className="w-2.5 h-2.5 rounded-full bg-fg" />
                     <span className="font-sans text-xs font-bold uppercase text-fg">Modular Component Builder</span>
                   </div>
-                  <span className="font-sans text-[10px] font-bold text-muted bg-surface border border-line px-2 py-0.5">
+                  <span className="font-sans text-xs font-bold text-muted bg-surface border border-line px-2 py-0.5">
                     Drag & Drop Ready
                   </span>
                 </div>
@@ -159,14 +159,14 @@ export default function FeatureShowcase() {
                       sizes="(max-width: 1024px) 50vw, 25vw"
                     />
                   </div>
-                  <span className="font-sans text-[10px] font-bold text-bg bg-fg border border-line px-1.5 py-0.5">
+                  <span className="font-sans text-xs font-bold text-bg bg-fg border border-line px-1.5 py-0.5">
                     Option A · Suite
                   </span>
                   <h4 className="font-display font-bold text-sm sm:text-base text-fg mt-1.5">
                     Canaves Oia Suites
                   </h4>
                   <div className="mt-2 font-sans text-xs font-bold text-fg">
-                    $620 <span className="text-[10px] font-normal text-muted">/ night</span>
+                    $620 <span className="text-xs font-normal text-muted">/ night</span>
                   </div>
                 </div>
 
@@ -181,14 +181,14 @@ export default function FeatureShowcase() {
                       sizes="(max-width: 1024px) 50vw, 25vw"
                     />
                   </div>
-                  <span className="font-sans text-[10px] font-bold text-muted bg-surface border border-line px-1.5 py-0.5">
+                  <span className="font-sans text-xs font-bold text-muted bg-surface border border-line px-1.5 py-0.5">
                     Option B · Cave Villa
                   </span>
                   <h4 className="font-display font-bold text-sm sm:text-base text-fg mt-1.5">
                     Grace Hotel Imerovigli
                   </h4>
                   <div className="mt-2 font-sans text-xs font-bold text-fg">
-                    $510 <span className="text-[10px] font-normal text-muted">/ night</span>
+                    $510 <span className="text-xs font-normal text-muted">/ night</span>
                   </div>
                 </div>
               </div>
@@ -218,7 +218,7 @@ export default function FeatureShowcase() {
                   </h4>
                 </div>
                 <div className="text-right">
-                  <span className="font-sans text-[10px] text-muted uppercase">Net Guaranteed</span>
+                  <span className="font-sans text-xs text-muted uppercase">Net Guaranteed</span>
                   <div className="font-sans text-xl sm:text-2xl font-black text-accent">$4,280.00</div>
                 </div>
               </div>
@@ -311,7 +311,7 @@ export default function FeatureShowcase() {
                   Itinerary Dependency Graph (Day 1)
                 </span>
                 <span
-                  className={`font-sans text-[11px] font-bold px-2.5 py-0.5 border ${
+                  className={`font-sans text-sm font-bold px-2.5 py-0.5 border ${
  delayTriggered
  ? "bg-surface text-accent border-line animate-pulse"
  : "bg-surface text-accent border-line"
@@ -337,20 +337,20 @@ export default function FeatureShowcase() {
                     </div>
                     <div>
                       <div className="font-bold text-sm">Flight AF 1420 (CDG → NAP)</div>
-                      <div className="text-[11px] text-muted">Scheduled Inbound Leg</div>
+                      <div className="text-sm text-muted">Scheduled Inbound Leg</div>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className={`font-bold ${delayTriggered ? "text-accent" : "text-accent"}`}>
                       {delayTriggered ? "Delayed to 17:30 (+3h)" : "On-Time · 14:30"}
                     </div>
-                    {delayTriggered && <span className="text-[10px] text-accent uppercase">Trigger Event</span>}
+                    {delayTriggered && <span className="text-xs text-accent uppercase">Trigger Event</span>}
                   </div>
                 </div>
 
                 {/* Connecting Graph Arrow */}
                 <div className="flex justify-center -my-2 text-accent font-sans text-xs">
-                  ↓ <span className="text-[10px] text-muted ml-1">Automated Cascading Propagation</span>
+                  ↓ <span className="text-xs text-muted ml-1">Automated Cascading Propagation</span>
                 </div>
 
                 {/* Node 2: Private Chauffeur */}
@@ -367,20 +367,20 @@ export default function FeatureShowcase() {
                     </div>
                     <div>
                       <div className="font-bold text-sm">Mercedes V-Class Transfer (Naples ↔ Amalfi)</div>
-                      <div className="text-[11px] text-muted">Driver: Marco Rossi · Live Flight Tracked</div>
+                      <div className="text-sm text-muted">Driver: Marco Rossi · Live Flight Tracked</div>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className={`font-bold ${delayTriggered ? "text-accent" : "text-muted"}`}>
                       {delayTriggered ? "Auto-shifted to 17:45" : "14:45 Pickup"}
                     </div>
-                    {delayTriggered && <span className="text-[10px] text-accent">Driver Auto-Notified</span>}
+                    {delayTriggered && <span className="text-xs text-accent">Driver Auto-Notified</span>}
                   </div>
                 </div>
 
                 {/* Connecting Graph Arrow */}
                 <div className="flex justify-center -my-2 text-accent font-sans text-xs">
-                  ↓ <span className="text-[10px] text-muted ml-1">Downstream Reservation Conflict Solver</span>
+                  ↓ <span className="text-xs text-muted ml-1">Downstream Reservation Conflict Solver</span>
                 </div>
 
                 {/* Node 3: Michelin Dinner & Boat Swap */}
@@ -397,14 +397,14 @@ export default function FeatureShowcase() {
                     </div>
                     <div>
                       <div className="font-bold text-sm">Ristorante La Sponda (Positano)</div>
-                      <div className="text-[11px] text-muted">Dinner Reservation & Table 12 Hold</div>
+                      <div className="text-sm text-muted">Dinner Reservation & Table 12 Hold</div>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className={`font-bold ${delayTriggered ? "text-accent" : "text-muted"}`}>
                       {delayTriggered ? "Rescheduled to 21:00" : "19:00 Table"}
                     </div>
-                    {delayTriggered && <span className="text-[10px] text-accent">Zero Cancellation Penalties</span>}
+                    {delayTriggered && <span className="text-xs text-accent">Zero Cancellation Penalties</span>}
                   </div>
                 </div>
               </div>

@@ -63,11 +63,19 @@ const config: Config = {
         "display-md": ["clamp(2rem, 4.5vw, 3.75rem)", { lineHeight: "0.95", letterSpacing: "-0.045em" }],
         "display-sm": ["clamp(1.5rem, 2.8vw, 2.25rem)", { lineHeight: "1.0", letterSpacing: "-0.035em" }],
         /* Labels: Son Daven uses 14–24px uppercase at +1.9px (~0.08em) */
-        "label": ["0.875rem", { lineHeight: "1.35", letterSpacing: "0.08em" }],
+        "label": ["0.9375rem", { lineHeight: "1.4", letterSpacing: "0.08em" }],
         "label-lg": ["1.125rem", { lineHeight: "1.3", letterSpacing: "0.08em" }],
         /* Body sized up so it reads without strain */
         "body": ["1.0625rem", { lineHeight: "1.6" }],
         "body-lg": ["clamp(1.125rem, 1.4vw, 1.375rem)", { lineHeight: "1.55" }],
+
+        /* Small end of the scale, raised across the board — the Tailwind
+           defaults (12/14/16) read too faint against this palette, especially
+           tan-on-dark in the footer and the mockup chrome. Overriding the
+           tokens lifts every use at once instead of touching ~130 classNames. */
+        xs: ["0.875rem", { lineHeight: "1.5" }],    /* 12 -> 14 */
+        sm: ["1rem", { lineHeight: "1.55" }],       /* 14 -> 16 */
+        base: ["1.0625rem", { lineHeight: "1.6" }], /* 16 -> 17 */
       },
       letterSpacing: {
         label: "0.08em",

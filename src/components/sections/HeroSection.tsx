@@ -148,10 +148,10 @@ export default function HeroSection() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="font-sans text-[11px] bg-fg text-bg border border-line px-2 py-0.5 font-bold uppercase tracking-wider">
+                <span className="font-sans text-sm bg-fg text-bg border border-line px-2 py-0.5 font-bold uppercase tracking-wider">
                   Live Total: ${totalPrice.toLocaleString()}
                 </span>
-                <span className="font-sans text-[11px] bg-surface text-muted border border-line px-2 py-0.5 font-bold uppercase tracking-wider hidden md:inline">
+                <span className="font-sans text-sm bg-surface text-muted border border-line px-2 py-0.5 font-bold uppercase tracking-wider hidden md:inline">
                   Auto-Adapt: ON
                 </span>
               </div>
@@ -209,7 +209,7 @@ export default function HeroSection() {
                 {/* Component 1: Accommodation */}
                 <div className="border border-line p-4 bg-surface relative">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-sans text-[10px] uppercase font-bold tracking-widest text-muted bg-surface px-2 py-0.5 border border-line">
+                    <span className="font-sans text-xs uppercase font-bold tracking-widest text-muted bg-surface px-2 py-0.5 border border-line">
                       Stay · Positano
                     </span>
                     <span className="font-sans text-xs font-bold text-fg">
@@ -225,7 +225,7 @@ export default function HeroSection() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => setHotelTier(hotelTier === "cliffside" ? "boutique" : "cliffside")}
-                      className="text-[11px] font-sans font-bold uppercase tracking-wider px-2.5 py-1 bg-surface border border-line hover:bg-surface flex items-center gap-1"
+                      className="text-sm font-sans font-bold uppercase tracking-wider px-2.5 py-1 bg-surface border border-line hover:bg-surface flex items-center gap-1"
                     >
                       <RefreshCw className="w-3 h-3 text-accent" />
                       Swap ({hotelTier === "cliffside" ? "Boutique -$320" : "Cliffside +$320"})
@@ -236,7 +236,7 @@ export default function HeroSection() {
                 {/* Component 2: Primary Activity */}
                 <div className="border border-line p-4 bg-surface relative">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-sans text-[10px] uppercase font-bold tracking-widest text-bg bg-fg px-2 py-0.5 border border-line">
+                    <span className="font-sans text-xs uppercase font-bold tracking-widest text-bg bg-fg px-2 py-0.5 border border-line">
                       Experience · Capri
                     </span>
                     <span className="font-sans text-xs font-bold text-fg">
@@ -251,7 +251,7 @@ export default function HeroSection() {
                   </p>
                   <button
                     onClick={() => setIsYachtUpgraded(!isYachtUpgraded)}
-                    className="text-[11px] font-sans font-bold uppercase tracking-wider px-2.5 py-1 bg-surface border border-line hover:bg-surface flex items-center gap-1"
+                    className="text-sm font-sans font-bold uppercase tracking-wider px-2.5 py-1 bg-surface border border-line hover:bg-surface flex items-center gap-1"
                   >
                     <SlidersHorizontal className="w-3 h-3 text-muted" />
                     {isYachtUpgraded ? "Downgrade (-$500)" : "Upgrade to Riva (+$500)"}
@@ -261,7 +261,7 @@ export default function HeroSection() {
                 {/* Component 3: Live Adaptation & Routing Status */}
                 <div className="border border-line p-4 bg-surface text-fg relative">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-sans text-[10px] uppercase font-bold tracking-widest text-accent bg-surface px-2 py-0.5 border border-line">
+                    <span className="font-sans text-xs uppercase font-bold tracking-widest text-accent bg-surface px-2 py-0.5 border border-line">
                       Auto-Adapt Guard
                     </span>
                     <span className="w-2 h-2 rounded-full bg-fg animate-ping" />
@@ -272,7 +272,7 @@ export default function HeroSection() {
                   <p className="text-xs text-muted mb-3">
                     If sea swells exceed 1.2m on Capri day, the yacht moves to Day 3 and Ravello gardens switch seamlessly.
                   </p>
-                  <div className="flex items-center gap-1.5 text-[11px] font-sans text-accent font-bold">
+                  <div className="flex items-center gap-1.5 text-sm font-sans text-accent font-bold">
                     <Check className="w-3.5 h-3.5 text-accent" />
                     Contingency Route Linked
                   </div>

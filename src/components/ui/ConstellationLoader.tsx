@@ -274,7 +274,7 @@ export default function ConstellationLoader() {
           </p>
           <div className="mt-2 flex items-center justify-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-tan-500 animate-ping" />
-            <span className="text-[10px] font-sans tracking-widest text-tan-500/70 uppercase">
+            <span className="text-xs font-sans tracking-widest text-tan-500/70 uppercase">
               VOYAGE
             </span>
           </div>

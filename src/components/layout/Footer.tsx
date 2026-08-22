@@ -28,7 +28,7 @@ export default function Footer() {
                   <span className="font-display font-extrabold text-2xl tracking-tight text-fg">
                     VOYAGE
                   </span>
-                  <span className="font-sans text-[9px] uppercase tracking-[0.25em] font-semibold text-accent">
+                  <span className="font-sans text-xs uppercase tracking-[0.25em] font-semibold text-accent">
                     Personalized Tour Planning
                   </span>
                 </div>

@@ -71,7 +71,7 @@ export default function Navbar() {
                 VOYAGE
               </span>
               <span
-                className={`font-sans text-[9px] uppercase tracking-[0.25em] font-semibold mt-0.5 transition-colors ${
+                className={`font-sans text-xs uppercase tracking-[0.25em] font-semibold mt-0.5 transition-colors ${
  isScrolled ? "text-accent" : "text-accent"
  }`}
               >
@@ -118,7 +118,7 @@ export default function Navbar() {
           <div className="flex md:hidden items-center gap-3">
             <a
               href="#features"
-              className="btn-solid py-2 px-3 text-[11px]"
+              className="btn-solid py-2 px-3 text-sm"
             >
               Plan Trip
             </a>
