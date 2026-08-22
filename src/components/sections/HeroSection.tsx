@@ -19,17 +19,22 @@ export default function HeroSection() {
   return (
     <section data-scroll-theme="dark" className="relative min-h-screen pt-28 sm:pt-36 pb-20 sm:pb-32 overflow-hidden flex flex-col justify-center">
       {/* Background Full-bleed Travel Photography */}
-      <div className="absolute inset-0 -z-10 overflow-hidden">
+      {/* z-0, not -z-10: the section has z-index:auto so it forms no stacking
+          context, and a negative z-index escapes to paint behind the body's
+          opaque background — which hid the photo completely. */}
+      <div className="absolute inset-0 z-0 overflow-hidden">
         <Photo
-          src="https://images.unsplash.com/photo-1533105079780-92b9be482077?q=80&w=2000&auto=format&fit=crop"
+          src="/images/hero_travel_bg.jpg"
           alt="Santorini and Mediterranean coastline"
           fill
           priority
           className="object-cover object-center scale-105 filter brightness-[0.88] contrast-[1.05]"
           sizes="100vw"
         />
-        {/* Warm overlay — dark enough for legible type, light enough to keep the photo */}
-        <div className="absolute inset-0 bg-gradient-to-t from-umber-700 via-umber-700/60 to-umber-900/70" />
+        {/* Warm veil — every stop needs an alpha, or the photo is erased entirely.
+            Heaviest at the bottom where the mockup card sits, lighter up top so
+            the coastline still reads behind the headline. */}
+        <div className="absolute inset-0 bg-gradient-to-t from-umber-900/95 via-umber-900/80 to-umber-900/60" />
       </div>
 
       <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 w-full relative z-10">

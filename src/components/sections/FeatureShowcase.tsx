@@ -29,7 +29,7 @@ export default function FeatureShowcase() {
             <div className="surface overflow-hidden relative group">
               <div className="relative h-[340px] sm:h-[440px] w-full">
                 <Photo
-                  src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?q=80&w=1600&auto=format&fit=crop"
+                  src="/images/feature_planning_laptop.jpg"
                   alt="Travelers planning custom itinerary"
                   fill
                   className="object-cover group-hover:scale-105 transition-transform duration-500"
@@ -101,7 +101,7 @@ export default function FeatureShowcase() {
                 <div className="border border-line bg-surface p-3 sm:p-4 relative">
                   <div className="relative h-32 sm:h-44 w-full mb-3 border border-line overflow-hidden">
                     <Photo
-                      src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?q=80&w=800&auto=format&fit=crop"
+                      src="/images/feature_compare_suite.jpg"
                       alt="Luxury Resort Suite"
                       fill
                       className="object-cover"
@@ -122,7 +122,7 @@ export default function FeatureShowcase() {
                 <div className="border border-line bg-surface p-3 sm:p-4 relative">
                   <div className="relative h-32 sm:h-44 w-full mb-3 border border-line overflow-hidden">
                     <Photo
-                      src="https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=800&auto=format&fit=crop"
+                      src="/images/feature_compare_cave.jpg"
                       alt="Boutique Cave Hotel"
                       fill
                       className="object-cover"

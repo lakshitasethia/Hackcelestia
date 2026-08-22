@@ -19,19 +19,31 @@ export default function ConstellationLoader() {
       return;
     }
 
-    const tl = gsap.timeline({
-      onComplete: () => {
-        sessionStorage.setItem("voyage_loader_shown", "true");
-        // Quick cross-fade out
-        gsap.to(containerRef.current, {
-          opacity: 0,
-          scale: 1.04,
-          duration: 0.45,
-          ease: "power2.inOut",
-          onComplete: () => setVisible(false),
-        });
-      },
-    });
+    let dismissed = false;
+    const dismiss = (immediate = false) => {
+      if (dismissed) return;
+      dismissed = true;
+      sessionStorage.setItem("voyage_loader_shown", "true");
+      if (immediate || !containerRef.current) {
+        setVisible(false);
+        return;
+      }
+      // Quick cross-fade out
+      gsap.to(containerRef.current, {
+        opacity: 0,
+        scale: 1.04,
+        duration: 0.45,
+        ease: "power2.inOut",
+        onComplete: () => setVisible(false),
+      });
+    };
+
+    // Hard ceiling. If the main thread stalls (heavy image decode, slow device)
+    // the GSAP timeline can crawl and strand the overlay over the whole page —
+    // never let the loader outlive this regardless of animation progress.
+    const failsafe = window.setTimeout(() => dismiss(true), 2600);
+
+    const tl = gsap.timeline({ onComplete: () => dismiss() });
 
     // 1. Text cycle phrases
     const phrases = ["CHARTING YOUR COURSE", "ALIGNING YOUR STARS", "MAPPING YOUR JOURNEY"];
@@ -120,6 +132,7 @@ export default function ConstellationLoader() {
     }
 
     return () => {
+      window.clearTimeout(failsafe);
       tl.kill();
     };
   }, []);
@@ -129,7 +142,7 @@ export default function ConstellationLoader() {
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-surface text-fg select-none overflow-hidden"
+      className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-umber-900 text-tan-500 select-none overflow-hidden"
     >
       {/* Background Starfield */}
       <div className="absolute inset-0 pointer-events-none opacity-60">
@@ -144,7 +157,7 @@ export default function ConstellationLoader() {
         ].map((star, i) => (
           <div
             key={i}
-            className="absolute rounded-full bg-fg animate-twinkle"
+            className="absolute rounded-full bg-tan-500 animate-twinkle"
             style={{
               top: star.top,
               left: star.left,
@@ -157,8 +170,8 @@ export default function ConstellationLoader() {
         ))}
 
         {/* 4-point sparkle stars */}
-        <Sparkles className="absolute top-[18%] left-[82%] w-5 h-5 text-accent animate-pulse" />
-        <Sparkles className="absolute bottom-[22%] left-[12%] w-4 h-4 text-accent animate-pulse" />
+        <Sparkles className="absolute top-[18%] left-[82%] w-5 h-5 text-tan-500/40 animate-pulse" />
+        <Sparkles className="absolute bottom-[22%] left-[12%] w-4 h-4 text-tan-500/50 animate-pulse" />
       </div>
 
       {/* Constellation Canvas */}
@@ -214,7 +227,7 @@ export default function ConstellationLoader() {
           <g className="constellation-node" transform="translate(50, 110)">
             <circle r="18" fill="#2C2824" stroke="#A89474" strokeWidth="2.5" />
             <foreignObject x="-9" y="-9" width="18" height="18" className="constellation-icon">
-              <Plane className="w-4 h-4 text-accent" />
+              <Plane className="w-4 h-4 text-tan-500" />
             </foreignObject>
           </g>
 
@@ -222,7 +235,7 @@ export default function ConstellationLoader() {
           <g className="constellation-node" transform="translate(130, 45)">
             <circle r="18" fill="#2C2824" stroke="#FFFFFF" strokeWidth="2.5" />
             <foreignObject x="-9" y="-9" width="18" height="18" className="constellation-icon">
-              <Building2 className="w-4 h-4 text-accent" />
+              <Building2 className="w-4 h-4 text-tan-500" />
             </foreignObject>
           </g>
 
@@ -230,7 +243,7 @@ export default function ConstellationLoader() {
           <g className="constellation-node" transform="translate(210, 130)">
             <circle r="22" fill="#A89474" stroke="#A89474" strokeWidth="3" />
             <foreignObject x="-10" y="-10" width="20" height="20" className="constellation-icon">
-              <Compass className="w-5 h-5 text-fg" />
+              <Compass className="w-5 h-5 text-umber-900" />
             </foreignObject>
           </g>
 
@@ -238,7 +251,7 @@ export default function ConstellationLoader() {
           <g className="constellation-node" transform="translate(290, 55)">
             <circle r="18" fill="#2C2824" stroke="#FFFFFF" strokeWidth="2.5" />
             <foreignObject x="-9" y="-9" width="18" height="18" className="constellation-icon">
-              <MapPin className="w-4 h-4 text-accent" />
+              <MapPin className="w-4 h-4 text-tan-500" />
             </foreignObject>
           </g>
 
@@ -246,7 +259,7 @@ export default function ConstellationLoader() {
           <g className="constellation-node" transform="translate(370, 110)">
             <circle r="18" fill="#2C2824" stroke="#A89474" strokeWidth="2.5" />
             <foreignObject x="-9" y="-9" width="18" height="18" className="constellation-icon">
-              <Sparkles className="w-4 h-4 text-accent" />
+              <Sparkles className="w-4 h-4 text-tan-500" />
             </foreignObject>
           </g>
         </svg>
@@ -255,13 +268,13 @@ export default function ConstellationLoader() {
         <div className="mt-8 text-center">
           <p
             ref={textRef}
-            className="font-sans text-xs sm:text-sm tracking-[0.3em] font-semibold text-accent uppercase"
+            className="font-sans text-xs sm:text-sm tracking-[0.3em] font-semibold text-tan-500 uppercase"
           >
             {phaseText}
           </p>
           <div className="mt-2 flex items-center justify-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-fg animate-ping" />
-            <span className="text-[10px] font-sans tracking-widest text-muted uppercase">
+            <span className="w-1.5 h-1.5 rounded-full bg-tan-500 animate-ping" />
+            <span className="text-[10px] font-sans tracking-widest text-tan-500/70 uppercase">
               VOYAGE PS-7 PLATFORM
             </span>
           </div>

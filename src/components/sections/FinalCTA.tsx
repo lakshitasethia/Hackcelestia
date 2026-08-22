@@ -11,7 +11,7 @@ export default function FinalCTA() {
         <div className="grid grid-cols-3 h-full gap-2">
           <div className="relative h-full">
             <Photo
-              src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=800&auto=format&fit=crop"
+              src="/images/cta_coastal_arch.jpg"
               alt="Beach collage"
               fill
               className="object-cover"
@@ -19,7 +19,7 @@ export default function FinalCTA() {
           </div>
           <div className="relative h-full">
             <Photo
-              src="https://images.unsplash.com/photo-1499856871958-5b9627545d1a?q=80&w=800&auto=format&fit=crop"
+              src="/images/cta_parisian_facade.jpg"
               alt="Paris collage"
               fill
               className="object-cover"
@@ -27,7 +27,7 @@ export default function FinalCTA() {
           </div>
           <div className="relative h-full">
             <Photo
-              src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=800&auto=format&fit=crop"
+              src="/images/cta_alpine_silhouette.jpg"
               alt="Mountain collage"
               fill
               className="object-cover"
