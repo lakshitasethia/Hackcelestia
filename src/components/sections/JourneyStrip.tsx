@@ -90,15 +90,57 @@ export default function JourneyStrip() {
       className="py-20 sm:py-28 border-b border-line relative overflow-hidden"
     >
       <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12">
-        {/* Section Heading */}
-        <div data-reveal className="max-w-3xl mb-16 sm:mb-20">
-          <span className="eyebrow">· HOW IT WORKS ·</span>
-          <h2 className="font-display text-display-lg font-semibold uppercase text-fg">
-            From first spark to mid-trip adaptation.
-          </h2>
-          <p className="mt-4 text-base sm:text-lg text-muted leading-relaxed font-medium">
-            Unlike fixed agency packages that lock you into rigid templates, Voyage treats your trip as an interconnected, living itinerary constellation that responds in real time.
-          </p>
+        {/* Section Heading — the copy holds the left, hard numbers hold the
+            right, so the full-width container does not run empty. */}
+        <div
+          data-reveal
+          className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-end mb-16 sm:mb-20"
+        >
+          <div className="lg:col-span-7">
+            <span className="eyebrow">· HOW IT WORKS ·</span>
+            <h2 className="font-display text-display-lg font-semibold uppercase text-fg">
+              From first spark to mid-trip adaptation.
+            </h2>
+            <p className="mt-6 text-body-lg text-muted max-w-2xl">
+              Unlike fixed agency packages that lock you into rigid templates, Voyage
+              treats your trip as an interconnected, living itinerary constellation
+              that responds in real time.
+            </p>
+          </div>
+
+          <dl className="lg:col-span-5 lg:pl-10 lg:border-l border-line grid grid-cols-2 lg:grid-cols-1 gap-x-8 gap-y-8">
+            {[
+              {
+                value: "11 → 6",
+                label: "Lifecycle stages",
+                note: "Eleven tracked end to end; the six that change your day are shown here.",
+              },
+              {
+                value: "8 sec",
+                label: "Median re-plan",
+                note: "From disruption detected to a confirmed alternative on your phone.",
+              },
+              {
+                value: "98%",
+                label: "Resolved without a call",
+                note: "Re-routes that complete automatically, with no agent in the loop.",
+              },
+            ].map((stat) => (
+              <div key={stat.label}>
+                <dt className="font-display text-2xl sm:text-3xl font-semibold uppercase tracking-tight text-fg">
+                  {stat.value}
+                </dt>
+                <dd className="mt-1.5">
+                  <span className="block font-display uppercase text-label tracking-label text-accent">
+                    {stat.label}
+                  </span>
+                  <span className="mt-2 block text-sm text-muted leading-relaxed max-w-xs">
+                    {stat.note}
+                  </span>
+                </dd>
+              </div>
+            ))}
+          </dl>
         </div>
 
         {/* Desktop Constellation Timeline Strip */}

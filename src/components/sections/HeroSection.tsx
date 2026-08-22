@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Photo from "@/components/ui/Photo";
 import { ArrowRight, Sparkles, SlidersHorizontal, Check, RefreshCw, MapPin, Clock, Calendar } from "lucide-react";
 
@@ -10,6 +12,42 @@ export default function HeroSection() {
   const [isYachtUpgraded, setIsYachtUpgraded] = useState(true);
   const [hotelTier, setHotelTier] = useState<"boutique" | "cliffside">("cliffside");
 
+  const stageRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const veilRef = useRef<HTMLDivElement>(null);
+  const copyRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Cinematic open, after sondaven.com/en: the photo holds the full viewport,
+   * then scales down into a small centred panel as you scroll, revealing the
+   * page behind it. The stage is twice viewport height and the frame inside is
+   * `sticky`, so the hold is pure CSS — no ScrollTrigger pin, no pin spacers,
+   * and no chance of a pin/refresh feedback loop.
+   */
+  useEffect(() => {
+    const stage = stageRef.current;
+    const frame = frameRef.current;
+    if (!stage || !frame) return;
+
+    gsap.registerPlugin(ScrollTrigger);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline({
+        scrollTrigger: { trigger: stage, start: "top top", end: "bottom bottom", scrub: true },
+      });
+
+      // Copy clears out first so it never sits over the shrinking panel.
+      tl.to(copyRef.current, { opacity: 0, y: -60, ease: "none", duration: 0.35 }, 0);
+      // Veil lifts as the panel shrinks — the photo is readable once it is small.
+      tl.to(veilRef.current, { opacity: 0.25, ease: "none", duration: 1 }, 0);
+      // The panel itself: full bleed down to a centred rectangle, easing lower.
+      tl.to(frame, { scale: 0.38, yPercent: 6, ease: "none", duration: 1 }, 0);
+    }, stage);
+
+    return () => ctx.revert();
+  }, []);
+
   // Dynamic price calculation for the preview
   const basePrice = 2740;
   const yachtPrice = isYachtUpgraded ? 680 : 0;
@@ -17,28 +55,39 @@ export default function HeroSection() {
   const totalPrice = basePrice + yachtPrice + hotelPrice;
 
   return (
-    <section data-scroll-theme="dark" className="relative min-h-screen pt-28 sm:pt-36 pb-20 sm:pb-32 overflow-hidden flex flex-col justify-center">
-      {/* Background Full-bleed Travel Photography */}
-      {/* z-0, not -z-10: the section has z-index:auto so it forms no stacking
-          context, and a negative z-index escapes to paint behind the body's
-          opaque background — which hid the photo completely. */}
-      <div className="absolute inset-0 z-0 overflow-hidden">
-        <Photo
-          src="/images/hero_travel_bg.jpg"
-          alt="Santorini and Mediterranean coastline"
-          fill
-          priority
-          className="object-cover object-center scale-105 filter brightness-[0.88] contrast-[1.05]"
-          sizes="100vw"
-        />
-        {/* Warm veil — every stop needs an alpha, or the photo is erased entirely.
-            Heaviest at the bottom where the mockup card sits, lighter up top so
-            the coastline still reads behind the headline. */}
-        <div className="absolute inset-0 bg-gradient-to-t from-umber-900/95 via-umber-900/80 to-umber-900/60" />
-      </div>
+    <section data-scroll-theme="dark" className="relative">
+      {/* ---------- Cinematic stage: 2vh of scroll, held by a sticky frame ---------- */}
+      <div ref={stageRef} className="relative h-[200vh]">
+        <div className="sticky top-0 h-screen overflow-hidden flex items-center justify-center">
+          {/* Photo panel — scrubbed from full bleed down to a centred rectangle.
+              z-0, not -z-10: the section has z-index:auto so it forms no stacking
+              context, and a negative z-index escapes to paint behind the body's
+              opaque background — which hid the photo completely. */}
+          <div
+            ref={frameRef}
+            className="absolute inset-0 z-0 origin-center will-change-transform overflow-hidden"
+          >
+            <Photo
+              src="/images/hero_travel_bg.jpg"
+              alt="Santorini and Mediterranean coastline"
+              fill
+              priority
+              className="object-cover object-center scale-105 filter brightness-[0.88] contrast-[1.05]"
+              sizes="100vw"
+            />
+            {/* Warm veil — every stop needs an alpha, or the photo is erased
+                entirely. Lifts as the panel shrinks so the photo reads once small. */}
+            <div
+              ref={veilRef}
+              className="absolute inset-0 bg-gradient-to-t from-umber-900/95 via-umber-900/80 to-umber-900/60"
+            />
+          </div>
 
-      <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 w-full relative z-10">
-        <div className="max-w-6xl mx-auto text-center flex flex-col items-center">
+          <div
+            ref={copyRef}
+            className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 w-full relative z-10"
+          >
+            <div className="max-w-6xl mx-auto text-center flex flex-col items-center">
           {/* Top Pill / Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-surface border border-line mb-6 rounded-none backdrop-blur-sm animate-in fade-in slide-in-from-bottom-3 duration-500">
             <Sparkles className="w-3.5 h-3.5 text-accent" />
@@ -84,10 +133,17 @@ export default function HeroSection() {
             <span className="text-muted">·</span>
             <span>Zero Agency Markups</span>
           </div>
+            </div>
+          </div>
         </div>
+      </div>
 
-        {/* Floating Product Mockup Card (Itinerary Builder UI Preview) */}
-        <div className="mt-14 sm:mt-20 max-w-5xl mx-auto">
+      {/* ---------- Product mockup, in normal flow below the stage ----------
+          The panel settles at 38% of a full-height sticky frame, leaving ~31vh
+          clear beneath it; pull the mockup up into that gap so the two read as
+          one composition instead of drifting apart. */}
+      <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 w-full relative z-10 -mt-[20vh] pb-20 sm:pb-28">
+        <div className="max-w-5xl mx-auto">
           <div className="surface overflow-hidden">
             {/* macOS Window Chrome Bar */}
             <div className="bg-surface border-b border-line px-4 py-3 flex items-center justify-between">
