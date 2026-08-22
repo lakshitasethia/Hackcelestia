@@ -13,6 +13,10 @@ import Lenis from "lenis";
  * pairs a background with a foreground guaranteed legible against it, so
  * sections pick a theme rather than hand-picking colours and text can never
  * end up invisible.
+ *
+ * Sections are grouped into five large blocks (dark → tan → dark → tan → dark)
+ * so the inversion lands three times over the page rather than on every
+ * section, which read as restless.
  */
 export const SCROLL_THEMES = {
   dark: {
@@ -30,14 +34,6 @@ export const SCROLL_THEMES = {
     "--line-scroll": "rgba(44,40,36,0.26)",
     "--accent-scroll": "#2C2824",
     "--surface-scroll": "#B9A88C",
-  },
-  deep: {
-    "--bg-scroll": "#171512",
-    "--fg-scroll": "#A89474",
-    "--fg-muted-scroll": "rgba(168,148,116,0.58)",
-    "--line-scroll": "rgba(168,148,116,0.2)",
-    "--accent-scroll": "#FFFFFF",
-    "--surface-scroll": "#211E1A",
   },
 } as const;
 
@@ -79,6 +75,7 @@ export default function ScrollEffects() {
          contrast — so resolve the winner once per update instead. */
       const themed = gsap.utils.toArray<HTMLElement>("[data-scroll-theme]");
       const root = document.documentElement;
+
       let currentTheme: string | null = null;
 
       const themeAtCentre = (): string | null => {
@@ -91,6 +88,9 @@ export default function ScrollEffects() {
         return found;
       };
 
+      // Only *set* the variables — the CSS transition on :root does the
+      // animating (see globals.css). No tween to strand, and nothing here can
+      // feed back into ScrollTrigger, so there is no refresh loop.
       const syncTheme = () => {
         const name = themeAtCentre();
         // No themed section under the centre (a gap) — keep what we have.
@@ -98,19 +98,15 @@ export default function ScrollEffects() {
         const theme = SCROLL_THEMES[name as ScrollThemeName];
         if (!theme) return;
         currentTheme = name;
-        gsap.to(root, {
-          ...theme,
-          duration: 0.6,
-          ease: "power2.out",
-          overwrite: true,
-        });
+        for (const [prop, value] of Object.entries(theme)) {
+          root.style.setProperty(prop, value);
+        }
       };
 
       ScrollTrigger.create({
         start: 0,
         end: "max",
         onUpdate: syncTheme,
-        onRefresh: syncTheme,
       });
 
       syncTheme();

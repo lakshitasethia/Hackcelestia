@@ -1,15 +1,24 @@
 import type { Metadata } from "next";
-import { Archivo } from "next/font/google";
+import { Archivo, Saira } from "next/font/google";
 import "./globals.css";
 import ConstellationLoader from "@/components/ui/ConstellationLoader";
 import ScrollEffects from "@/components/ui/ScrollEffects";
 
 /**
- * Son Daven runs a single superfamily (KTF Metro Roman + KTF Metro Blueline),
- * which is commercially licensed. Archivo is the closest freely-licensed
- * geometric grotesque and covers both the heavy tight display sizes and the
- * tracked uppercase labels.
+ * Display + labels: KTF Metro Blueline (see globals.css @font-face), falling
+ * back to Saira — a wide, squarish grotesque that stands in for Blueline's
+ * Eurostile-adjacent signage character until the font files are added.
+ *
+ * Body copy stays on Archivo: Blueline is a signage face and gets unreadable
+ * at paragraph sizes.
  */
+const saira = Saira({
+  subsets: ["latin"],
+  variable: "--font-display-fallback",
+  display: "swap",
+  weight: ["300", "400", "500", "600", "700"],
+});
+
 const archivo = Archivo({
   subsets: ["latin"],
   variable: "--font-sans",
@@ -43,7 +52,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={archivo.variable}>
+    <html lang="en" className={`${archivo.variable} ${saira.variable}`}>
       <body className="antialiased">
         <ConstellationLoader />
         <ScrollEffects />

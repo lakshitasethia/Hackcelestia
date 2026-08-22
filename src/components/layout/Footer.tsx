@@ -5,7 +5,7 @@ import { Sparkles, Globe, Twitter, Instagram, Linkedin, Github } from "lucide-re
 
 export default function Footer() {
   return (
-    <footer data-scroll-theme="deep" className="pt-20 pb-12 relative overflow-hidden">
+    <footer data-scroll-theme="dark" className="pt-20 pb-12 relative overflow-hidden">
       {/* Background Starfield (Final Bookend) */}
       <div className="absolute inset-0 pointer-events-none opacity-30">
         <Sparkles className="absolute top-[20%] left-[10%] w-4 h-4 text-accent animate-pulse" />

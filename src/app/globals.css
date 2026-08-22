@@ -2,16 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+/* KTF Metro Blueline — the signage face from Kyiv's Blue Line metro stations
+   (1980–84), the same family Son Daven uses. Free from Kyiv Type Foundry.
+   Drop the files into public/fonts/ and this picks them up automatically;
+   see public/fonts/README.md. Until then Saira carries the same wide,
+   Eurostile-adjacent character. */
+@font-face {
+  font-family: "KTF Metro Blueline";
+  src: url("/fonts/KTFMetroBlueline.woff2") format("woff2"),
+       url("/fonts/KTFMetroBlueline.woff") format("woff");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Scroll-driven theme tokens. Two-tone system from sondaven.com — every theme
+   pairs a background with a foreground guaranteed readable against it.
+
+   Registered with @property so the browser can interpolate them, which means a
+   plain CSS transition animates the palette. ScrollEffects.tsx only *sets* the
+   values; it never animates them. Driving these with GSAP instead caused a
+   tween on documentElement to trigger a ScrollTrigger refresh, which re-ran the
+   handler, which tweened again — an infinite loop that froze the renderer and
+   stranded the palette on an unreadable blend of two themes. The browser
+   retargets a transition cleanly from wherever it is, so it cannot strand. */
+@property --bg-scroll {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #2c2824;
+}
+@property --fg-scroll {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #a89474;
+}
+@property --fg-muted-scroll {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: rgba(168, 148, 116, 0.62);
+}
+@property --line-scroll {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: rgba(168, 148, 116, 0.22);
+}
+@property --accent-scroll {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ffffff;
+}
+@property --surface-scroll {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #211e1a;
+}
+
 :root {
-  /* Scroll-driven theme tokens, tweened by ScrollEffects.tsx via GSAP
-     ScrollTrigger. Two-tone system from sondaven.com — every theme pairs a
-     background with a foreground guaranteed readable against it. */
   --bg-scroll: #2c2824;
   --fg-scroll: #a89474;
   --fg-muted-scroll: rgba(168, 148, 116, 0.62);
   --line-scroll: rgba(168, 148, 116, 0.22);
   --accent-scroll: #ffffff;
   --surface-scroll: #211e1a;
+
+  transition: --bg-scroll 0.7s ease, --fg-scroll 0.7s ease,
+    --fg-muted-scroll 0.7s ease, --line-scroll 0.7s ease,
+    --accent-scroll 0.7s ease, --surface-scroll 0.7s ease;
 }
 
 @layer base {
@@ -69,7 +125,7 @@
   /* ---------- Typography ---------- */
   /* Son Daven sets nearly everything uppercase. */
   .eyebrow {
-    @apply font-sans uppercase text-label tracking-label font-normal text-muted mb-6 block;
+    @apply font-display uppercase text-label tracking-label font-normal text-muted mb-6 block;
   }
 
   .headline {
@@ -95,7 +151,7 @@
 
   /* ---------- Buttons: outline-first, uppercase, tracked ---------- */
   .btn {
-    @apply inline-flex items-center justify-center gap-3 font-sans uppercase
+    @apply inline-flex items-center justify-center gap-3 font-display uppercase
            text-label tracking-label font-medium px-9 py-4 border transition-all duration-500;
     transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   }
@@ -125,7 +181,7 @@
 
   /* ---------- Link with animated underline ---------- */
   .link-underline {
-    @apply relative inline-flex items-center gap-2 font-sans uppercase text-label tracking-label font-medium text-fg;
+    @apply relative inline-flex items-center gap-2 font-display uppercase text-label tracking-label font-medium text-fg;
   }
   .link-underline::after {
     content: "";

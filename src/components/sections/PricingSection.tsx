@@ -58,7 +58,7 @@ export default function PricingSection() {
   ];
 
   return (
-    <section id="pricing" data-scroll-theme="dark" className="py-20 sm:py-28 border-b border-line">
+    <section id="pricing" data-scroll-theme="tan" className="py-20 sm:py-28 border-b border-line">
       <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12">
         {/* Heading */}
         <div data-reveal className="max-w-3xl mx-auto text-center mb-16 sm:mb-20">

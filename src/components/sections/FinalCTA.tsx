@@ -5,7 +5,7 @@ import { ArrowRight, Sparkles, Check } from "lucide-react";
 
 export default function FinalCTA() {
   return (
-    <section data-scroll-theme="tan" className="py-20 sm:py-28 border-b border-line relative overflow-hidden">
+    <section data-scroll-theme="dark" className="py-20 sm:py-28 border-b border-line relative overflow-hidden">
       {/* Background collage with low opacity for depth */}
       <div className="absolute inset-0 opacity-20 pointer-events-none mix-blend-luminosity">
         <div className="grid grid-cols-3 h-full gap-2">
@@ -15,6 +15,7 @@ export default function FinalCTA() {
               alt="Beach collage"
               fill
               className="object-cover"
+              sizes="33vw"
             />
           </div>
           <div className="relative h-full">
@@ -23,6 +24,7 @@ export default function FinalCTA() {
               alt="Paris collage"
               fill
               className="object-cover"
+              sizes="33vw"
             />
           </div>
           <div className="relative h-full">
@@ -31,6 +33,7 @@ export default function FinalCTA() {
               alt="Mountain collage"
               fill
               className="object-cover"
+              sizes="33vw"
             />
           </div>
         </div>

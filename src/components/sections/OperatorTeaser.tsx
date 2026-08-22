@@ -25,7 +25,7 @@ export default function OperatorTeaser() {
   ];
 
   return (
-    <section id="for-operators" data-scroll-theme="deep" className="py-20 sm:py-28 border-b border-line relative overflow-hidden">
+    <section id="for-operators" data-scroll-theme="dark" className="py-20 sm:py-28 border-b border-line relative overflow-hidden">
       {/* Background Starfield (Celestial Bookend) */}
       <div className="absolute inset-0 pointer-events-none opacity-40">
         <Sparkles className="absolute top-[15%] right-[15%] w-5 h-5 text-accent animate-pulse" />

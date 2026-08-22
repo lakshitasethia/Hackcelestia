@@ -43,10 +43,18 @@ const config: Config = {
         },
       },
       fontFamily: {
-        /* Son Daven runs one superfamily (KTF Metro Roman + Blueline).
-           Archivo is the closest freely-licensed geometric grotesque. */
+        /* Body copy — Blueline is a signage face and does not hold up at
+           paragraph sizes, so running text stays on Archivo. */
         sans: ["var(--font-sans)", "Archivo", "Helvetica Neue", "system-ui", "sans-serif"],
-        display: ["var(--font-sans)", "Archivo", "Helvetica Neue", "system-ui", "sans-serif"],
+        /* Display + labels — KTF Metro Blueline when present (see globals.css
+           @font-face + public/fonts/README.md), Saira as the stand-in. */
+        display: [
+          "KTF Metro Blueline",
+          "var(--font-display-fallback)",
+          "Saira",
+          "var(--font-sans)",
+          "sans-serif",
+        ],
       },
       fontSize: {
         /* Son Daven display runs 114px at -0.064em tracking, 0.91 leading. */

@@ -105,6 +105,7 @@ export default function FeatureShowcase() {
                       alt="Luxury Resort Suite"
                       fill
                       className="object-cover"
+                      sizes="(max-width: 1024px) 50vw, 25vw"
                     />
                   </div>
                   <span className="font-sans text-[10px] font-bold text-bg bg-fg border border-line px-1.5 py-0.5">
@@ -126,6 +127,7 @@ export default function FeatureShowcase() {
                       alt="Boutique Cave Hotel"
                       fill
                       className="object-cover"
+                      sizes="(max-width: 1024px) 50vw, 25vw"
                     />
                   </div>
                   <span className="font-sans text-[10px] font-bold text-muted bg-surface border border-line px-1.5 py-0.5">
