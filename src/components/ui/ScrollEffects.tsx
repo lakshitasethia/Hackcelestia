@@ -14,9 +14,9 @@ import Lenis from "lenis";
  * sections pick a theme rather than hand-picking colours and text can never
  * end up invisible.
  *
- * Sections are grouped into five large blocks (dark → tan → dark → tan → dark)
- * so the inversion lands three times over the page rather than on every
- * section, which read as restless.
+ * The page runs dark → tan → dark and then stays dark: one light block
+ * (FeatureShowcase) breaking up an otherwise dark page. Inverting on every
+ * section read as restless.
  */
 export const SCROLL_THEMES = {
   dark: {

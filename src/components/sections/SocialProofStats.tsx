@@ -58,7 +58,7 @@ export default function SocialProofStats() {
   return (
     <section
       ref={containerRef}
-      data-scroll-theme="tan"
+      data-scroll-theme="dark"
       className="py-16 sm:py-20 border-b border-line relative"
     >
       <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12">
