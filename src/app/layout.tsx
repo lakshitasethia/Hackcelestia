@@ -34,12 +34,11 @@ export const viewport = {
 export const metadata: Metadata = {
   title: "VOYAGE — Personalized Dynamic Tour Planning Platform",
   description:
-    "Skip the fixed package. Build your custom itinerary with real-time pricing, component customization, and automatic mid-trip adaptation. Built for HackCelestia 2026.",
+    "Build your custom itinerary with real-time pricing, component customization, and automatic mid-trip adaptation.",
   keywords: [
     "dynamic tour planning",
     "personalized travel itinerary",
     "tour operations",
-    "HackCelestia 2026",
     "real-time travel pricing",
     "adaptive itinerary",
   ],

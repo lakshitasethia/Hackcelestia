@@ -87,7 +87,7 @@ export default function OperatorTeaser() {
                 Bespoke Partner Integrations & White-label Engine
               </h4>
               <p className="text-xs text-muted font-sans mt-0.5">
-                Join 140+ tour operators currently modernizing on the Voyage PS-7 API.
+                Join 140+ tour operators currently modernizing on the Voyage API.
               </p>
             </div>
           </div>

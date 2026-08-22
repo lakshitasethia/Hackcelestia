@@ -180,10 +180,6 @@ export default function Navbar() {
               Start Planning Trip
               <ArrowRight className="w-4 h-4 ml-2 inline" />
             </a>
-            <div className="flex items-center justify-between text-xs font-sans text-muted pt-2">
-              <span>PS-7 TOUR PLATFORM</span>
-              <span className="text-accent">HACKCELESTIA 2026</span>
-            </div>
           </div>
         </div>
       )}

@@ -275,7 +275,7 @@ export default function ConstellationLoader() {
           <div className="mt-2 flex items-center justify-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-tan-500 animate-ping" />
             <span className="text-[10px] font-sans tracking-widest text-tan-500/70 uppercase">
-              VOYAGE PS-7 PLATFORM
+              VOYAGE
             </span>
           </div>
         </div>

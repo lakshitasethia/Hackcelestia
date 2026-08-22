@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Photo from "@/components/ui/Photo";
-import { ArrowRight, Sparkles, SlidersHorizontal, Check, RefreshCw, MapPin, Clock, Calendar } from "lucide-react";
+import { ArrowRight, SlidersHorizontal, Check, RefreshCw, MapPin, Clock, Calendar } from "lucide-react";
 
 export default function HeroSection() {
   // Interactive mini-preview state for the floating mockup
@@ -88,14 +88,6 @@ export default function HeroSection() {
             className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 w-full relative z-10"
           >
             <div className="max-w-6xl mx-auto text-center flex flex-col items-center">
-          {/* Top Pill / Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-surface border border-line mb-6 rounded-none backdrop-blur-sm animate-in fade-in slide-in-from-bottom-3 duration-500">
-            <Sparkles className="w-3.5 h-3.5 text-accent" />
-            <span className="font-sans text-xs font-bold uppercase tracking-[0.2em] text-fg">
-              Skip the fixed package
-            </span>
-          </div>
-
           {/* Large 3-beat Statement Headline */}
           <h1 className="font-display text-display-xl font-semibold uppercase text-fg text-balance">
             Your trip. Your rules.<br />

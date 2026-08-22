@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Sparkles, Globe, Twitter, Instagram, Linkedin, Github } from "lucide-react";
+import { Sparkles, Twitter, Instagram, Linkedin, Github } from "lucide-react";
 
 export default function Footer() {
   return (
@@ -164,10 +164,6 @@ export default function Footer() {
             <span>© 2026 VOYAGE Inc. All rights reserved.</span>
           </div>
 
-          <div className="flex items-center gap-2 bg-surface border border-line px-3 py-1 text-accent">
-            <Globe className="w-3.5 h-3.5" />
-            <span className="font-bold">Built for HackCelestia 2026 (PS-7)</span>
-          </div>
         </div>
       </div>
     </footer>
