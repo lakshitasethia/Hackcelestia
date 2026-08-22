@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Sparkles, ArrowRight } from "lucide-react";
+import { Check, ArrowRight } from "lucide-react";
 import HighlightText from "@/components/ui/HighlightText";
 
 export default function PricingSection() {
@@ -96,13 +96,6 @@ export default function PricingSection() {
  : "bg-surface"
  }`}
             >
-              {plan.highlight && (
-                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-fg text-bg font-sans text-xs uppercase font-bold tracking-widest px-3 py-1 border border-line flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-accent" />
-                  Most Popular for Travelers
-                </div>
-              )}
-
               <div>
                 <span className="font-sans text-xs font-bold uppercase tracking-wider text-accent block mb-1">
                   {plan.eyebrow}

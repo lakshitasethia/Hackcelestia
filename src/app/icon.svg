@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Voyage</title>
+  <!-- Mark matches the site logo: tan field, dark V. The V is the real Archivo
+       ExtraBold glyph outline, not a redrawn approximation. -->
+  <rect width="64" height="64" fill="#A89474"/>
+  <path d="M27.48 47 16.69 17H25.08L30.58 33.94Q30.76 34.47 31.02 35.32Q31.28 36.17 31.56 37.07Q31.85 37.96 32.02 38.66H32.33Q32.55 38 32.79 37.15Q33.03 36.3 33.29 35.45Q33.55 34.6 33.72 33.99L39.23 17H47.31L36.56 47Z" fill="#2C2824"/>
+</svg>

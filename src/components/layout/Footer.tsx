@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Sparkles, Twitter, Instagram, Linkedin, Github } from "lucide-react";
+import { Sparkles } from "lucide-react";
+import { XIcon, InstagramIcon, LinkedInIcon, GitHubIcon } from "@/components/ui/BrandIcons";
 
 export default function Footer() {
   return (
@@ -39,26 +40,23 @@ export default function Footer() {
               </p>
             </div>
 
-            {/* Social Icons Row (Bordered Square Neubrutalist Icons) */}
+            {/* Social row — official brand marks, see BrandIcons.tsx */}
             <div className="flex items-center gap-3 mt-8">
               {[
-                { icon: Twitter, href: "#", label: "Twitter" },
-                { icon: Instagram, href: "#", label: "Instagram" },
-                { icon: Linkedin, href: "#", label: "LinkedIn" },
-                { icon: Github, href: "#", label: "GitHub" },
-              ].map((item, i) => {
-                const Icon = item.icon;
-                return (
-                  <a
-                    key={i}
-                    href={item.href}
-                    aria-label={item.label}
-                    className="w-10 h-10 border border-line bg-surface text-muted flex items-center justify-center hover:bg-fg hover:text-bg hover:border-line transition-all"
-                  >
-                    <Icon className="w-4 h-4" />
-                  </a>
-                );
-              })}
+                { Icon: XIcon, href: "#", label: "X" },
+                { Icon: InstagramIcon, href: "#", label: "Instagram" },
+                { Icon: LinkedInIcon, href: "#", label: "LinkedIn" },
+                { Icon: GitHubIcon, href: "#", label: "GitHub" },
+              ].map(({ Icon, href, label }) => (
+                <a
+                  key={label}
+                  href={href}
+                  aria-label={label}
+                  className="w-10 h-10 border border-line bg-surface text-muted flex items-center justify-center hover:bg-fg hover:text-bg hover:border-line transition-all"
+                >
+                  <Icon className="w-[18px] h-[18px]" />
+                </a>
+              ))}
             </div>
           </div>
 

@@ -31,10 +31,31 @@ export const viewport = {
   initialScale: 1,
 };
 
+const SITE_NAME = "VOYAGE";
+const TITLE = "VOYAGE — Personalized Dynamic Tour Planning Platform";
+const DESCRIPTION =
+  "Build your custom itinerary from real hotels, transport and guides — priced live at supplier rates, and re-routed automatically when weather or delays hit mid-trip.";
+
+/**
+ * `metadataBase` resolves the relative icon/OG paths to absolute URLs, which
+ * crawlers and chat unfurlers require. Set NEXT_PUBLIC_SITE_URL in the host's
+ * env once the domain is known; the Vercel-provided URL is used otherwise, and
+ * localhost only as a last resort in development.
+ */
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3000");
+
 export const metadata: Metadata = {
-  title: "VOYAGE — Personalized Dynamic Tour Planning Platform",
-  description:
-    "Build your custom itinerary with real-time pricing, component customization, and automatic mid-trip adaptation.",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: TITLE,
+    template: `%s — ${SITE_NAME}`,
+  },
+  description: DESCRIPTION,
+  applicationName: SITE_NAME,
   keywords: [
     "dynamic tour planning",
     "personalized travel itinerary",
@@ -43,6 +64,26 @@ export const metadata: Metadata = {
     "adaptive itinerary",
   ],
   authors: [{ name: "Voyage Team" }],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: TITLE,
+    description: DESCRIPTION,
+    url: "/",
+    locale: "en_US",
+    // opengraph-image.jpg in this directory is picked up automatically.
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large" },
+  },
 };
 
 export default function RootLayout({
