@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Sparkles, ArrowRight } from "lucide-react";
+import HighlightText from "@/components/ui/HighlightText";
 
 export default function PricingSection() {
   const plans = [
@@ -61,14 +62,26 @@ export default function PricingSection() {
     <section id="pricing" data-scroll-theme="dark" className="py-20 sm:py-28 border-b border-line">
       <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12">
         {/* Heading */}
-        <div data-reveal className="max-w-3xl mx-auto text-center mb-16 sm:mb-20">
+        <div data-reveal className="max-w-4xl mx-auto text-center mb-14">
           <span className="eyebrow text-center">· TRANSPARENT PLANS ·</span>
           <h2 className="font-display text-display-lg font-semibold uppercase text-fg">
             Simple, honest pricing. <br />
             No hidden agency commissions.
           </h2>
-          <p className="mt-4 text-base sm:text-lg text-muted font-medium">
-            Plan for free as a traveler or supercharge your tour business with our back-office automation suite.
+        </div>
+
+        {/* Scroll-scrubbed manifesto — words lift from dim to full as you pass. */}
+        <div className="max-w-5xl mx-auto text-center mb-16 sm:mb-24">
+          <HighlightText
+            as="p"
+            className="font-display uppercase text-display-sm font-semibold text-fg text-balance"
+          >
+            {`A traditional agency buries its margin somewhere between the flight you booked and the room you never saw. We do the opposite. Every hotel night, every private transfer, every guided afternoon is priced at the rate the supplier actually quoted us — and you watch that number move in real time as you build. No bundled totals, no cancellation traps, no quiet markup for the privilege of asking.`}
+          </HighlightText>
+
+          <p className="mt-10 text-body-lg text-muted max-w-2xl mx-auto">
+            Plan for free as a traveler, or run your whole operation on the back-office
+            suite. Upgrade only when the automation starts paying for itself.
           </p>
         </div>
 
