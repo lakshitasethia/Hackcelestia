@@ -50,9 +50,17 @@ export default function HighlightText({
           stagger: 1,
           scrollTrigger: {
             trigger: el,
-            start: "top 82%",
-            end: "bottom 55%",
-            scrub: true,
+            // Begin as the block enters and finish while its bottom is still
+            // well inside the viewport, so the passage is always fully lit
+            // before it scrolls away. Widening the window from 82%->55% to
+            // 90%->40% stretches the reveal by roughly a third; a fixed
+            // distance (+=N%) is not safe here — it decouples the pace from
+            // the block's position and leaves words dim as it exits.
+            start: "top 90%",
+            end: "bottom 40%",
+            // Light catch-up easing so the words drift rather than tracking
+            // the wheel one-to-one.
+            scrub: 0.5,
           },
         }
       );
