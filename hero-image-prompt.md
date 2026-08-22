@@ -102,7 +102,7 @@ Overwrite the existing file. Keeping the same filename means **no code change is
 needed at all** — the site picks it up immediately.
 
 If you save under a different name instead, then the **only** permitted edit is
-line 40 of `src/components/sections/HeroSection.tsx`:
+line 71 of `src/components/sections/HeroSection.tsx`:
 
 ```diff
 - src="/images/hero_travel_bg.jpg"
