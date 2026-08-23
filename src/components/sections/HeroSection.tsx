@@ -104,7 +104,7 @@ export default function HeroSection() {
           {/* Dual CTAs */}
           <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto">
             <a
-              href="#destinations"
+              href="/app"
               className="btn-solid w-full sm:w-auto px-8 py-4 text-sm tracking-wider group"
             >
               <span>Start Planning Your Trip</span>

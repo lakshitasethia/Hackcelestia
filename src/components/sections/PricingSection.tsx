@@ -19,7 +19,7 @@ export default function PricingSection() {
         "Digital wallet passes & synchronized offline map",
       ],
       cta: "Start Planning Free",
-      ctaLink: "#destinations",
+      ctaLink: "/app",
       highlight: false,
     },
     {
@@ -36,7 +36,7 @@ export default function PricingSection() {
         "Real-time weather contingency swaps",
       ],
       cta: "Unlock Protection",
-      ctaLink: "#destinations",
+      ctaLink: "/app",
       highlight: true,
     },
     {

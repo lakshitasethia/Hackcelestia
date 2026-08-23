@@ -55,7 +55,7 @@ export default function FinalCTA() {
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
           <a
-            href="#destinations"
+            href="/app"
             className="btn-outline w-full sm:w-auto px-10 py-4 text-sm sm:text-base tracking-wider group bg-surface text-fg hover:bg-surface"
           >
             <span>Start Planning Your Trip</span>

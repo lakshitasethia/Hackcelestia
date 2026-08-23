@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import Navbar from "@/components/layout/Navbar";
+import AppNav from "@/components/layout/AppNav";
 import TripSummary from "@/components/trip/TripSummary";
 import DayTimeline from "@/components/trip/DayTimeline";
 import { getBookings, getItems, getTrip, groupByDay } from "@/lib/db/queries";
@@ -37,9 +37,9 @@ export default async function TripPage({
       data-scroll-theme="dark"
       className="min-h-screen bg-surface text-fg selection:bg-fg selection:text-bg"
     >
-      <Navbar />
+      <AppNav />
 
-      <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 pt-36 sm:pt-44 pb-24">
+      <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 pt-28 pb-24">
         <header className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-end">
           <div className="lg:col-span-8">
             <span className="eyebrow">
@@ -111,9 +111,9 @@ export default async function TripPage({
         )}
 
         <div className="mt-20 pt-8 border-t border-line">
-          <Link href="/" className="link-underline">
+          <Link href="/ops" className="link-underline">
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to Voyage</span>
+            <span>Operations board</span>
           </Link>
         </div>
       </div>

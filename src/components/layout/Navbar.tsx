@@ -16,8 +16,10 @@ const NAV_LINKS = [
   { label: "Pricing", href: "#pricing" },
 ];
 
-/** Where "Start Planning" goes — the catalog is where a trip actually begins. */
-const PLAN_HREF = "#destinations";
+/** "Start Planning" now leads into the product rather than to a section of
+ *  the marketing page. A real route, so it is never passed through
+ *  sectionHref() — that only prefixes hashes. */
+const PLAN_HREF = "/app";
 
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -148,7 +150,7 @@ export default function Navbar() {
               Log In
             </button>
             <a
-              href={sectionHref(PLAN_HREF)}
+              href={PLAN_HREF}
               className="btn-solid py-2.5 px-5 text-xs tracking-wider"
             >
               <span>Start Planning</span>
@@ -159,7 +161,7 @@ export default function Navbar() {
           {/* Mobile Menu Trigger */}
           <div className="flex md:hidden items-center gap-3">
             <a
-              href={sectionHref(PLAN_HREF)}
+              href={PLAN_HREF}
               className="btn-solid py-2 px-3 text-sm"
             >
               Plan Trip
@@ -215,7 +217,7 @@ export default function Navbar() {
 
           <div className="relative z-10 pt-8 border-t border-line flex flex-col gap-4">
             <a
-              href={sectionHref(PLAN_HREF)}
+              href={PLAN_HREF}
               onClick={() => setMobileMenuOpen(false)}
               className="btn-solid w-full py-4 text-sm font-bold tracking-wider"
             >

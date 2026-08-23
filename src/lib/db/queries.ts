@@ -5,6 +5,7 @@ import type {
   Disruption,
   ItineraryItem,
   Trip,
+  Vendor,
 } from "./types";
 
 /**
@@ -133,4 +134,88 @@ export function summarize(items: ItineraryItem[], bookings: Booking[]) {
     .reduce((sum, b) => sum + Number(b.penalty), 0);
 
   return { total, atRisk, confirmed, count: live.length, penaltyIfCancelled };
+}
+
+// --------------------------------------------------------------- operator --
+
+/** Every trip this operator runs, soonest first. */
+export async function getOperatorTrips(): Promise<Trip[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("trips")
+    .select("*")
+    .order("starts_on", { ascending: true });
+
+  if (error) throw new Error(`getOperatorTrips: ${error.message}`);
+  return (data ?? []) as Trip[];
+}
+
+export async function getVendors(): Promise<Vendor[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("vendors")
+    .select("*")
+    .order("type")
+    .order("name");
+
+  if (error) throw new Error(`getVendors: ${error.message}`);
+  return (data ?? []) as Vendor[];
+}
+
+/**
+ * Every item happening between now and `days` ahead, across all trips —
+ * the operator's actual working view. Joined to the trip so each row can say
+ * which group it belongs to, since that is the first thing a coordinator asks.
+ */
+export async function getSchedule(days = 3): Promise<ScheduleEntry[]> {
+  const supabase = createAdminClient();
+
+  const from = new Date();
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(from);
+  to.setDate(to.getDate() + days);
+
+  const { data, error } = await supabase
+    .from("itinerary_items")
+    .select("*, trips(title, contact_name, party_size), vendors(name, channel)")
+    .gte("starts_at", from.toISOString())
+    .lt("starts_at", to.toISOString())
+    .order("starts_at");
+
+  if (error) throw new Error(`getSchedule: ${error.message}`);
+  return (data ?? []) as unknown as ScheduleEntry[];
+}
+
+export type ScheduleEntry = ItineraryItem & {
+  trips: { title: string; contact_name: string | null; party_size: number } | null;
+  vendors: { name: string; channel: "auto" | "manual" } | null;
+};
+
+/** Open disruptions across every trip, worst first. */
+export async function getAllOpenDisruptions(): Promise<
+  (Disruption & { trips: { title: string } | null })[]
+> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("disruptions")
+    .select("*, trips(title)")
+    .eq("state", "open")
+    .order("detected_at", { ascending: false });
+
+  if (error) throw new Error(`getAllOpenDisruptions: ${error.message}`);
+  return (data ?? []) as unknown as (Disruption & {
+    trips: { title: string } | null;
+  })[];
+}
+
+/** Headline numbers for the operator dashboard. */
+export function operatorTotals(trips: Trip[], schedule: ScheduleEntry[]) {
+  const live = trips.filter(
+    (t) => t.status === "in_progress" || t.status === "confirmed"
+  );
+  const travellers = live.reduce((sum, t) => sum + t.party_size, 0);
+  const booked = trips.reduce((sum, t) => sum + Number(t.budget ?? 0), 0);
+  const atRisk = schedule.filter((s) => s.status === "at_risk").length;
+
+  return { liveTrips: live.length, travellers, booked, atRisk };
 }
