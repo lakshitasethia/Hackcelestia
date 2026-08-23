@@ -10,7 +10,8 @@
     "db:push": "supabase db push",
     "db:seed": "node scripts/sql.mjs supabase/seed.sql",
     "db:types": "node scripts/gen-types.mjs > src/lib/db/generated.ts",
-    "db:verify": "node scripts/sql.mjs supabase/verify.sql"
+    "db:verify": "node scripts/sql.mjs supabase/verify.sql",
+    "test:disruption": "tsx --conditions=react-server scripts/test-disruption.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
@@ -24,6 +25,7 @@
     "next": "^14.2.23",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "server-only": "^0.0.1",
     "tailwind-merge": "^2.6.0",
     "zod": "^4.4.3"
   },
@@ -38,6 +40,7 @@
     "pg": "^8.23.0",
     "postcss": "^8.5.1",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.12",
     "typescript": "^5.7.3"
   }
 }

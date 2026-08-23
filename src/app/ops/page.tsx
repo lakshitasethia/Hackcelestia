@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertTriangle, ArrowUpRight, Zap } from "lucide-react";
+import { AlertTriangle, ArrowUpRight } from "lucide-react";
 import AppNav from "@/components/layout/AppNav";
 import ScheduleBoard from "@/components/ops/ScheduleBoard";
 import VendorTable from "@/components/ops/VendorTable";
+import DemoControls from "@/components/ops/DemoControls";
 import {
   getAllOpenDisruptions,
   getOperatorTrips,
@@ -151,17 +152,7 @@ export default async function OpsPage() {
           </div>
         </div>
 
-        {/* The injector is a demo control, not a product feature, so it sits at
-            the bottom and says so. Wired on Day 4. */}
-        <section className="mt-20 pt-8 border-t border-line flex flex-wrap items-center justify-between gap-4">
-          <p className="font-sans text-xs uppercase tracking-wider text-muted flex items-center gap-2">
-            <Zap className="w-3.5 h-3.5" />
-            Demo controls
-          </p>
-          <span className="font-sans text-xs text-muted">
-            Disruption injector arrives with the re-planner.
-          </span>
-        </section>
+        {trips[0] && <DemoControls tripId={trips[0].id} />}
       </div>
     </main>
   );
