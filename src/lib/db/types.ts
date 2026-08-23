@@ -1,83 +1,69 @@
 /**
  * Domain types for the Voyage schema.
  *
- * The status/type columns are text + CHECK in Postgres (see the migration for
- * why), so the unions below are where that vocabulary is actually enforced for
- * us. Keep them in step with the CHECK constraints — nothing else will.
+ * Row shapes and the status/type unions are derived from `generated.ts`, which
+ * is read straight off the live database — so they cannot drift from Postgres.
+ * What lives here is the shape Postgres cannot express: the contents of jsonb
+ * columns, and the query results that only exist as function output.
  *
- * Row shapes will be replaced by `supabase gen types typescript` output once
- * the project exists; these are the hand-written stand-ins.
+ * Regenerate after every migration: `npm run db:types`.
  */
 
-export type Role = "traveler" | "operator" | "coordinator";
+import type {
+  AgentRunsRow,
+  AgentStepsRow,
+  AvailabilityRow,
+  BookingsRow,
+  DisruptionsRow,
+  InventoryRow,
+  ItineraryItemsRow,
+  MessagesRow,
+  OperatorsRow,
+  ProfilesRow,
+  ReplanProposalsRow,
+  TripsRow,
+  VendorsRow,
+} from "./generated";
 
-export type VendorType =
-  | "hotel"
-  | "activity"
-  | "transport"
-  | "guide"
-  | "restaurant";
+export type Profile = ProfilesRow;
+export type Operator = OperatorsRow;
+export type Vendor = VendorsRow;
+export type Inventory = InventoryRow;
+export type Availability = AvailabilityRow;
+export type Booking = BookingsRow;
+export type Message = MessagesRow;
+export type AgentRun = AgentRunsRow;
+export type AgentStep = AgentStepsRow;
+export type ItineraryItem = ItineraryItemsRow;
 
-/** Itinerary items add `flight`, which is not something a vendor supplies. */
-export type ItemType = VendorType | "flight";
+/** jsonb columns come back as `Json`; these override them with real shapes. */
+export type Trip = Omit<TripsRow, "prefs"> & { prefs: TripPrefs };
+export type Disruption = Omit<DisruptionsRow, "payload"> & {
+  payload: DisruptionPayload;
+};
+export type ReplanProposal = Omit<ReplanProposalsRow, "plan"> & {
+  plan: ReplanOp[];
+};
 
-export type TripStatus =
-  | "draft"
-  | "quoted"
-  | "confirmed"
-  | "in_progress"
-  | "completed"
-  | "cancelled";
+// Pulled off the row types so the CHECK constraints stay the single source.
+export type Role = ProfilesRow["role"];
+export type VendorType = VendorsRow["type"];
+export type ItemType = ItineraryItemsRow["type"];
+export type TripStatus = TripsRow["status"];
+export type ItemStatus = ItineraryItemsRow["status"];
+export type BookingState = BookingsRow["state"];
+export type DisruptionSource = DisruptionsRow["source"];
+export type Severity = DisruptionsRow["severity"];
+export type DisruptionState = DisruptionsRow["state"];
+export type ProposalState = ReplanProposalsRow["state"];
+export type AgentKind = AgentRunsRow["kind"];
+export type AgentStatus = AgentRunsRow["status"];
 
-export type ItemStatus =
-  | "planned"
-  | "confirmed"
-  | "at_risk"
-  | "cancelled"
-  | "replaced";
-
-export type BookingState =
-  | "held"
-  | "confirmed"
-  | "cancelled"
-  | "refunded"
-  | "failed";
-
-export type DisruptionSource = "weather" | "transport" | "vendor" | "manual";
-export type Severity = "low" | "medium" | "high";
-export type DisruptionState = "open" | "resolved" | "dismissed";
-
-export type ProposalState =
-  | "draft"
-  | "sent"
-  | "accepted"
-  | "rejected"
-  | "superseded";
-
-export type AgentKind = "intake" | "compose" | "replan" | "comms" | "copilot";
-export type AgentStatus = "running" | "succeeded" | "failed";
-
-export interface Trip {
-  id: string;
-  traveler_id: string | null;
-  operator_id: string | null;
-  title: string;
-  contact_name: string | null;
-  contact_email: string | null;
-  contact_phone: string | null;
-  status: TripStatus;
-  party_size: number;
-  budget: number | null;
-  currency: string;
-  starts_on: string | null;
-  ends_on: string | null;
-  prefs: TripPrefs;
-  created_at: string;
-  updated_at: string;
-}
-
-/** Structured output of the intake agent. Everything optional — a traveler who
- *  says "a week in Italy, we like food" should still produce a valid spec. */
+/**
+ * Structured output of the intake agent. Everything is optional on purpose — a
+ * traveler who says "a week in Italy, we like food" should still produce a
+ * valid spec rather than an extraction failure.
+ */
 export interface TripPrefs {
   interests?: string[];
   pace?: "relaxed" | "moderate" | "packed";
@@ -86,48 +72,30 @@ export interface TripPrefs {
   style?: string;
 }
 
-export interface ItineraryItem {
-  id: string;
-  trip_id: string;
-  day: number;
-  seq: number;
-  inventory_id: string | null;
-  vendor_id: string | null;
-  title: string;
-  type: ItemType;
-  starts_at: string;
-  ends_at: string;
-  lat: number | null;
-  lng: number | null;
-  cost: number;
-  status: ItemStatus;
-  /** The DAG edge: ids of items this one cannot happen without. */
-  depends_on: string[];
-  /** Non-null means the re-planner may not move it; the text says why. */
-  lock_reason: string | null;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
+/** What the disruption injector records about the cause. */
+export interface DisruptionPayload {
+  condition?: string;
+  wind_kts?: number;
+  rain_mm?: number;
+  vendor_message?: string;
+  delay_min?: number;
+  [key: string]: unknown;
 }
 
-export interface Disruption {
-  id: string;
-  trip_id: string;
-  source: DisruptionSource;
-  severity: Severity;
-  headline: string;
-  root_item_id: string | null;
-  payload: Record<string, unknown>;
-  state: DisruptionState;
-  detected_at: string;
-  resolved_at: string | null;
-}
-
-/** One operation in a re-plan. The agent emits an ordered list of these;
- *  applying them is a separate, deliberate step taken by a human. */
+/**
+ * One operation in a re-plan. The agent emits an ordered list of these, and
+ * applying them is a separate step taken by a human — a proposal never mutates
+ * a live booking on its own.
+ */
 export type ReplanOp =
   | { op: "drop"; item_id: string; reason: string }
-  | { op: "move"; item_id: string; starts_at: string; ends_at: string; reason: string }
+  | {
+      op: "move";
+      item_id: string;
+      starts_at: string;
+      ends_at: string;
+      reason: string;
+    }
   | {
       op: "replace";
       item_id: string;
@@ -146,21 +114,7 @@ export type ReplanOp =
       reason: string;
     };
 
-export interface ReplanProposal {
-  id: string;
-  disruption_id: string;
-  run_id: string | null;
-  plan: ReplanOp[];
-  cost_delta: number;
-  rationale: string | null;
-  state: ProposalState;
-  created_at: string;
-  decided_at: string | null;
-  decided_by: string | null;
-}
-
-/** One node of the blast radius, as returned by the `blast_radius()` function
- *  joined back to the items it names. */
+/** A blast_radius() row joined back to the item it names. */
 export interface AffectedItem extends ItineraryItem {
   depth: number;
 }

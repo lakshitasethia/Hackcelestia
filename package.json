@@ -7,11 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:link": "supabase link --project-ref $SUPABASE_PROJECT_REF",
     "db:push": "supabase db push",
-    "db:seed": "supabase db push --include-seed",
-    "db:types": "supabase gen types typescript --linked > src/lib/db/generated.ts",
-    "db:reset": "supabase db reset --linked"
+    "db:seed": "node scripts/sql.mjs supabase/seed.sql",
+    "db:types": "node scripts/gen-types.mjs > src/lib/db/generated.ts",
+    "db:verify": "node scripts/sql.mjs supabase/verify.sql"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
@@ -30,11 +29,13 @@
   },
   "devDependencies": {
     "@types/node": "^20.17.14",
+    "@types/pg": "^8.23.1",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
     "eslint-config-next": "14.2.23",
+    "pg": "^8.23.0",
     "postcss": "^8.5.1",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3"
