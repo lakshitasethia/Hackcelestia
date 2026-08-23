@@ -9,6 +9,7 @@ import {
   getAllOpenDisruptions,
   getOperatorTrips,
   getSchedule,
+  getOperators,
   getVendors,
   operatorTotals,
 } from "@/lib/db/queries";
@@ -19,11 +20,12 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Operations" };
 
 export default async function OpsPage() {
-  const [trips, vendors, schedule, disruptions] = await Promise.all([
+  const [trips, vendors, schedule, disruptions, operators] = await Promise.all([
     getOperatorTrips(),
     getVendors(),
     getSchedule(3),
     getAllOpenDisruptions(),
+    getOperators(),
   ]);
 
   const { liveTrips, travellers, booked, atRisk } = operatorTotals(
@@ -41,11 +43,15 @@ export default async function OpsPage() {
       <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 pt-28 pb-24">
         <header className="flex flex-wrap items-end justify-between gap-6">
           <div>
-            <span className="eyebrow">· Costiera DMC ·</span>
+            <span className="eyebrow">· {operators[0]?.name ?? "Operations"} ·</span>
             <h1 className="font-display text-display-lg font-semibold uppercase text-fg">
               Operations
             </h1>
           </div>
+
+          <Link href="/plan" className="btn-solid px-6 py-3 text-xs tracking-wider">
+            New trip
+          </Link>
         </header>
 
         {/* Disruptions come first and nothing else moves above them. An operator

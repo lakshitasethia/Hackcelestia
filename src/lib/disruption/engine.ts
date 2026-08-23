@@ -129,12 +129,28 @@ export async function findCandidates(
   const supabase = createAdminClient();
   const date = root.starts_at.slice(0, 10);
 
-  const { data, error } = await supabase
-    .from("availability")
-    .select("*, inventory(*, vendors(name, channel))")
-    .eq("date", date);
+  const [{ data, error }, { data: booked }] = await Promise.all([
+    supabase
+      .from("availability")
+      .select("*, inventory(*, vendors(name, channel))")
+      .eq("date", date),
+    // Anything already on this itinerary is not a replacement for anything
+    // else on it — including, in the worst case, an item the same disruption
+    // just broke being offered as its own fix.
+    supabase
+      .from("itinerary_items")
+      .select("inventory_id")
+      .eq("trip_id", root.trip_id)
+      .not("inventory_id", "is", null),
+  ]);
 
   if (error) throw new Error(`findCandidates: ${error.message}`);
+
+  const alreadyPlanned = new Set(
+    ((booked ?? []) as { inventory_id: string | null }[])
+      .map((b) => b.inventory_id)
+      .filter((id): id is string => Boolean(id))
+  );
 
   type Row = {
     starts_at: string;
@@ -151,6 +167,7 @@ export async function findCandidates(
       const inv = row.inventory;
       if (!inv) return false;
       if (inv.id === root.inventory_id) return false; // the thing that broke
+      if (alreadyPlanned.has(inv.id)) return false; // already on this itinerary
       if (row.slots_total - row.slots_taken <= 0) return false;
       if (source === "weather" && inv.weather_sensitive) return false;
       // Replace like with like: a boat day is an experience, not a hotel bed.

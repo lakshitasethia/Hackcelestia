@@ -25,11 +25,12 @@ export default async function AppHome() {
 
   const surfaces = [
     {
-      label: "Traveler",
+      label: "Plan a trip",
       icon: Compass,
-      href: trip ? `/trip/${trip.id}` : "/app/trip",
-      blurb: "The live itinerary, day by day, with what each stop depends on.",
-      stat: trip ? `${trip.contact_name ?? trip.title}` : "No trips yet",
+      href: "/plan",
+      blurb:
+        "Set your dates, budget and interests, then build the itinerary from real inventory.",
+      stat: trip ? `Latest: ${trip.contact_name ?? trip.title}` : "No trips yet",
       ready: true,
     },
     {

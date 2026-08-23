@@ -3,7 +3,9 @@ import type {
   AffectedItem,
   Booking,
   Disruption,
+  Inventory,
   ItineraryItem,
+  Operator,
   Trip,
   Vendor,
 } from "./types";
@@ -218,4 +220,44 @@ export function operatorTotals(trips: Trip[], schedule: ScheduleEntry[]) {
   const atRisk = schedule.filter((s) => s.status === "at_risk").length;
 
   return { liveTrips: live.length, travellers, booked, atRisk };
+}
+
+// -------------------------------------------------------------- catalogue --
+
+export type InventoryOption = Inventory & {
+  vendors: { id: string; name: string; channel: "auto" | "manual" } | null;
+};
+
+/** Everything bookable, for the traveler's picker. */
+export async function getInventory(): Promise<InventoryOption[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("inventory")
+    .select("*, vendors(id, name, channel)")
+    .order("type")
+    .order("title");
+
+  if (error) throw new Error(`getInventory: ${error.message}`);
+  return (data ?? []) as unknown as InventoryOption[];
+}
+
+/** Distinct interest tags across the catalogue, so the trip form offers what
+ *  actually exists rather than a hard-coded list that drifts from inventory. */
+export async function getInterestTags(): Promise<string[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.from("inventory").select("tags");
+  if (error) throw new Error(`getInterestTags: ${error.message}`);
+
+  const tags = new Set<string>();
+  for (const row of (data ?? []) as { tags: string[] }[]) {
+    for (const tag of row.tags ?? []) tags.add(tag);
+  }
+  return [...tags].sort();
+}
+
+export async function getOperators(): Promise<Operator[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.from("operators").select("*").order("name");
+  if (error) throw new Error(`getOperators: ${error.message}`);
+  return (data ?? []) as Operator[];
 }
