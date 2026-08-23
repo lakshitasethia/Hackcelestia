@@ -99,6 +99,14 @@
     color: #2c2824;
   }
 
+  /* Anchor clearance for the fixed header. ScrollEffects applies the same
+     offset when it drives the scroll itself; this covers the native fallback
+     (no JS, or a hash typed straight into the address bar). */
+  :target,
+  section[id] {
+    scroll-margin-top: 88px;
+  }
+
   /* Lenis */
   html.lenis,
   html.lenis body {

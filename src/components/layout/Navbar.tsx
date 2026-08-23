@@ -1,22 +1,60 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
-import { Menu, X, Compass, ArrowRight, Sparkles } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Menu, X, ArrowRight, Sparkles } from "lucide-react";
+
+/**
+ * Every entry points at a section that exists on the page; ScrollEffects
+ * intercepts the click and scrolls there smoothly, clear of the fixed header.
+ */
+const NAV_LINKS = [
+  { label: "Discover", href: "#destinations" },
+  { label: "How It Works", href: "#how-it-works" },
+  { label: "Features", href: "#features" },
+  { label: "For Operators", href: "#for-operators" },
+  { label: "Pricing", href: "#pricing" },
+];
+
+/** Where "Start Planning" goes — the catalog is where a trip actually begins. */
+const PLAN_HREF = "#destinations";
 
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<string>("");
+
+  // The nav points at sections of the home page. Away from home those anchors
+  // do not exist, so send the link back to "/" and let the hash resolve there.
+  const pathname = usePathname();
+  const isHome = pathname === "/";
+  const sectionHref = (hash: string) => (isHome ? hash : `/${hash}`);
+  const homeHref = isHome ? "#top" : "/";
+
+  // Off the home page there is no hero image behind the header, so the
+  // transparent treatment has nothing to sit on — keep it solid throughout.
+  const solid = isScrolled || !isHome;
 
   useEffect(() => {
+    // Lenis scrolls the window natively, so a plain scroll listener stays in
+    // sync with it — no separate subscription needed.
     const handleScroll = () => {
-      if (window.scrollY > 60) {
-        setIsScrolled(true);
-      } else {
-        setIsScrolled(false);
+      setIsScrolled(window.scrollY > 60);
+
+      // Whichever linked section sits under the upper third of the viewport is
+      // the one the reader is on.
+      const marker = window.innerHeight * 0.35;
+      let current = "";
+      for (const { href } of NAV_LINKS) {
+        const el = document.getElementById(href.slice(1));
+        if (!el) continue;
+        const { top, bottom } = el.getBoundingClientRect();
+        if (top <= marker && bottom > marker) current = href;
       }
+      setActiveSection(current);
     };
 
+    handleScroll();
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
@@ -30,32 +68,25 @@ export default function Navbar() {
     }
   }, [mobileMenuOpen]);
 
-  const navLinks = [
-    { label: "Discover", href: "#destinations" },
-    { label: "How It Works", href: "#how-it-works" },
-    { label: "Features", href: "#features" },
-    { label: "For Operators", href: "#for-operators" },
-    { label: "Pricing", href: "#pricing" },
-  ];
-
   return (
     <>
       <header
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
- isScrolled
+ solid
  ? "bg-surface backdrop-blur-md border-b border-line shadow-sm py-3.5"
  : "bg-gradient-to-b from-black/60 via-black/20 to-transparent py-5"
  }`}
       >
         <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 flex items-center justify-between">
           {/* Logo / Wordmark */}
-          <Link
-            href="/"
+          <a
+            href={homeHref}
+            aria-label={isHome ? "VOYAGE — back to top" : "VOYAGE — home"}
             className="flex items-center gap-3 group focus:outline-none"
           >
             <div
               className={`w-9 h-9 border border-line flex items-center justify-center font-display font-black text-lg transition-transform duration-200 group-hover:scale-105 ${
- isScrolled
+ solid
  ? "bg-fg text-bg"
  : "bg-surface text-fg"
  }`}
@@ -78,35 +109,46 @@ export default function Navbar() {
                 Personalized Tour Planning
               </span>
             </div>
-          </Link>
+          </a>
 
           {/* Desktop Center Nav Links */}
           <nav className="hidden md:flex items-center gap-7 lg:gap-9">
-            {navLinks.map((link) => (
-              <a
-                key={link.label}
-                href={link.href}
-                className={`font-sans text-xs uppercase tracking-wider font-bold transition-colors duration-150 relative py-1 hover:text-accent ${
- isScrolled ? "text-fg" : "text-fg hover:text-accent"
+            {NAV_LINKS.map((link) => {
+              const isActive = activeSection === link.href;
+              return (
+                <a
+                  key={link.label}
+                  href={sectionHref(link.href)}
+                  aria-current={isActive ? "true" : undefined}
+                  className={`font-sans text-xs uppercase tracking-wider font-bold transition-colors duration-150 relative py-1 hover:text-accent ${
+ isActive ? "text-accent" : "text-fg hover:text-accent"
  }`}
-              >
-                {link.label}
-              </a>
-            ))}
+                >
+                  {link.label}
+                  <span
+                    className={`absolute left-0 -bottom-0.5 h-px bg-accent transition-all duration-300 ${
+ isActive ? "w-full opacity-100" : "w-0 opacity-0"
+ }`}
+                  />
+                </a>
+              );
+            })}
           </nav>
 
           {/* Desktop Right CTAs */}
           <div className="hidden md:flex items-center gap-4">
-            <a
-              href="#pricing"
-              className={`font-sans text-xs uppercase tracking-wider font-bold transition-colors py-2 px-3 hover:text-accent ${
- isScrolled ? "text-fg" : "text-fg hover:text-accent"
- }`}
+            {/* Accounts do not exist yet, so this deliberately goes nowhere
+                rather than dumping the reader into an unrelated section. */}
+            <button
+              type="button"
+              aria-disabled="true"
+              title="Accounts are not live yet"
+              className="font-sans text-xs uppercase tracking-wider font-bold py-2 px-3 text-fg opacity-50 cursor-not-allowed"
             >
               Log In
-            </a>
+            </button>
             <a
-              href="#features"
+              href={sectionHref(PLAN_HREF)}
               className="btn-solid py-2.5 px-5 text-xs tracking-wider"
             >
               <span>Start Planning</span>
@@ -117,7 +159,7 @@ export default function Navbar() {
           {/* Mobile Menu Trigger */}
           <div className="flex md:hidden items-center gap-3">
             <a
-              href="#features"
+              href={sectionHref(PLAN_HREF)}
               className="btn-solid py-2 px-3 text-sm"
             >
               Plan Trip
@@ -155,10 +197,10 @@ export default function Navbar() {
               · NAVIGATION MENU ·
             </div>
             <nav className="flex flex-col gap-5">
-              {navLinks.map((link, idx) => (
+              {NAV_LINKS.map((link, idx) => (
                 <a
                   key={link.label}
-                  href={link.href}
+                  href={sectionHref(link.href)}
                   onClick={() => setMobileMenuOpen(false)}
                   className="group flex items-center justify-between font-display text-3xl font-bold border-b border-line pb-3 hover:text-accent transition-colors"
                 >
@@ -173,13 +215,16 @@ export default function Navbar() {
 
           <div className="relative z-10 pt-8 border-t border-line flex flex-col gap-4">
             <a
-              href="#features"
+              href={sectionHref(PLAN_HREF)}
               onClick={() => setMobileMenuOpen(false)}
               className="btn-solid w-full py-4 text-sm font-bold tracking-wider"
             >
               Start Planning Trip
               <ArrowRight className="w-4 h-4 ml-2 inline" />
             </a>
+            <span className="font-sans text-xs uppercase tracking-wider text-muted text-center">
+              Accounts are not live yet
+            </span>
           </div>
         </div>
       )}

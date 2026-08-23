@@ -5,87 +5,132 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Compass, Sliders, CalendarRange, Calculator, CheckCircle2, RefreshCw } from "lucide-react";
 
+const steps = [
+  {
+    num: "01",
+    icon: Compass,
+    title: "Discover",
+    desc: "Browse curated destinations & activities tailored to your travel vibe.",
+    detail: "Explore hand-vetted villas, private culinary tours, and off-grid adventures matched to your pace.",
+    tag: "Curation Engine",
+  },
+  {
+    num: "02",
+    icon: Sliders,
+    title: "Personalize",
+    desc: "Set your exact dates, guest count, comfort tier, and target budget.",
+    detail: "Fine-tune dietary preferences, pace parameters, private transfer needs, and mobility requirements.",
+    tag: "Preference Matrix",
+  },
+  {
+    num: "03",
+    icon: CalendarRange,
+    title: "Plan",
+    desc: "Build day-by-day itineraries, swap hotels, and reorder activities.",
+    detail: "Drag and drop schedule blocks with automated transit time validation between waypoints.",
+    tag: "Dynamic Builder",
+  },
+  {
+    num: "04",
+    icon: Calculator,
+    title: "Price",
+    desc: "Watch transparent itemized totals calculate live with every change.",
+    detail: "Direct supplier rates with zero opaque package markups. What you see is exactly what you pay.",
+    tag: "Live Ledger",
+  },
+  {
+    num: "05",
+    icon: CheckCircle2,
+    title: "Book",
+    desc: "Confirm flights, stays, and experiences in one consolidated checkout.",
+    detail: "Unified reservation voucher, instant operator confirmation, and synchronized digital wallet passes.",
+    tag: "Instant Lock",
+  },
+  {
+    num: "06",
+    icon: RefreshCw,
+    title: "Adapt",
+    desc: "Automated real-time re-routing if delays, cancellations, or storms hit.",
+    detail: "Dynamic graph solver detects delays, cancels conflicting slots, and reschedules reservations instantly.",
+    tag: "Flagship Sentinel",
+  },
+];
+
+/** Diameter of a step node, in px — the line has to cross their centres. */
+const NODE_SIZE = 56;
+
 export default function JourneyStrip() {
   const [activeStep, setActiveStep] = useState(0);
   const [progress, setProgress] = useState(0);
-  const sectionRef = useRef<HTMLElement>(null);
+  // Where the connecting line starts and how far it runs: measured from the
+  // real node positions rather than guessed from the container, so it lines up
+  // with the first and last node centres at any width.
+  const [track, setTrack] = useState({ start: 0, span: 0 });
 
-  const steps = [
-    {
-      num: "01",
-      icon: Compass,
-      title: "Discover",
-      desc: "Browse curated destinations & activities tailored to your travel vibe.",
-      detail: "Explore hand-vetted villas, private culinary tours, and off-grid adventures matched to your pace.",
-      tag: "Curation Engine",
-    },
-    {
-      num: "02",
-      icon: Sliders,
-      title: "Personalize",
-      desc: "Set your exact dates, guest count, comfort tier, and target budget.",
-      detail: "Fine-tune dietary preferences, pace parameters, private transfer needs, and mobility requirements.",
-      tag: "Preference Matrix",
-    },
-    {
-      num: "03",
-      icon: CalendarRange,
-      title: "Plan",
-      desc: "Build day-by-day itineraries, swap hotels, and reorder activities.",
-      detail: "Drag and drop schedule blocks with automated transit time validation between waypoints.",
-      tag: "Dynamic Builder",
-    },
-    {
-      num: "04",
-      icon: Calculator,
-      title: "Price",
-      desc: "Watch transparent itemized totals calculate live with every change.",
-      detail: "Direct supplier rates with zero opaque package markups. What you see is exactly what you pay.",
-      tag: "Live Ledger",
-    },
-    {
-      num: "05",
-      icon: CheckCircle2,
-      title: "Book",
-      desc: "Confirm flights, stays, and experiences in one consolidated checkout.",
-      detail: "Unified reservation voucher, instant operator confirmation, and synchronized digital wallet passes.",
-      tag: "Instant Lock",
-    },
-    {
-      num: "06",
-      icon: RefreshCw,
-      title: "Adapt",
-      desc: "Automated real-time re-routing if delays, cancellations, or storms hit.",
-      detail: "Dynamic graph solver detects delays, cancels conflicting slots, and reschedules reservations instantly.",
-      tag: "Flagship Sentinel",
-    },
-  ];
+  const stripRef = useRef<HTMLDivElement>(null);
+  const nodeRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
+  /* Measure the node centres, and re-measure whenever the strip resizes. */
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+
+    const measure = () => {
+      const first = nodeRefs.current[0];
+      const last = nodeRefs.current[steps.length - 1];
+      if (!first || !last) return;
+      const start = first.offsetLeft + first.offsetWidth / 2;
+      const end = last.offsetLeft + last.offsetWidth / 2;
+      setTrack((prev) =>
+        prev.start === start && prev.span === end - start
+          ? prev
+          : { start, span: end - start }
+      );
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(strip);
+    return () => observer.disconnect();
+  }, []);
+
+  /* Scrub the line + active node against scroll position.
+     The strip is the trigger, not the whole section: anchoring to the section
+     meant the bar was already part-filled before the strip came into view and
+     only completed once it had scrolled away. Desktop only — below `lg` the
+     strip is display:none, which would give ScrollTrigger a zero-height box to
+     measure, and the cards there are click-driven anyway. */
   useEffect(() => {
     gsap.registerPlugin(ScrollTrigger);
-    if (!sectionRef.current) return;
 
-    // Scrub the constellation line + active node directly against scroll position,
-    // instead of a manual scroll listener — smoother, and pauses cleanly off-screen.
-    const trigger = ScrollTrigger.create({
-      trigger: sectionRef.current,
-      start: "top 70%",
-      end: "bottom 55%",
-      scrub: 0.6,
-      onUpdate: (self) => {
-        const p = self.progress;
-        setProgress(p);
-        setActiveStep(Math.min(steps.length - 1, Math.floor(p * steps.length)));
-      },
+    const mm = gsap.matchMedia();
+    mm.add("(min-width: 1024px)", () => {
+      if (!stripRef.current) return;
+
+      const trigger = ScrollTrigger.create({
+        trigger: stripRef.current,
+        start: "top 80%",
+        end: "top 30%",
+        scrub: 0.6,
+        invalidateOnRefresh: true,
+        onUpdate: (self) => {
+          const p = self.progress;
+          setProgress(p);
+          // Same mapping the line uses: progress 0 sits on the first node,
+          // progress 1 on the last, so the highlight tracks the line head.
+          setActiveStep(Math.round(p * (steps.length - 1)));
+        },
+      });
+
+      return () => trigger.kill();
     });
 
-    return () => trigger.kill();
-  }, [steps.length]);
+    return () => mm.revert();
+  }, []);
 
   return (
     <section
       id="how-it-works"
-      ref={sectionRef}
       data-scroll-theme="dark"
       className="py-20 sm:py-28 border-b border-line relative overflow-hidden"
     >
@@ -144,47 +189,74 @@ export default function JourneyStrip() {
         </div>
 
         {/* Desktop Constellation Timeline Strip */}
-        <div className="relative mb-16 hidden lg:block">
-          {/* Background Track */}
-          <div className="absolute top-1/2 left-8 right-8 -translate-y-1/2 h-1 bg-surface border-t border-b border-line -z-0" />
-          
+        <div ref={stripRef} className="relative mb-16 hidden lg:block">
+          {/* Background Track — pinned to the node centres, both horizontally
+              (measured) and vertically (half a node down from the top of the
+              row), so it threads the circles instead of the labels below them. */}
+          <div
+            className="absolute h-px bg-line"
+            style={{
+              top: NODE_SIZE / 2,
+              left: track.start,
+              width: track.span,
+            }}
+          />
+
           {/* Animated Connecting Line (Constellation Progress) */}
           <div
-            className="absolute top-1/2 left-8 -translate-y-1/2 h-1 bg-fg transition-all duration-300 -z-0 shadow-[0_0_8px_rgba(232,93,58,0.8)]"
-            style={{ width: `calc(${Math.max(0, Math.min(100, progress * 100))}% - 4rem)` }}
+            className="absolute h-px bg-fg"
+            style={{
+              top: NODE_SIZE / 2,
+              left: track.start,
+              width: track.span * Math.max(0, Math.min(1, progress)),
+            }}
           />
 
           {/* 6 Constellation Step Nodes */}
           <div className="grid grid-cols-6 gap-4 relative z-10">
             {steps.map((step, idx) => {
               const Icon = step.icon;
-              const isPassed = progress >= (idx / (steps.length - 1)) - 0.05;
+              // The line head sits at idx/(n-1); a node counts as reached once
+              // the head is on it.
+              const isPassed = progress >= idx / (steps.length - 1) - 0.001;
               const isCurrent = activeStep === idx;
 
               return (
                 <button
                   key={step.num}
+                  ref={(el) => {
+                    nodeRefs.current[idx] = el;
+                  }}
                   onClick={() => setActiveStep(idx)}
+                  aria-current={isCurrent ? "step" : undefined}
                   className="group flex flex-col items-center text-center focus:outline-none"
                 >
                   {/* Node Circle */}
                   <div
-                    className={`w-14 h-14 rounded-full border border-line flex items-center justify-center transition-all duration-300 ${
+                    className={`w-14 h-14 rounded-full flex items-center justify-center border transition-all duration-300 ${
  isCurrent
- ? "bg-fg text-bg scale-110"
+ ? "bg-fg text-bg border-fg scale-110"
  : isPassed
- ? "bg-surface text-fg"
- : "bg-surface text-fg group-hover:bg-surface"
+ ? "bg-surface text-fg border-fg"
+ : "bg-surface text-muted border-line group-hover:border-fg group-hover:text-fg"
  }`}
                   >
                     <Icon className="w-6 h-6" />
                   </div>
 
                   {/* Step Number & Title */}
-                  <span className="font-sans text-xs font-bold text-accent mt-3 uppercase tracking-wider">
+                  <span
+                    className={`font-sans text-xs font-bold mt-3 uppercase tracking-wider transition-colors duration-300 ${
+ isPassed ? "text-accent" : "text-muted"
+ }`}
+                  >
                     STEP {step.num}
                   </span>
-                  <h4 className="font-display font-bold text-lg text-fg mt-0.5">
+                  <h4
+                    className={`font-display font-bold text-lg mt-0.5 transition-colors duration-300 ${
+ isPassed ? "text-fg" : "text-muted"
+ }`}
+                  >
                     {step.title}
                   </h4>
                   <p className="text-xs text-muted mt-1 line-clamp-2 px-1">

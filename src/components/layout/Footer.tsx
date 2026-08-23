@@ -1,10 +1,23 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { XIcon, InstagramIcon, LinkedInIcon, GitHubIcon } from "@/components/ui/BrandIcons";
 
+const STANDARDS_LINKS = [
+  { label: "Privacy Policy", href: "/privacy" },
+  { label: "Terms of Service", href: "/terms" },
+  { label: "Traveler Security", href: "/security" },
+  { label: "API Documentation", href: "/api-docs" },
+];
+
 export default function Footer() {
+  // Same reasoning as the navbar: section anchors only resolve on the home page.
+  const pathname = usePathname();
+  const isHome = pathname === "/";
+  const sectionHref = (hash: string) => (isHome ? hash : `/${hash}`);
+
   return (
     <footer data-scroll-theme="dark" className="pt-20 pb-12 relative overflow-hidden">
       {/* Background Starfield (Final Bookend) */}
@@ -21,7 +34,7 @@ export default function Footer() {
           <div className="md:col-span-5 flex flex-col justify-between">
             <div>
               {/* Stacked Wordmark */}
-              <Link href="/" className="flex items-center gap-3 group mb-4">
+              <a href={isHome ? "#top" : "/"} aria-label={isHome ? "VOYAGE — back to top" : "VOYAGE — home"} className="flex items-center gap-3 group mb-4">
                 <div className="w-10 h-10 border border-line bg-fg text-bg flex items-center justify-center font-display font-black text-xl">
                   V
                 </div>
@@ -33,7 +46,7 @@ export default function Footer() {
                     Personalized Tour Planning
                   </span>
                 </div>
-              </Link>
+              </a>
 
               <p className="text-sm text-muted max-w-sm leading-relaxed font-medium">
                 The next-generation dynamic itinerary planning & operations platform. Built to empower travelers with modular flexibility and tour operators with intelligent automation.
@@ -41,21 +54,23 @@ export default function Footer() {
             </div>
 
             {/* Social row — official brand marks, see BrandIcons.tsx */}
+            {/* No accounts are live yet, so these stay inert instead of
+                pointing at "#". Swap in real URLs when the channels exist. */}
             <div className="flex items-center gap-3 mt-8">
               {[
-                { Icon: XIcon, href: "#", label: "X" },
-                { Icon: InstagramIcon, href: "#", label: "Instagram" },
-                { Icon: LinkedInIcon, href: "#", label: "LinkedIn" },
-                { Icon: GitHubIcon, href: "#", label: "GitHub" },
-              ].map(({ Icon, href, label }) => (
-                <a
+                { Icon: XIcon, label: "X" },
+                { Icon: InstagramIcon, label: "Instagram" },
+                { Icon: LinkedInIcon, label: "LinkedIn" },
+                { Icon: GitHubIcon, label: "GitHub" },
+              ].map(({ Icon, label }) => (
+                <span
                   key={label}
-                  href={href}
-                  aria-label={label}
-                  className="w-10 h-10 border border-line bg-surface text-muted flex items-center justify-center hover:bg-fg hover:text-bg hover:border-line transition-all"
+                  aria-label={`${label} — coming soon`}
+                  title={`${label} — coming soon`}
+                  className="w-10 h-10 border border-line bg-surface text-muted flex items-center justify-center opacity-60 cursor-not-allowed"
                 >
                   <Icon className="w-[18px] h-[18px]" />
-                </a>
+                </span>
               ))}
             </div>
           </div>
@@ -69,27 +84,27 @@ export default function Footer() {
               </span>
               <ul className="space-y-2.5 font-sans text-xs">
                 <li>
-                  <a href="#destinations" className="text-muted hover:text-accent transition-colors">
+                  <a href={sectionHref("#destinations")} className="text-muted hover:text-accent transition-colors">
                     Discover Catalog
                   </a>
                 </li>
                 <li>
-                  <a href="#how-it-works" className="text-muted hover:text-accent transition-colors">
+                  <a href={sectionHref("#how-it-works")} className="text-muted hover:text-accent transition-colors">
                     How It Works
                   </a>
                 </li>
                 <li>
-                  <a href="#features" className="text-muted hover:text-accent transition-colors">
+                  <a href={sectionHref("#features")} className="text-muted hover:text-accent transition-colors">
                     Live Pricing Engine
                   </a>
                 </li>
                 <li>
-                  <a href="#features" className="text-muted hover:text-accent transition-colors">
+                  <a href={sectionHref("#features")} className="text-muted hover:text-accent transition-colors">
                     Adaptive Sentinel
                   </a>
                 </li>
                 <li>
-                  <a href="#pricing" className="text-muted hover:text-accent transition-colors">
+                  <a href={sectionHref("#pricing")} className="text-muted hover:text-accent transition-colors">
                     Pricing & Tiers
                   </a>
                 </li>
@@ -103,22 +118,22 @@ export default function Footer() {
               </span>
               <ul className="space-y-2.5 font-sans text-xs">
                 <li>
-                  <a href="#for-operators" className="text-muted hover:text-accent transition-colors">
+                  <a href={sectionHref("#for-operators")} className="text-muted hover:text-accent transition-colors">
                     For Tour Operators
                   </a>
                 </li>
                 <li>
-                  <a href="#for-operators" className="text-muted hover:text-accent transition-colors">
+                  <a href={sectionHref("#for-operators")} className="text-muted hover:text-accent transition-colors">
                     DMC Back Office
                   </a>
                 </li>
                 <li>
-                  <a href="#for-operators" className="text-muted hover:text-accent transition-colors">
+                  <a href={sectionHref("#for-operators")} className="text-muted hover:text-accent transition-colors">
                     Vendor Dispatch API
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-muted hover:text-accent transition-colors">
+                  <a href={sectionHref("#for-operators")} className="text-muted hover:text-accent transition-colors">
                     Partner Network
                   </a>
                 </li>
@@ -131,26 +146,16 @@ export default function Footer() {
                 Standards
               </span>
               <ul className="space-y-2.5 font-sans text-xs">
-                <li>
-                  <a href="#" className="text-muted hover:text-accent transition-colors">
-                    Privacy Policy
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="text-muted hover:text-accent transition-colors">
-                    Terms of Service
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="text-muted hover:text-accent transition-colors">
-                    Traveler Security
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="text-muted hover:text-accent transition-colors">
-                    API Documentation
-                  </a>
-                </li>
+                {STANDARDS_LINKS.map(({ label, href }) => (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      className="text-muted hover:text-accent transition-colors"
+                    >
+                      {label}
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </div>
           </div>

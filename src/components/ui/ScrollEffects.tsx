@@ -39,6 +39,14 @@ export const SCROLL_THEMES = {
 
 export type ScrollThemeName = keyof typeof SCROLL_THEMES;
 
+/**
+ * Clearance for the fixed header, used only on the reduced-motion path below.
+ * Lenis reads `scroll-margin-top` off the target itself, so the rule in
+ * globals.css is the source of truth for the smooth path — applying this offset
+ * there as well would double-count it. Keep the two values in step.
+ */
+const HEADER_OFFSET = 88;
+
 export default function ScrollEffects() {
   useEffect(() => {
     gsap.registerPlugin(ScrollTrigger);
@@ -66,6 +74,78 @@ export default function ScrollEffects() {
       };
       rafId = requestAnimationFrame(raf);
     }
+
+    /* ---------- 1b. Same-page anchor navigation ----------
+       Lenis owns the scroll position, so a native hash jump would fight it and
+       land the section under the fixed header. One delegated listener handles
+       every in-page link on the site — nav, footer, and section CTAs alike —
+       so no individual link has to know about the offset. */
+    const scrollToTarget = (hash: string): boolean => {
+      if (hash === "#" || hash === "#top") {
+        if (lenis) lenis.scrollTo(0, { duration: 1.2 });
+        else window.scrollTo({ top: 0, behavior: prefersReduced ? "auto" : "smooth" });
+        return true;
+      }
+
+      let target: Element | null = null;
+      try {
+        target = document.querySelector(hash);
+      } catch {
+        return false;
+      }
+      if (!target) return false;
+
+      if (lenis) {
+        // No `offset` here on purpose — Lenis subtracts the target's own
+        // scroll-margin-top, which globals.css already sets to the header height.
+        lenis.scrollTo(target as HTMLElement, { duration: 1.2 });
+      } else {
+        const top =
+          target.getBoundingClientRect().top + window.scrollY - HEADER_OFFSET;
+        window.scrollTo({ top, behavior: prefersReduced ? "auto" : "smooth" });
+      }
+      return true;
+    };
+
+    const onDocumentClick = (event: MouseEvent) => {
+      // Leave modified clicks (new tab/window) and anything already handled alone.
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      const anchor = (event.target as HTMLElement | null)?.closest?.("a");
+      const href = anchor?.getAttribute("href");
+      if (!href || !href.startsWith("#")) return;
+
+      event.preventDefault();
+
+      // The mobile menu unlocks body scroll in the same tick; scroll on the
+      // next frame so the lock is gone before the tween starts.
+      requestAnimationFrame(() => {
+        if (!scrollToTarget(href)) return;
+        const isTop = href === "#" || href === "#top";
+        window.history.replaceState(
+          null,
+          "",
+          isTop ? window.location.pathname + window.location.search : href
+        );
+      });
+    };
+
+    document.addEventListener("click", onDocumentClick);
+
+    // Honour a hash the page was opened with, once layout has settled.
+    const initialHash = window.location.hash;
+    const deepLinkTimer = initialHash
+      ? window.setTimeout(() => scrollToTarget(initialHash), 250)
+      : 0;
 
     const ctx = gsap.context(() => {
       /* ---------- 2. Scroll-driven background + text colour ----------
@@ -158,6 +238,8 @@ export default function ScrollEffects() {
     const refreshTimer = window.setTimeout(refresh, 600);
 
     return () => {
+      document.removeEventListener("click", onDocumentClick);
+      window.clearTimeout(deepLinkTimer);
       window.removeEventListener("load", refresh);
       window.clearTimeout(refreshTimer);
       cancelAnimationFrame(rafId);
