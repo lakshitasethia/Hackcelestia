@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Bot, Lock, User } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bot, Lock, Sparkles, User } from "lucide-react";
 import AppNav from "@/components/layout/AppNav";
 import { assessDisruption } from "@/lib/disruption/engine";
+import { getAgentRuns, getItems, getProposals } from "@/lib/db/queries";
+import TracePanel from "@/components/agent/TracePanel";
+import ProposalCard from "@/components/agent/ProposalCard";
+import { runAgentAction } from "./actions";
 import { formatDateLong, formatMoney, formatTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +21,14 @@ export default async function DisruptionPage({
 }) {
   const assessment = await assessDisruption(params.id);
   if (!assessment) notFound();
+
+  const [runs, proposals, allItems] = await Promise.all([
+    getAgentRuns(params.id),
+    getProposals(params.id),
+    getItems(assessment.disruption.trip_id),
+  ]);
+  const titleById = new Map(allItems.map((i) => [i.id, i.title]));
+  const latestRun = runs[0] ?? null;
 
   const { disruption, root, affected, locked, exposure, sunk, candidates } =
     assessment;
@@ -200,20 +212,66 @@ export default async function DisruptionPage({
               </ul>
             )}
 
-            {/* Deliberate: this screen states the problem, it does not solve it.
-                The re-planner arrives on Day 5 and proposes; a human accepts. */}
+            {/* Everything above this line is deterministic. The agent starts
+                here, and it only ever writes drafts. */}
             <div className="mt-8 border border-line p-5">
               <h3 className="font-sans text-xs uppercase tracking-wider font-bold text-accent">
-                Next
+                Re-planner
               </h3>
               <p className="mt-2 font-sans text-sm text-muted leading-relaxed">
                 Impact and options above are computed deterministically — graph
-                traversal and availability, no model. The re-planner reads
-                exactly this and proposes ordered fixes for a human to accept.
+                traversal and availability, no model. The agent reads exactly
+                that, calls the same tools, and proposes plans for you to accept.
+                It cannot change a booking on its own.
               </p>
+
+              {assessment.disruption.state === "open" && (
+                <form action={runAgentAction} className="mt-4">
+                  <input type="hidden" name="disruptionId" value={assessment.disruption.id} />
+                  <input type="hidden" name="tripId" value={assessment.disruption.trip_id} />
+                  <button type="submit" className="btn-solid px-6 py-3 text-xs tracking-wider">
+                    <Sparkles className="w-3.5 h-3.5 mr-2 inline" />
+                    {runs.length > 0 ? "Run again" : "Run the re-planner"}
+                  </button>
+                </form>
+              )}
             </div>
           </section>
         </div>
+
+        {(proposals.length > 0 || latestRun) && (
+          <div className="mt-16 grid grid-cols-1 xl:grid-cols-12 gap-12">
+            <section className="xl:col-span-7">
+              <h2 className="font-display text-display-sm font-semibold uppercase text-fg">
+                Proposed plans
+              </h2>
+              <p className="mt-2 font-sans text-xs uppercase tracking-wider text-muted">
+                Drafts — nothing is booked until you accept one
+              </p>
+
+              {proposals.length === 0 ? (
+                <p className="mt-6 text-muted">
+                  The agent has not proposed anything yet.
+                </p>
+              ) : (
+                <div className="mt-6 flex flex-col gap-4">
+                  {proposals.map((proposal) => (
+                    <ProposalCard
+                      key={proposal.id}
+                      proposal={proposal}
+                      titleById={titleById}
+                      disruptionId={assessment.disruption.id}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <div className="xl:col-span-5">
+              {latestRun && <TracePanel run={latestRun} />}
+            </div>
+          </div>
+        )}
 
         <div className="mt-20 pt-8 border-t border-line flex flex-wrap gap-6 justify-between">
           <Link href="/ops" className="link-underline">

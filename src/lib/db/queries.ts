@@ -1,11 +1,14 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   AffectedItem,
+  AgentRun,
+  AgentStep,
   Booking,
   Disruption,
   Inventory,
   ItineraryItem,
   Operator,
+  ReplanProposal,
   Trip,
   Vendor,
 } from "./types";
@@ -260,4 +263,43 @@ export async function getOperators(): Promise<Operator[]> {
   const { data, error } = await supabase.from("operators").select("*").order("name");
   if (error) throw new Error(`getOperators: ${error.message}`);
   return (data ?? []) as Operator[];
+}
+
+// ------------------------------------------------------------------ agent --
+
+export interface AgentRunWithSteps extends AgentRun {
+  agent_steps: AgentStep[];
+}
+
+/** Runs for a disruption, newest first, with their full tool trace. */
+export async function getAgentRuns(
+  disruptionId: string
+): Promise<AgentRunWithSteps[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("agent_runs")
+    .select("*, agent_steps(*)")
+    .eq("input->>disruption_id", disruptionId)
+    .order("started_at", { ascending: false });
+
+  if (error) throw new Error(`getAgentRuns: ${error.message}`);
+
+  return ((data ?? []) as unknown as AgentRunWithSteps[]).map((run) => ({
+    ...run,
+    agent_steps: [...(run.agent_steps ?? [])].sort((a, b) => a.seq - b.seq),
+  }));
+}
+
+export async function getProposals(
+  disruptionId: string
+): Promise<ReplanProposal[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("replan_proposals")
+    .select("*")
+    .eq("disruption_id", disruptionId)
+    .order("cost_delta");
+
+  if (error) throw new Error(`getProposals: ${error.message}`);
+  return (data ?? []) as ReplanProposal[];
 }

@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { ItineraryItem, TripPrefs } from "./types";
+import type { ItineraryItem, ReplanOp, TripPrefs } from "./types";
 
 /**
  * Writes for the traveler planner.
@@ -230,4 +230,208 @@ function zonedTime(
   ).getTime();
 
   return new Date(naive.getTime() - (asZone - asUtc));
+}
+
+/**
+ * Apply an accepted re-plan to the live itinerary.
+ *
+ * This is the only code that turns a proposal into reality, and it is
+ * deliberately deterministic — the agent decides *what* to propose, a human
+ * decides *whether*, and this decides *how*. Keeping the write path out of the
+ * model means a wrong proposal is a bad suggestion someone declined, not a
+ * corrupted itinerary.
+ */
+export async function applyProposal(proposalId: string): Promise<{
+  applied: number;
+  tripId: string;
+}> {
+  const supabase = createAdminClient();
+
+  const { data: proposal, error } = await supabase
+    .from("replan_proposals")
+    .select("*, disruptions(id, trip_id, root_item_id)")
+    .eq("id", proposalId)
+    .single();
+
+  if (error) throw new Error(`applyProposal: ${error.message}`);
+
+  const row = proposal as unknown as {
+    id: string;
+    plan: ReplanOp[];
+    state: string;
+    disruptions: { id: string; trip_id: string } | null;
+  };
+  if (!row.disruptions) throw new Error("applyProposal: orphaned proposal");
+  if (row.state === "accepted") return { applied: 0, tripId: row.disruptions.trip_id };
+
+  const tripId = row.disruptions.trip_id;
+  let applied = 0;
+
+  for (const op of row.plan) {
+    if (op.op === "drop") {
+      await supabase
+        .from("itinerary_items")
+        .update({ status: "cancelled", notes: op.reason })
+        .eq("id", op.item_id);
+      applied++;
+    }
+
+    if (op.op === "move") {
+      await supabase
+        .from("itinerary_items")
+        .update({
+          starts_at: op.starts_at,
+          ends_at: op.ends_at,
+          status: "confirmed",
+          notes: op.reason,
+        })
+        .eq("id", op.item_id);
+      applied++;
+    }
+
+    if (op.op === "replace") {
+      const [{ data: old }, { data: inv }] = await Promise.all([
+        supabase.from("itinerary_items").select("*").eq("id", op.item_id).single(),
+        supabase
+          .from("inventory")
+          .select("*, vendors(id)")
+          .eq("id", op.with_inventory_id)
+          .single(),
+      ]);
+      if (!old || !inv) continue;
+
+      const previous = old as unknown as ItineraryItem;
+      const replacement = inv as unknown as {
+        title: string;
+        type: ItineraryItem["type"];
+        base_cost: number;
+        lat: number | null;
+        lng: number | null;
+        vendors: { id: string } | null;
+      };
+
+      const { data: inserted } = await supabase
+        .from("itinerary_items")
+        .insert({
+          trip_id: tripId,
+          day: previous.day,
+          seq: previous.seq,
+          inventory_id: op.with_inventory_id,
+          vendor_id: replacement.vendors?.id ?? null,
+          title: replacement.title,
+          type: replacement.type,
+          starts_at: op.starts_at,
+          ends_at: op.ends_at,
+          lat: replacement.lat,
+          lng: replacement.lng,
+          cost: replacement.base_cost,
+          status: "confirmed",
+          // The stand-in inherits the position in the graph, so the chain
+          // survives the swap.
+          depends_on: previous.depends_on,
+          notes: op.reason,
+        })
+        .select("id")
+        .single();
+
+      await supabase
+        .from("itinerary_items")
+        .update({ status: "replaced", notes: op.reason })
+        .eq("id", op.item_id);
+
+      // Anything that needed the old stop now needs the new one, or the
+      // downstream chain is quietly orphaned.
+      if (inserted) {
+        const newId = (inserted as { id: string }).id;
+        const { data: dependents } = await supabase
+          .from("itinerary_items")
+          .select("id, depends_on")
+          .eq("trip_id", tripId)
+          .contains("depends_on", [op.item_id]);
+
+        for (const dep of (dependents ?? []) as {
+          id: string;
+          depends_on: string[];
+        }[]) {
+          await supabase
+            .from("itinerary_items")
+            .update({
+              depends_on: [
+                ...new Set([
+                  ...dep.depends_on.filter((id) => id !== op.item_id),
+                  newId,
+                ]),
+              ],
+            })
+            .eq("id", dep.id);
+        }
+      }
+      applied++;
+    }
+
+    if (op.op === "add") {
+      const { data: inv } = await supabase
+        .from("inventory")
+        .select("*, vendors(id)")
+        .eq("id", op.inventory_id)
+        .single();
+      if (!inv) continue;
+
+      const addition = inv as unknown as {
+        title: string;
+        type: ItineraryItem["type"];
+        base_cost: number;
+        lat: number | null;
+        lng: number | null;
+        vendors: { id: string } | null;
+      };
+
+      await supabase.from("itinerary_items").insert({
+        trip_id: tripId,
+        day: op.day,
+        seq: 99,
+        inventory_id: op.inventory_id,
+        vendor_id: addition.vendors?.id ?? null,
+        title: addition.title,
+        type: addition.type,
+        starts_at: op.starts_at,
+        ends_at: op.ends_at,
+        lat: addition.lat,
+        lng: addition.lng,
+        cost: addition.base_cost,
+        status: "confirmed",
+        depends_on: op.depends_on ?? [],
+        notes: op.reason,
+      });
+      applied++;
+    }
+  }
+
+  // Anything still flagged survived the disruption untouched, so clear it.
+  await supabase
+    .from("itinerary_items")
+    .update({ status: "confirmed" })
+    .eq("trip_id", tripId)
+    .eq("status", "at_risk");
+
+  await Promise.all([
+    supabase
+      .from("replan_proposals")
+      .update({ state: "accepted", decided_at: new Date().toISOString() })
+      .eq("id", proposalId),
+    // Competing options are superseded, not deleted — the operator should be
+    // able to see what else was on the table when this call was made.
+    supabase
+      .from("replan_proposals")
+      .update({ state: "superseded" })
+      .eq("disruption_id", row.disruptions.id)
+      .neq("id", proposalId)
+      .eq("state", "draft"),
+    supabase
+      .from("disruptions")
+      .update({ state: "resolved", resolved_at: new Date().toISOString() })
+      .eq("id", row.disruptions.id),
+  ]);
+
+  return { applied, tripId };
 }
