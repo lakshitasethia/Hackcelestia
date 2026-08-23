@@ -23,15 +23,16 @@ try {
   // A stack trace is the wrong output for a billing problem — say what is
   // actually wrong and where to fix it.
   const message = error instanceof Error ? error.message : String(error);
-  if (message.includes("credit balance")) {
-    console.error("BLOCKED — the Anthropic account has no credits.\n");
-    console.error("  The key is valid: the request reached Anthropic and came back");
-    console.error("  with a workspace id, so this is billing, not authentication.\n");
-    console.error("  Fix: console.anthropic.com -> Plans & Billing -> add credits.");
-    console.error("  Check you are topping up the workspace the key belongs to.\n");
-  } else if (message.includes("authentication") || message.includes("401")) {
-    console.error("BLOCKED — ANTHROPIC_API_KEY is not valid.\n");
-    console.error("  Check the value in .env.local against console.anthropic.com.\n");
+  if (message.includes("GROQ_API_KEY is not set")) {
+    console.error("BLOCKED — no Groq key.\n");
+    console.error("  Get one free at console.groq.com -> API Keys (no card needed),");
+    console.error("  then add GROQ_API_KEY=... to .env.local.\n");
+  } else if (message.includes("401") || message.toLowerCase().includes("invalid api key")) {
+    console.error("BLOCKED — GROQ_API_KEY is not valid.\n");
+    console.error("  Check the value in .env.local against console.groq.com.\n");
+  } else if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
+    console.error("Rate limited by Groq's free tier. Unlike a billing error this");
+    console.error("DOES reset — wait a minute and run it again.\n");
   } else {
     console.error(`Agent run failed: ${message}\n`);
   }

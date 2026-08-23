@@ -1,6 +1,5 @@
 import "server-only";
 import { z } from "zod";
-import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getBlastRadius } from "@/lib/db/queries";
 import { findCandidates } from "@/lib/disruption/engine";
@@ -19,7 +18,48 @@ import type { ReplanOp } from "@/lib/db/types";
  * Each call is written to `agent_steps` as it happens, which is what the trace
  * panel renders. The recorder is passed in rather than imported so a run can be
  * traced or not without changing the tools.
+ *
+ * Definitions are provider-neutral on purpose: a name, a description, a JSON
+ * Schema, and a function. Schemas are declared in Zod and emitted as JSON
+ * Schema, so arguments are still validated locally whichever vendor is driving
+ * the loop — and swapping vendors touches the loop, never these.
  */
+
+export interface AgentTool {
+  name: string;
+  description: string;
+  /** JSON Schema, the format every current provider accepts. */
+  parameters: Record<string, unknown>;
+  run: (input: unknown) => Promise<string>;
+}
+
+/** Validates against the Zod schema, then hands off to the implementation. */
+function defineTool<S extends z.ZodType>(spec: {
+  name: string;
+  description: string;
+  inputSchema: S;
+  run: (input: z.infer<S>) => Promise<string>;
+}): AgentTool {
+  return {
+    name: spec.name,
+    description: spec.description,
+    parameters: z.toJSONSchema(spec.inputSchema) as Record<string, unknown>,
+    run: async (raw) => {
+      const parsed = spec.inputSchema.safeParse(raw);
+      if (!parsed.success) {
+        // Returned, not thrown — a malformed call is usually recoverable if the
+        // model is told precisely what was wrong with it.
+        return JSON.stringify({
+          error: "Invalid arguments",
+          issues: parsed.error.issues.map(
+            (i) => `${i.path.join(".") || "(root)"}: ${i.message}`
+          ),
+        });
+      }
+      return spec.run(parsed.data);
+    },
+  };
+}
 
 export type StepRecorder = (step: {
   tool: string;
@@ -67,10 +107,13 @@ const opSchema = z.object({
   reason: z.string().describe("Why this operation, in one sentence a traveler would understand"),
 });
 
-export function buildTools(assessment: Assessment, record: StepRecorder) {
+export function buildTools(
+  assessment: Assessment,
+  record: StepRecorder
+): AgentTool[] {
   const tripId = assessment.disruption.trip_id;
 
-  const getBlastRadiusTool = betaZodTool({
+  const getBlastRadiusTool = defineTool({
     name: "get_blast_radius",
     description:
       "List every itinerary item affected by a broken item, with how many dependency hops away each one sits. Depth 0 is the broken item itself. Items NOT in this list are unaffected and must not be changed.",
@@ -93,7 +136,7 @@ export function buildTools(assessment: Assessment, record: StepRecorder) {
     }),
   });
 
-  const searchAvailabilityTool = betaZodTool({
+  const searchAvailabilityTool = defineTool({
     name: "search_availability",
     description:
       "Find bookable replacements for a broken item on the same date. Results already exclude options that cannot survive the cause (weather-sensitive options during a weather disruption) and anything already on this itinerary.",
@@ -111,7 +154,7 @@ export function buildTools(assessment: Assessment, record: StepRecorder) {
     }),
   });
 
-  const priceOptionTool = betaZodTool({
+  const priceOptionTool = defineTool({
     name: "price_option",
     description:
       "Net cost of swapping one itinerary item for a catalogue option, including what is lost on the cancelled booking. A positive delta costs the traveler more.",
@@ -149,7 +192,7 @@ export function buildTools(assessment: Assessment, record: StepRecorder) {
     }),
   });
 
-  const checkVendorTool = betaZodTool({
+  const checkVendorTool = defineTool({
     name: "check_vendor",
     description:
       "Ask whether a vendor can take a booking. Vendors on the 'auto' channel confirm instantly; 'manual' vendors need an operator to phone them, so a plan that depends on one cannot complete unattended.",
@@ -207,7 +250,7 @@ export function buildTools(assessment: Assessment, record: StepRecorder) {
     }),
   });
 
-  const proposeReplanTool = betaZodTool({
+  const proposeReplanTool = defineTool({
     name: "propose_replan",
     description:
       "Record one complete alternative plan for a human to accept or reject. Call it more than once to offer genuinely different options. This writes a DRAFT — it never changes the live itinerary.",

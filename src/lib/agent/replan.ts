@@ -1,8 +1,8 @@
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assessDisruption } from "@/lib/disruption/engine";
-import { buildTools, type StepRecorder } from "./tools";
+import { buildTools, type AgentTool, type StepRecorder } from "./tools";
 import { TRIP_TZ, formatTime } from "@/lib/format";
 
 /**
@@ -14,9 +14,18 @@ import { TRIP_TZ, formatTime } from "@/lib/format";
  * change a live booking — `propose_replan` inserts into `replan_proposals` and
  * a human accepts. So the worst failure mode is a bad suggestion, not a
  * traveler stranded in Positano.
+ *
+ * Runs on Groq. The loop is hand-written rather than an SDK helper, which is
+ * what a plain `/chat/completions` API gives you — and it means the iteration
+ * cap, the trace, and the recovery behaviour are all ours to control.
  */
 
-const MODEL = "claude-opus-5";
+/** Overridable so a weaker or stronger model can be tried without a deploy. */
+const MODEL = process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
+
+/** Guards against a model that keeps calling tools and never concludes. Each
+ *  iteration is one inference call plus its tool results. */
+const MAX_ITERATIONS = 12;
 
 const SYSTEM = `You are the re-planning agent for Voyage, a tour operations platform.
 
@@ -42,8 +51,8 @@ Rules you must not break:
 - Times are ISO 8601 UTC. The traveler reads them in the trip's local zone.
 - Do not invent ids. Only use ids returned by your tools.
 
-Be decisive. When you have proposed your options, stop and summarise them in
-two or three sentences.`;
+When you have called propose_replan for every option you intend to offer, stop
+calling tools and reply with two or three sentences summarising them.`;
 
 export interface ReplanResult {
   runId: string;
@@ -71,6 +80,7 @@ export async function runReplanAgent(disruptionId: string): Promise<ReplanResult
       input: {
         disruption_id: disruptionId,
         headline: assessment.disruption.headline,
+        model: MODEL,
       },
     })
     .select("id")
@@ -92,34 +102,97 @@ export async function runReplanAgent(disruptionId: string): Promise<ReplanResult
   };
 
   try {
-    const client = new Anthropic();
+    const groq = new Groq({ apiKey: requireKey() });
     const tools = buildTools(assessment, record);
+    const byName = new Map(tools.map((tool) => [tool.name, tool]));
 
-    const runner = client.beta.messages.toolRunner({
-      model: MODEL,
-      max_tokens: 16000,
-      thinking: { type: "adaptive" },
-      output_config: { effort: "high" },
-      system: SYSTEM,
-      tools,
-      messages: [{ role: "user", content: briefFor(assessment) }],
-    });
+    const messages: Groq.Chat.ChatCompletionMessageParam[] = [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: briefFor(assessment) },
+    ];
 
-    const final = await runner;
+    let summary = "";
+    let inputTokens = 0;
+    let outputTokens = 0;
 
-    const summary = final.content
-      .filter((block): block is Anthropic.Beta.BetaTextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("\n")
-      .trim();
+    for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+      const completion = await groq.chat.completions.create({
+        model: MODEL,
+        max_tokens: 4096,
+        temperature: 0.4,
+        messages,
+        tools: tools.map(toGroqTool),
+        tool_choice: "auto",
+      });
+
+      inputTokens += completion.usage?.prompt_tokens ?? 0;
+      outputTokens += completion.usage?.completion_tokens ?? 0;
+
+      const choice = completion.choices[0];
+      const message = choice?.message;
+      if (!message) break;
+
+      messages.push({
+        role: "assistant",
+        content: message.content ?? "",
+        tool_calls: message.tool_calls,
+      } as Groq.Chat.ChatCompletionMessageParam);
+
+      const calls = message.tool_calls ?? [];
+      if (calls.length === 0) {
+        summary = (message.content ?? "").trim();
+        break;
+      }
+
+      // Parallel calls come back in one message and every one of them needs a
+      // matching tool result, or the next request is rejected as malformed.
+      const results = await Promise.all(
+        calls.map(async (call) => {
+          const tool = byName.get(call.function.name);
+          if (!tool) {
+            return {
+              role: "tool" as const,
+              tool_call_id: call.id,
+              content: JSON.stringify({
+                error: `No such tool: ${call.function.name}`,
+              }),
+            };
+          }
+
+          let args: unknown = {};
+          try {
+            // Arguments arrive as a JSON *string*; never pattern-match on it.
+            args = call.function.arguments
+              ? JSON.parse(call.function.arguments)
+              : {};
+          } catch {
+            return {
+              role: "tool" as const,
+              tool_call_id: call.id,
+              content: JSON.stringify({
+                error: "Arguments were not valid JSON. Send a JSON object.",
+              }),
+            };
+          }
+
+          return {
+            role: "tool" as const,
+            tool_call_id: call.id,
+            content: await tool.run(args),
+          };
+        })
+      );
+
+      messages.push(...results);
+    }
 
     const { count } = await supabase
       .from("replan_proposals")
       .select("id", { count: "exact", head: true })
       .eq("disruption_id", disruptionId);
 
-    // Tie the proposals back to the run that produced them, so the trace panel
-    // can show which reasoning led to which option.
+    // Tie proposals back to the run that produced them, so the trace panel can
+    // show which reasoning led to which option.
     await supabase
       .from("replan_proposals")
       .update({ run_id: runId })
@@ -130,9 +203,9 @@ export async function runReplanAgent(disruptionId: string): Promise<ReplanResult
       .from("agent_runs")
       .update({
         status: "succeeded",
-        output: { summary, proposals: count ?? 0 },
-        input_tokens: final.usage.input_tokens,
-        output_tokens: final.usage.output_tokens,
+        output: { summary, proposals: count ?? 0, model: MODEL },
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
         ended_at: new Date().toISOString(),
       })
       .eq("id", runId);
@@ -158,6 +231,27 @@ export async function runReplanAgent(disruptionId: string): Promise<ReplanResult
   }
 }
 
+function requireKey(): string {
+  const key = process.env.GROQ_API_KEY;
+  if (!key) {
+    throw new Error(
+      "GROQ_API_KEY is not set. Get a free key at console.groq.com and add it to .env.local."
+    );
+  }
+  return key;
+}
+
+function toGroqTool(tool: AgentTool): Groq.Chat.ChatCompletionTool {
+  return {
+    type: "function",
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+    },
+  };
+}
+
 /**
  * The opening brief.
  *
@@ -179,7 +273,9 @@ function briefFor(a: NonNullable<Awaited<ReturnType<typeof assessDisruption>>>) 
   lines.push(`Broken item id: ${a.root!.id}`);
   lines.push(`Trip timezone: ${TRIP_TZ}`);
   lines.push("");
-  lines.push(`AFFECTED (${a.affected.length} items, ${a.exposure} EUR exposed, ${a.sunk} EUR non-refundable):`);
+  lines.push(
+    `AFFECTED (${a.affected.length} items, ${a.exposure} EUR exposed, ${a.sunk} EUR non-refundable):`
+  );
 
   for (const item of a.affected) {
     lines.push(
@@ -191,10 +287,14 @@ function briefFor(a: NonNullable<Awaited<ReturnType<typeof assessDisruption>>>) 
 
   if (a.candidates.length) {
     lines.push("");
-    lines.push(`${a.candidates.length} replacements are already known to survive this disruption. Use search_availability for the full detail.`);
+    lines.push(
+      `${a.candidates.length} replacements are already known to survive this disruption. Use search_availability for the full detail.`
+    );
   } else {
     lines.push("");
-    lines.push("No pre-filtered replacements were found. Search anyway, then consider dropping items and rebalancing the day.");
+    lines.push(
+      "No pre-filtered replacements were found. Search anyway, then consider dropping items and rebalancing the day."
+    );
   }
 
   lines.push("");
