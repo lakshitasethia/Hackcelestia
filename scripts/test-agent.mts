@@ -15,7 +15,28 @@ const d = await runScenario(DEMO_TRIP_ID, "storm");
 console.log("disruption:", d!.headline, "\n");
 
 console.log("running agent…\n");
-const result = await runReplanAgent(d!.id);
+
+let result;
+try {
+  result = await runReplanAgent(d!.id);
+} catch (error) {
+  // A stack trace is the wrong output for a billing problem — say what is
+  // actually wrong and where to fix it.
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("credit balance")) {
+    console.error("BLOCKED — the Anthropic account has no credits.\n");
+    console.error("  The key is valid: the request reached Anthropic and came back");
+    console.error("  with a workspace id, so this is billing, not authentication.\n");
+    console.error("  Fix: console.anthropic.com -> Plans & Billing -> add credits.");
+    console.error("  Check you are topping up the workspace the key belongs to.\n");
+  } else if (message.includes("authentication") || message.includes("401")) {
+    console.error("BLOCKED — ANTHROPIC_API_KEY is not valid.\n");
+    console.error("  Check the value in .env.local against console.anthropic.com.\n");
+  } else {
+    console.error(`Agent run failed: ${message}\n`);
+  }
+  process.exit(1);
+}
 
 const supabase = createAdminClient();
 const { data: steps } = await supabase

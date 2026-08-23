@@ -11,7 +11,8 @@
     "db:seed": "node scripts/sql.mjs supabase/seed.sql",
     "db:types": "node scripts/gen-types.mjs > src/lib/db/generated.ts",
     "db:verify": "node scripts/sql.mjs supabase/verify.sql",
-    "test:disruption": "tsx --conditions=react-server scripts/test-disruption.mts"
+    "test:disruption": "tsx --conditions=react-server scripts/test-disruption.mts",
+    "test:agent": "tsx --conditions=react-server scripts/test-agent.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
