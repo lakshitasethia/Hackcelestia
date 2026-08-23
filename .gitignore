@@ -42,3 +42,7 @@ yarn-error.log*
 .idea/
 .vscode/
 *.swp
+
+# supabase cli local state
+/supabase/.temp
+/supabase/.branches
