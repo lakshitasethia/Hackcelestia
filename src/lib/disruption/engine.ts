@@ -31,6 +31,15 @@ export interface Candidate {
   slotsFree: number;
   /** Straight-line-ish km from the item being replaced. */
   distanceKm: number | null;
+  /**
+   * Net EUR change if this replaces the broken item, including the deposit
+   * forfeited on cancellation. Negative is cheaper.
+   *
+   * Precomputed because it is pure arithmetic over data we already hold, and
+   * an agent asked to derive it will spend its whole iteration budget calling
+   * a pricing tool once per candidate instead of deciding anything.
+   */
+  netDelta: number;
 }
 
 export interface Assessment {
@@ -129,6 +138,13 @@ export async function findCandidates(
   const supabase = createAdminClient();
   const date = root.starts_at.slice(0, 10);
 
+  const { data: rootBooking } = await supabase
+    .from("bookings")
+    .select("penalty")
+    .eq("item_id", root.id)
+    .maybeSingle();
+  const penalty = Number((rootBooking as { penalty: number } | null)?.penalty ?? 0);
+
   const [{ data, error }, { data: booked }] = await Promise.all([
     supabase
       .from("availability")
@@ -175,14 +191,17 @@ export async function findCandidates(
     })
     .map((row) => {
       const inv = row.inventory!;
+      const price = Number(row.price ?? inv.base_cost);
       return {
         inventory: inv,
         vendorName: inv.vendors?.name ?? "Unknown vendor",
         channel: inv.vendors?.channel ?? "manual",
         startsAt: row.starts_at,
-        price: Number(row.price ?? inv.base_cost),
+        price,
         slotsFree: row.slots_total - row.slots_taken,
         distanceKm: distanceKm(root.lat, root.lng, inv.lat, inv.lng),
+        netDelta:
+          Math.round((price - Number(root.cost) + penalty) * 100) / 100,
       };
     })
     .sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));

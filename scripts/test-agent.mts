@@ -57,6 +57,37 @@ for (const p of (proposals ?? []) as { cost_delta: number; rationale: string; pl
 console.log(`\nSUMMARY:\n${result.summary}`);
 console.log(`\n${result.steps} tool calls, ${result.proposals} proposals, ${(result.ms / 1000).toFixed(1)}s`);
 
+// Money must be computed, never taken from the model. It reported +280 on a
+// plan that actually came to -390 during development; this recomputes every
+// stored delta from its own operations and fails if any drifts.
+const { data: props } = await supabase
+  .from("replan_proposals").select("id, cost_delta, plan").eq("disruption_id", d!.id);
+const { data: allItems } = await supabase
+  .from("itinerary_items").select("id, cost").eq("trip_id", DEMO_TRIP_ID);
+const { data: allInv } = await supabase.from("inventory").select("id, base_cost");
+const { data: allBook } = await supabase
+  .from("bookings").select("item_id, penalty").eq("trip_id", DEMO_TRIP_ID);
+
+const cost = new Map((allItems ?? []).map((i: any) => [i.id, Number(i.cost)]));
+const price = new Map((allInv ?? []).map((i: any) => [i.id, Number(i.base_cost)]));
+const pen = new Map((allBook ?? []).filter((b: any) => b.item_id).map((b: any) => [b.item_id, Number(b.penalty)]));
+
+for (const p of (props ?? []) as any[]) {
+  const actual = (p.plan as any[]).reduce((sum, op) => {
+    const c = cost.get(op.item_id) ?? 0;
+    const q = pen.get(op.item_id) ?? 0;
+    const n = price.get(op.with_inventory_id ?? op.inventory_id) ?? 0;
+    if (op.op === "drop") return sum + q - c;
+    if (op.op === "replace") return sum + n - c + q;
+    if (op.op === "add") return sum + n;
+    return sum;
+  }, 0);
+  const stored = Number(p.cost_delta);
+  const ok = Math.abs(actual - stored) < 0.01;
+  console.log(`${ok ? "PASS" : "FAIL"} — cost_delta ${stored} vs recomputed ${Math.round(actual * 100) / 100}`);
+  if (!ok) process.exitCode = 1;
+}
+
 // The invariant that matters most: proposing must never mutate the live plan.
 const { data: items } = await supabase
   .from("itinerary_items").select("status").eq("trip_id", DEMO_TRIP_ID);

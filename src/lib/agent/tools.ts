@@ -96,15 +96,17 @@ function traced<I, O>(
   };
 }
 
+/** Descriptions are terse because this schema is nested inside propose_replan
+ *  and therefore resent on every iteration of a token-capped loop. */
 const opSchema = z.object({
   op: z.enum(["drop", "move", "replace", "add"]),
-  item_id: z.string().optional().describe("Existing itinerary item, for drop/move/replace"),
-  with_inventory_id: z.string().optional().describe("Catalogue item to swap in, for replace/add"),
-  day: z.number().optional().describe("Trip day number, for add"),
-  starts_at: z.string().optional().describe("ISO 8601 UTC start, for move/replace/add"),
-  ends_at: z.string().optional().describe("ISO 8601 UTC end, for move/replace/add"),
-  depends_on: z.array(z.string()).optional().describe("Item ids this new stop needs, for add"),
-  reason: z.string().describe("Why this operation, in one sentence a traveler would understand"),
+  item_id: z.string().optional().describe("itinerary item; drop/move/replace"),
+  with_inventory_id: z.string().optional().describe("catalogue item; replace/add"),
+  day: z.number().optional().describe("trip day; add"),
+  starts_at: z.string().optional().describe("ISO UTC; move/replace/add"),
+  ends_at: z.string().optional().describe("ISO UTC; move/replace/add"),
+  depends_on: z.array(z.string()).optional().describe("prerequisite item ids; add"),
+  reason: z.string().describe("max 12 words"),
 });
 
 export function buildTools(
@@ -116,22 +118,21 @@ export function buildTools(
   const getBlastRadiusTool = defineTool({
     name: "get_blast_radius",
     description:
-      "List every itinerary item affected by a broken item, with how many dependency hops away each one sits. Depth 0 is the broken item itself. Items NOT in this list are unaffected and must not be changed.",
+      "Items affected by a break, with dependency depth. Depth 0 is the break itself. Anything absent is unaffected — do not touch it.",
     inputSchema: z.object({
       item_id: z.string().describe("The itinerary item that broke"),
     }),
     run: traced("get_blast_radius", record, async ({ item_id }) => {
       const items = await getBlastRadius(item_id);
+      // Fields are chosen for what changes a decision. Every extra key here is
+      // resent on every later iteration and this run has 8000 tokens a minute.
       return items.map((i) => ({
         item_id: i.id,
         title: i.title,
-        type: i.type,
         depth: i.depth,
         starts_at: i.starts_at,
-        ends_at: i.ends_at,
         cost: Number(i.cost),
-        locked: Boolean(i.lock_reason),
-        lock_reason: i.lock_reason,
+        ...(i.lock_reason ? { locked: i.lock_reason } : {}),
       }));
     }),
   });
@@ -139,10 +140,10 @@ export function buildTools(
   const searchAvailabilityTool = defineTool({
     name: "search_availability",
     description:
-      "Find bookable replacements for a broken item on the same date. Results already exclude options that cannot survive the cause (weather-sensitive options during a weather disruption) and anything already on this itinerary.",
+      "Replacements for a broken item, same date. Already excludes options that cannot survive the cause and anything already on the itinerary.",
     inputSchema: z.object({
       item_id: z.string().describe("The item you are replacing"),
-      max_results: z.number().optional().describe("Default 8"),
+      max_results: z.number().optional().describe("Default 4"),
     }),
     run: traced("search_availability", record, async ({ item_id, max_results }) => {
       const root =
@@ -150,14 +151,14 @@ export function buildTools(
       if (!root) return { error: "Unknown item_id" };
 
       const candidates = await findCandidates(root, assessment.disruption.source);
-      return candidates.slice(0, max_results ?? 8).map(describeCandidate);
+      return candidates.slice(0, max_results ?? 4).map(describeCandidate);
     }),
   });
 
   const priceOptionTool = defineTool({
     name: "price_option",
     description:
-      "Net cost of swapping one itinerary item for a catalogue option, including what is lost on the cancelled booking. A positive delta costs the traveler more.",
+      "Net cost of a swap, including the forfeited deposit. Positive means the traveler pays more.",
     inputSchema: z.object({
       item_id: z.string().describe("Item being replaced"),
       with_inventory_id: z.string().describe("Catalogue item swapping in"),
@@ -195,7 +196,7 @@ export function buildTools(
   const checkVendorTool = defineTool({
     name: "check_vendor",
     description:
-      "Ask whether a vendor can take a booking. Vendors on the 'auto' channel confirm instantly; 'manual' vendors need an operator to phone them, so a plan that depends on one cannot complete unattended.",
+      "Check a vendor can take a slot. 'auto' confirms instantly; 'manual' needs an operator to phone, so that plan cannot complete unattended.",
     inputSchema: z.object({
       inventory_id: z.string(),
       starts_at: z.string().describe("ISO 8601 UTC start time you want"),
@@ -250,25 +251,178 @@ export function buildTools(
     }),
   });
 
+  /**
+   * Deterministic gate on the model's output.
+   *
+   * A 20B-class open model produces structurally valid but factually wrong
+   * plans — in testing it invented dates three years off, put an inventory id
+   * in an item_id field, and named the wrong day. None of that is fixable by
+   * asking nicely in a prompt, and all of it would have been applied silently.
+   * So the plan is checked against the real itinerary before it is stored, and
+   * failures come back as errors the model can correct on its next turn.
+   */
+  const validateOps = async (
+    ops: z.infer<typeof opSchema>[]
+  ): Promise<{ errors: string[]; normalised: ReplanOp[]; costDelta: number }> => {
+    const supabase = createAdminClient();
+    const errors: string[] = [];
+
+    const [{ data: items }, { data: inventory }, { data: trip }, { data: bookings }] =
+      await Promise.all([
+        supabase.from("itinerary_items").select("id, day, cost").eq("trip_id", tripId),
+        supabase.from("inventory").select("id, base_cost"),
+        supabase.from("trips").select("starts_on, ends_on").eq("id", tripId).single(),
+        supabase.from("bookings").select("item_id, penalty").eq("trip_id", tripId),
+      ]);
+
+    const itemRows = (items ?? []) as { id: string; cost: number }[];
+    const inventoryRows = (inventory ?? []) as { id: string; base_cost: number }[];
+    const itemIds = new Set(itemRows.map((i) => i.id));
+    const inventoryIds = new Set(inventoryRows.map((i) => i.id));
+
+    const costOf = new Map(itemRows.map((i) => [i.id, Number(i.cost)]));
+    const priceOf = new Map(inventoryRows.map((i) => [i.id, Number(i.base_cost)]));
+    const penaltyOf = new Map(
+      ((bookings ?? []) as { item_id: string | null; penalty: number }[])
+        .filter((b) => b.item_id)
+        .map((b) => [b.item_id as string, Number(b.penalty)])
+    );
+    const window = trip as { starts_on: string; ends_on: string } | null;
+
+    // One day either side, so an overnight stop at the edge is not rejected.
+    const from = window ? new Date(`${window.starts_on}T00:00:00Z`).getTime() - 86_400_000 : 0;
+    const to = window ? new Date(`${window.ends_on}T00:00:00Z`).getTime() + 2 * 86_400_000 : Infinity;
+
+    const inWindow = (iso: string | undefined, label: string, idx: number) => {
+      if (!iso) return;
+      const t = new Date(iso).getTime();
+      if (Number.isNaN(t)) {
+        errors.push(`op ${idx}: ${label} "${iso}" is not a valid ISO 8601 timestamp.`);
+      } else if (t < from || t > to) {
+        errors.push(
+          `op ${idx}: ${label} "${iso}" is outside the trip (${window?.starts_on} to ${window?.ends_on}). Use dates from the brief.`
+        );
+      }
+    };
+
+    const normalised: ReplanOp[] = [];
+    /**
+     * Recomputed rather than taken from the model.
+     *
+     * In testing it reported +280 EUR on a plan that actually came to -390 —
+     * a 670 EUR error, shown to an operator as fact. Cancelling refunds the
+     * item and forfeits its deposit; a swap pays the difference plus that
+     * deposit; an addition is its own price.
+     */
+    let costDelta = 0;
+
+    ops.forEach((op, idx) => {
+      inWindow(op.starts_at, "starts_at", idx);
+      inWindow(op.ends_at, "ends_at", idx);
+
+      if (op.op === "drop" || op.op === "move" || op.op === "replace") {
+        if (!op.item_id) {
+          errors.push(`op ${idx}: "${op.op}" needs item_id.`);
+        } else if (!itemIds.has(op.item_id)) {
+          errors.push(`op ${idx}: item_id "${op.item_id}" is not on this itinerary.`);
+        }
+      }
+
+      if (op.op === "replace" || op.op === "add") {
+        // The model routinely puts the catalogue id in the wrong field, so
+        // accept either and normalise rather than rejecting on a technicality.
+        const invId = op.with_inventory_id ?? op.item_id;
+        if (!invId || !inventoryIds.has(invId)) {
+          errors.push(
+            `op ${idx}: "${op.op}" needs a catalogue id in with_inventory_id. Got "${invId ?? "nothing"}".`
+          );
+        }
+      }
+
+      if (op.op === "add" && op.day === undefined) {
+        errors.push(`op ${idx}: "add" needs day.`);
+      }
+
+      if (errors.length) return;
+
+      const penalty = op.item_id ? penaltyOf.get(op.item_id) ?? 0 : 0;
+      const oldCost = op.item_id ? costOf.get(op.item_id) ?? 0 : 0;
+      const newPrice = priceOf.get(op.with_inventory_id ?? op.item_id ?? "") ?? 0;
+
+      if (op.op === "drop") costDelta += penalty - oldCost;
+      else if (op.op === "replace") costDelta += newPrice - oldCost + penalty;
+      else if (op.op === "add") costDelta += newPrice;
+
+      if (op.op === "drop") {
+        normalised.push({ op: "drop", item_id: op.item_id!, reason: op.reason });
+      } else if (op.op === "move") {
+        normalised.push({
+          op: "move",
+          item_id: op.item_id!,
+          starts_at: op.starts_at!,
+          ends_at: op.ends_at!,
+          reason: op.reason,
+        });
+      } else if (op.op === "replace") {
+        normalised.push({
+          op: "replace",
+          item_id: op.item_id!,
+          with_inventory_id: (op.with_inventory_id ?? op.item_id)!,
+          starts_at: op.starts_at!,
+          ends_at: op.ends_at!,
+          reason: op.reason,
+        });
+      } else {
+        normalised.push({
+          op: "add",
+          inventory_id: (op.with_inventory_id ?? op.item_id)!,
+          day: op.day!,
+          starts_at: op.starts_at!,
+          ends_at: op.ends_at!,
+          depends_on: op.depends_on ?? [],
+          reason: op.reason,
+        });
+      }
+    });
+
+    return {
+      errors,
+      normalised,
+      costDelta: Math.round(costDelta * 100) / 100,
+    };
+  };
+
   const proposeReplanTool = defineTool({
     name: "propose_replan",
     description:
-      "Record one complete alternative plan for a human to accept or reject. Call it more than once to offer genuinely different options. This writes a DRAFT — it never changes the live itinerary.",
+      "Record one alternative plan as a DRAFT for a human to accept. Call once per distinct option. Never changes the live itinerary.",
     inputSchema: z.object({
-      summary: z.string().describe("One line naming the trade-off, e.g. 'Cheapest option, loses the sea day'"),
-      rationale: z.string().describe("Two or three sentences a traveler would understand, referencing cost and what was preserved"),
-      cost_delta: z.number().describe("Net change in EUR, negative if cheaper"),
+      summary: z.string().describe("one line naming the trade-off"),
+      rationale: z.string().describe("max 2 short sentences"),
+      cost_delta: z.number().describe("net EUR change, negative if cheaper"),
       operations: z.array(opSchema).min(1),
     }),
     run: traced("propose_replan", record, async (input) => {
       const supabase = createAdminClient();
 
+      const { errors, normalised, costDelta } = await validateOps(input.operations);
+      if (errors.length) {
+        // Rejected, not stored. Returning the specific problems lets the model
+        // fix them; storing them would put wrong dates in front of an operator.
+        return {
+          rejected: true,
+          errors,
+          hint: "Fix these and call propose_replan again.",
+        };
+      }
+
       const { data, error } = await supabase
         .from("replan_proposals")
         .insert({
           disruption_id: assessment.disruption.id,
-          plan: input.operations as unknown as ReplanOp[],
-          cost_delta: input.cost_delta,
+          plan: normalised,
+          // The computed figure, not the model's claim.
+          cost_delta: costDelta,
           rationale: `${input.summary}\n\n${input.rationale}`,
           state: "draft",
         })
@@ -280,6 +434,14 @@ export function buildTools(
         proposal_id: (data as { id: string }).id,
         recorded: true,
         operations: input.operations.length,
+        // Surfaced so the model can correct its summary when its own maths was
+        // off, rather than narrating a number the operator will not see.
+        cost_delta_computed: costDelta,
+        ...(Math.abs(costDelta - input.cost_delta) > 1
+          ? {
+              note: `Your cost_delta of ${input.cost_delta} was wrong; the recorded figure is ${costDelta}. Use it in your summary.`,
+            }
+          : {}),
       };
     }),
   });
@@ -297,13 +459,11 @@ function describeCandidate(c: Candidate) {
   return {
     inventory_id: c.inventory.id,
     title: c.inventory.title,
-    type: c.inventory.type,
     vendor: c.vendorName,
     channel: c.channel,
     starts_at: c.startsAt,
     duration_min: c.inventory.duration_min,
     price: c.price,
-    slots_free: c.slotsFree,
     distance_km: c.distanceKm,
     tags: c.inventory.tags,
   };

@@ -20,39 +20,59 @@ import { TRIP_TZ, formatTime } from "@/lib/format";
  * cap, the trace, and the recovery behaviour are all ours to control.
  */
 
-/** Overridable so a weaker or stronger model can be tried without a deploy. */
-const MODEL = process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
+/**
+ * Overridable so a weaker or stronger model can be tried without a deploy.
+ *
+ * Trimmed and emptiness-checked rather than `??`, which only falls back on
+ * undefined — a declared-but-empty `GROQ_MODEL=` in an env file otherwise wins
+ * and sends `model: ""`, which fails as an unhelpful 404 model_not_found.
+ *
+ * The default is chosen from what `GET /v1/models` actually returns, not from
+ * the docs: Groq's tool-use page still lists llama-3.3-70b-versatile, which no
+ * longer exists on the platform. `groq/compound*` is excluded deliberately —
+ * those support only Groq's built-in tools, not custom function calling.
+ */
+const MODEL = process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-120b";
 
 /** Guards against a model that keeps calling tools and never concludes. Each
  *  iteration is one inference call plus its tool results. */
-const MAX_ITERATIONS = 12;
+const MAX_ITERATIONS = 6;
 
-const SYSTEM = `You are the re-planning agent for Voyage, a tour operations platform.
+/**
+ * Groq's free tier allows 8000 tokens per minute, and an agent loop resends its
+ * whole history every iteration — so cumulative spend, not any single request,
+ * is what breaches it. Two things keep the run inside the budget: the brief
+ * carries the deterministic findings so fewer round trips are needed, and older
+ * tool results are dropped once they have been acted on.
+ *
+ * Keeping the last few exchanges is safe here because anything durable (ids,
+ * prices) has by then been written into a proposal, not held in the transcript.
+ */
+const KEEP_RECENT_EXCHANGES = 6;
 
-A booked itinerary has been disrupted. Your job is to propose concrete
-alternatives for a human operator to accept or reject.
+const SYSTEM = `You re-plan disrupted tour itineraries for a human operator to approve.
 
-How to work:
-1. Call get_blast_radius on the broken item first. Items not in that list are
-   unaffected — never touch them.
-2. Use search_availability to find replacements. Price the plausible ones with
-   price_option before committing to them.
-3. Use check_vendor on anything you intend to book. A plan that depends on a
-   'manual' vendor cannot complete unattended; say so in your rationale.
-4. Call propose_replan two or three times with genuinely different trade-offs —
-   for example one that protects the budget and one that protects the
-   experience. Two near-identical plans are worth less than one good one.
+Method: the brief already gives you everything — what broke, what it costs,
+which replacements survive, and the net EUR change for each. Do not re-derive
+any of it. Go straight to propose_replan, once per distinct option (2-3 total,
+with genuinely different trade-offs: one protecting budget, one protecting the
+experience). Use price_option or check_vendor only if something is genuinely
+missing.
 
-Rules you must not break:
-- Never move or drop a locked item. Work around it and say why in the rationale.
-- Prefer plans that keep the traveler's stated interests intact.
-- A cancellation penalty is real money. A cheap replacement that forfeits a
-  large deposit is usually worse than a pricier one that does not.
-- Times are ISO 8601 UTC. The traveler reads them in the trip's local zone.
-- Do not invent ids. Only use ids returned by your tools.
+Hard rules:
+- Never move or drop a LOCKED item. Work around it and say why.
+- A forfeited deposit is real money; a cheap swap that loses a big one is worse.
+- Only use ids your tools or the brief returned. Never invent one.
+- Times are ISO 8601 UTC and MUST fall on the trip dates given in the brief.
+  Never invent a date; copy the date from the item you are replacing.
 
-When you have called propose_replan for every option you intend to offer, stop
-calling tools and reply with two or three sentences summarising them.`;
+Batch independent calls into one turn — price several candidates together
+rather than one per turn. The token budget is tight and every extra turn resends
+the whole conversation.
+
+A prose answer records nothing. Only propose_replan saves a plan, so every
+option you intend to offer must go through it. Once they are recorded, stop
+calling tools and reply with two sentences.`;
 
 export interface ReplanResult {
   runId: string;
@@ -112,18 +132,35 @@ export async function runReplanAgent(disruptionId: string): Promise<ReplanResult
     ];
 
     let summary = "";
+    let nudged = false;
     let inputTokens = 0;
     let outputTokens = 0;
 
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-      const completion = await groq.chat.completions.create({
-        model: MODEL,
-        max_tokens: 4096,
-        temperature: 0.4,
-        messages,
-        tools: tools.map(toGroqTool),
-        tool_choice: "auto",
-      });
+      pruneHistory(messages);
+
+      const completion = await withRateLimitRetry(() =>
+        groq.chat.completions.create({
+          model: MODEL,
+          // A proposal with five operations serialises to well over 2k, and a
+          // truncated tool call comes back as a 400 tool_use_failed with the
+          // half-written JSON attached — the output cap has to clear the
+          // largest single tool call, not the average one.
+          max_tokens: 4096,
+          temperature: 0.4,
+          messages,
+          tools: tools.map(toGroqTool),
+          // Two failure modes seen in testing, both fixed here. Left to
+          // itself the model either answers in prose (recording nothing) or
+          // prices every candidate until the iteration budget is gone without
+          // ever committing. So the first turn and the last two are pinned to
+          // the only tool that actually saves anything.
+          tool_choice:
+            iteration === 0 || iteration >= MAX_ITERATIONS - 2
+              ? { type: "function", function: { name: "propose_replan" } }
+              : "auto",
+        })
+      );
 
       inputTokens += completion.usage?.prompt_tokens ?? 0;
       outputTokens += completion.usage?.completion_tokens ?? 0;
@@ -140,7 +177,25 @@ export async function runReplanAgent(disruptionId: string): Promise<ReplanResult
 
       const calls = message.tool_calls ?? [];
       if (calls.length === 0) {
-        summary = (message.content ?? "").trim();
+        // gpt-oss returns its prose in `reasoning` and leaves `content` null,
+        // so reading only content yields an empty summary on every clean finish.
+        const text =
+          message.content ??
+          (message as { reasoning?: string }).reasoning ??
+          "";
+        summary = text.trim();
+
+        // Finishing without a single proposal is a failed run, not a quiet
+        // success — nudge once before accepting it.
+        if (!nudged && (await countProposals(supabase, disruptionId)) === 0) {
+          nudged = true;
+          messages.push({
+            role: "user",
+            content:
+              "You have not recorded anything. Call propose_replan now for each option you described. Nothing is saved until you do.",
+          });
+          continue;
+        }
         break;
       }
 
@@ -231,6 +286,98 @@ export async function runReplanAgent(disruptionId: string): Promise<ReplanResult
   }
 }
 
+/**
+ * Drop the middle of the transcript, keeping the system prompt, the brief, and
+ * the most recent exchanges.
+ *
+ * An assistant message carrying tool_calls must keep its matching tool results
+ * or the next request is rejected, so the cut point is moved back to a clean
+ * boundary rather than taken literally.
+ */
+function pruneHistory(messages: Groq.Chat.ChatCompletionMessageParam[]): void {
+  const PRESERVED = 2; // system + opening brief
+  const budget = PRESERVED + KEEP_RECENT_EXCHANGES;
+  if (messages.length <= budget) return;
+
+  let cut = messages.length - KEEP_RECENT_EXCHANGES;
+  // Never begin the kept window on an orphaned tool result.
+  while (cut < messages.length && messages[cut].role === "tool") cut++;
+
+  messages.splice(PRESERVED, cut - PRESERVED);
+}
+
+/**
+ * Wait out a token-per-minute breach instead of failing the run.
+ *
+ * Groq's free tier has two independent windows and they reset on wildly
+ * different clocks: tokens refill in seconds, requests in ~16 minutes. A
+ * `retry-after` header reflects the slower one, so honouring it blindly turned
+ * a 4-second token pause into a 9-minute sleep — twice — and made a 30-second
+ * run take 19 minutes. Prefer the token-reset header, and cap the wait
+ * regardless, because a run that gives up is better than one nobody watches.
+ */
+const MAX_BACKOFF_MS = 30_000;
+
+/** Groq formats durations as "3.682s", "1m30s", "550ms". */
+function parseDuration(value: string | undefined): number | null {
+  if (!value) return null;
+  const match = value.match(
+    /^(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s)?(?:(\d+(?:\.\d+)?)ms)?$/
+  );
+  if (!match || !match.slice(1).some(Boolean)) {
+    const seconds = Number(value);
+    return Number.isFinite(seconds) ? seconds * 1000 : null;
+  }
+  const [, m, sec, ms] = match;
+  return (
+    (m ? Number(m) * 60_000 : 0) +
+    (sec ? Number(sec) * 1000 : 0) +
+    (ms ? Number(ms) : 0)
+  );
+}
+
+async function withRateLimitRetry<T>(
+  call: () => Promise<T>,
+  attempts = 4
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await call();
+    } catch (error) {
+      const status = (error as { status?: number })?.status;
+      const body = String((error as { message?: string })?.message ?? "");
+      const isRateLimit = status === 429 || status === 413;
+      // A malformed tool call is a one-off generation glitch; retrying costs a
+      // little budget and usually succeeds.
+      const isBadGeneration = status === 400 && body.includes("tool_use_failed");
+      if ((!isRateLimit && !isBadGeneration) || attempt >= attempts - 1) throw error;
+
+      if (isBadGeneration) continue;
+
+      const headers = (error as { headers?: Record<string, string> })?.headers ?? {};
+      const tokenReset = parseDuration(headers["x-ratelimit-reset-tokens"]);
+      const wait = Math.min(
+        tokenReset ?? 5_000 * (attempt + 1),
+        MAX_BACKOFF_MS
+      );
+      // A little headroom past the stated reset, since the window is a moving
+      // average rather than a hard tick.
+      await new Promise((resolve) => setTimeout(resolve, wait + 1_000));
+    }
+  }
+}
+
+async function countProposals(
+  supabase: ReturnType<typeof createAdminClient>,
+  disruptionId: string
+): Promise<number> {
+  const { count } = await supabase
+    .from("replan_proposals")
+    .select("id", { count: "exact", head: true })
+    .eq("disruption_id", disruptionId);
+  return count ?? 0;
+}
+
 function requireKey(): string {
   const key = process.env.GROQ_API_KEY;
   if (!key) {
@@ -271,6 +418,7 @@ function briefFor(a: NonNullable<Awaited<ReturnType<typeof assessDisruption>>>) 
   }
   lines.push("");
   lines.push(`Broken item id: ${a.root!.id}`);
+  lines.push(`Broken item date: ${a.root!.starts_at.slice(0, 10)} (UTC)`);
   lines.push(`Trip timezone: ${TRIP_TZ}`);
   lines.push("");
   lines.push(
@@ -287,9 +435,18 @@ function briefFor(a: NonNullable<Awaited<ReturnType<typeof assessDisruption>>>) 
 
   if (a.candidates.length) {
     lines.push("");
-    lines.push(
-      `${a.candidates.length} replacements are already known to survive this disruption. Use search_availability for the full detail.`
-    );
+    lines.push(`REPLACEMENTS that survive this disruption (already filtered):`);
+    // Inlined rather than left behind search_availability: these are computed
+    // deterministically before the model runs, so making it spend a round trip
+    // to fetch what we already have wastes a scarce token budget.
+    for (const c of a.candidates.slice(0, 6)) {
+      const delta = c.netDelta >= 0 ? `+${c.netDelta}` : `${c.netDelta}`;
+      lines.push(
+        `- [${c.inventory.id}] ${c.inventory.title} · ${c.price} EUR · ` +
+          `net ${delta} EUR vs the broken item · ${c.startsAt} · ` +
+          `${c.distanceKm}km · ${c.channel} · ${(c.inventory.tags ?? []).join(",")}`
+      );
+    }
   } else {
     lines.push("");
     lines.push(
