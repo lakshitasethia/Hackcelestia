@@ -70,6 +70,14 @@ with checks as (
          )
 
   union all
+  -- Guards the naive-timestamp trap: a bare `current_date + time` is cast using
+  -- the server's zone (UTC), which silently moved the 09:00 departure to 11:00.
+  select 'boat departs 09:00 Positano local, not UTC',
+         (select to_char(starts_at at time zone 'Europe/Rome', 'HH24:MI')
+            from itinerary_items
+           where id = '17000000-0000-4000-a000-000000000011') = '09:00'
+
+  union all
   select 'seeded trip is live today',
          (select starts_on <= current_date and ends_on >= current_date
             from trips where id = '7a000000-0000-4000-a000-000000000001')

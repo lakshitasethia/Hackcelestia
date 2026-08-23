@@ -1,10 +1,17 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { usePathname } from "next/navigation";
 import gsap from "gsap";
 import { Plane, Building2, MapPin, Compass, Sparkles } from "lucide-react";
 
 export default function ConstellationLoader() {
+  // The intro belongs to the marketing page only. Someone opening their live
+  // itinerary — or a coordinator checking today's schedule — should not wait
+  // through a brand animation to see it.
+  const pathname = usePathname();
+  const isLandingPage = pathname === "/";
+
   const [visible, setVisible] = useState(true);
   const [phaseText, setPhaseText] = useState("CHARTING YOUR COURSE");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -12,6 +19,11 @@ export default function ConstellationLoader() {
   const textRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
+    if (!isLandingPage) {
+      setVisible(false);
+      return;
+    }
+
     // Check if user already saw the intro loader in this session
     const hasSeen = sessionStorage.getItem("voyage_loader_shown");
     if (hasSeen) {
@@ -135,7 +147,7 @@ export default function ConstellationLoader() {
       window.clearTimeout(failsafe);
       tl.kill();
     };
-  }, []);
+  }, [isLandingPage]);
 
   if (!visible) return null;
 

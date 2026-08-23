@@ -6,6 +6,11 @@
 --
 -- Fixed UUIDs throughout so the demo is reproducible and the disruption
 -- injector can target a known item. Idempotent: safe to re-run.
+--
+-- Every time is written `... at time zone 'Europe/Rome'`. Without it, a bare
+-- `current_date + time '09:00'` is a naive timestamp that Postgres casts using
+-- the *server's* zone (UTC on Supabase), so a 09:00 boat departure silently
+-- becomes 11:00 in Positano.
 
 begin;
 
@@ -100,7 +105,7 @@ insert into availability (inventory_id, date, starts_at, slots_total, slots_take
 select
   inv.id,
   (current_date + d)::date,
-  (current_date + d) + inv.default_start,
+  ((current_date + d) + inv.default_start) at time zone 'Europe/Rome',
   inv.slots,
   0,
   inv.price
@@ -145,14 +150,14 @@ values
   ('17000000-0000-4000-a000-000000000001', '7a000000-0000-4000-a000-000000000001', 1, 1,
    '19000000-0000-4000-a000-000000000001', '0e000000-0000-4000-a000-000000000001',
    'Check in — Hotel Le Sirene', 'hotel',
-   current_date + time '15:00', current_date + time '16:00',
+   ((current_date + time '15:00') at time zone 'Europe/Rome'), ((current_date + time '16:00') at time zone 'Europe/Rome'),
    40.6281, 14.4850, 1280.00, 'confirmed', '{}',
    'Non-refundable rate — 4 nights prepaid'),
 
   ('17000000-0000-4000-a000-000000000002', '7a000000-0000-4000-a000-000000000001', 1, 2,
    '19000000-0000-4000-a000-000000000005', '0e000000-0000-4000-a000-000000000004',
    'Dinner — Trattoria da Enzo', 'restaurant',
-   current_date + time '20:00', current_date + time '22:00',
+   ((current_date + time '20:00') at time zone 'Europe/Rome'), ((current_date + time '22:00') at time zone 'Europe/Rome'),
    40.6285, 14.4855, 180.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000001}', null),
 
@@ -160,35 +165,35 @@ values
   ('17000000-0000-4000-a000-000000000010', '7a000000-0000-4000-a000-000000000001', 2, 1,
    '19000000-0000-4000-a000-000000000003', '0e000000-0000-4000-a000-000000000003',
    'Transfer — hotel to Positano marina', 'transport',
-   (current_date + 1) + time '08:20', (current_date + 1) + time '08:45',
+   (((current_date + 1) + time '08:20') at time zone 'Europe/Rome'), (((current_date + 1) + time '08:45') at time zone 'Europe/Rome'),
    40.6281, 14.4850, 45.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000001}', null),
 
   ('17000000-0000-4000-a000-000000000011', '7a000000-0000-4000-a000-000000000001', 2, 2,
    '19000000-0000-4000-a000-000000000002', '0e000000-0000-4000-a000-000000000002',
    'Private boat day to Capri', 'activity',
-   (current_date + 1) + time '09:00', (current_date + 1) + time '16:00',
+   (((current_date + 1) + time '09:00') at time zone 'Europe/Rome'), (((current_date + 1) + time '16:00') at time zone 'Europe/Rome'),
    40.6270, 14.4840, 780.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000010}', null),
 
   ('17000000-0000-4000-a000-000000000012', '7a000000-0000-4000-a000-000000000001', 2, 3,
    '19000000-0000-4000-a000-000000000004', '0e000000-0000-4000-a000-000000000004',
    'Lunch ashore on Capri', 'restaurant',
-   (current_date + 1) + time '12:30', (current_date + 1) + time '14:00',
+   (((current_date + 1) + time '12:30') at time zone 'Europe/Rome'), (((current_date + 1) + time '14:00') at time zone 'Europe/Rome'),
    40.5510, 14.2430, 110.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000011}', null),
 
   ('17000000-0000-4000-a000-000000000013', '7a000000-0000-4000-a000-000000000001', 2, 4,
    '19000000-0000-4000-a000-000000000003', '0e000000-0000-4000-a000-000000000003',
    'Transfer — marina to hotel', 'transport',
-   (current_date + 1) + time '16:15', (current_date + 1) + time '16:40',
+   (((current_date + 1) + time '16:15') at time zone 'Europe/Rome'), (((current_date + 1) + time '16:40') at time zone 'Europe/Rome'),
    40.6270, 14.4840, 45.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000011}', null),
 
   ('17000000-0000-4000-a000-000000000014', '7a000000-0000-4000-a000-000000000001', 2, 5,
    '19000000-0000-4000-a000-000000000005', '0e000000-0000-4000-a000-000000000004',
    'Dinner — Trattoria da Enzo', 'restaurant',
-   (current_date + 1) + time '20:00', (current_date + 1) + time '22:00',
+   (((current_date + 1) + time '20:00') at time zone 'Europe/Rome'), (((current_date + 1) + time '22:00') at time zone 'Europe/Rome'),
    40.6285, 14.4855, 180.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000013}', null),
 
@@ -196,7 +201,7 @@ values
   ('17000000-0000-4000-a000-000000000020', '7a000000-0000-4000-a000-000000000001', 3, 1,
    '19000000-0000-4000-a000-000000000008', '0e000000-0000-4000-a000-000000000006',
    'Ravello — Villa Rufolo with Marco', 'guide',
-   (current_date + 2) + time '10:00', (current_date + 2) + time '13:00',
+   (((current_date + 2) + time '10:00') at time zone 'Europe/Rome'), (((current_date + 2) + time '13:00') at time zone 'Europe/Rome'),
    40.6490, 14.6110, 150.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000001}', null);
 

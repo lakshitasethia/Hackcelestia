@@ -24,5 +24,13 @@ export function createAdminClient() {
 
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      // Next.js patches global fetch and caches GET responses in the App
+      // Router. supabase-js goes through fetch, so PostgREST reads get cached
+      // too — and an itinerary that re-plans mid-trip must never be served from
+      // a stale snapshot. Opt every query out explicitly rather than relying on
+      // route-level `dynamic` settings, which do not cover every render path.
+      fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+    },
   });
 }
