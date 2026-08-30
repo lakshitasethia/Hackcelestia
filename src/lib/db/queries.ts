@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { relativeDayLabel, startOfLocalDay } from "@/lib/format";
 import type {
   AffectedItem,
   AgentRun,
@@ -302,4 +303,68 @@ export async function getProposals(
 
   if (error) throw new Error(`getProposals: ${error.message}`);
   return (data ?? []) as ReplanProposal[];
+}
+
+// ----------------------------------------------------------- coordinator --
+
+/**
+ * The groups this coordinator is running.
+ *
+ * With no sign-in there is no `auth.uid()` to match against `coordinator_id`,
+ * so this falls back to "every live group that has a coordinator assigned" —
+ * which for the seeded operator is exactly one. The filter that replaces it is
+ * a single `.eq("coordinator_id", user.id)`, marked here so it is easy to find.
+ */
+export async function getCoordinatorTrips(): Promise<Trip[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("trips")
+    .select("*")
+    .not("coordinator_name", "is", null)
+    .in("status", ["confirmed", "in_progress"])
+    .order("starts_on");
+
+  if (error) throw new Error(`getCoordinatorTrips: ${error.message}`);
+  return (data ?? []) as Trip[];
+}
+
+/**
+ * The run sheet: what this group is doing between now and `days` out.
+ *
+ * The window opens at local midnight rather than "now" so a stop that started
+ * an hour ago is still on screen — the guide standing in it needs to be able to
+ * mark it done. It runs past today for the same reason a paper run sheet does:
+ * tomorrow's 09:00 departure is tonight's problem, and it is also where a
+ * disruption lands first.
+ */
+export async function getRunSheet(
+  tripId: string,
+  days = 2
+): Promise<ItineraryItem[]> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from("itinerary_items")
+    .select("*")
+    .eq("trip_id", tripId)
+    .gte("starts_at", startOfLocalDay(0).toISOString())
+    .lt("starts_at", startOfLocalDay(days).toISOString())
+    .neq("status", "replaced")
+    .order("starts_at");
+
+  if (error) throw new Error(`getRunSheet: ${error.message}`);
+  return (data ?? []) as ItineraryItem[];
+}
+
+/** Run-sheet items split into local days, each labelled Today / Tomorrow. */
+export function groupByLocalDay(
+  items: ItineraryItem[]
+): { label: string; items: ItineraryItem[] }[] {
+  const days = new Map<string, ItineraryItem[]>();
+  for (const item of items) {
+    const key = relativeDayLabel(item.starts_at);
+    if (!days.has(key)) days.set(key, []);
+    days.get(key)!.push(item);
+  }
+  return [...days].map(([label, list]) => ({ label, items: list }));
 }

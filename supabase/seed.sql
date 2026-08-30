@@ -188,10 +188,14 @@ cross join generate_series(0, 4) as d;
 
 insert into trips
   (id, traveler_id, operator_id, title, contact_name, contact_email, contact_phone,
+   coordinator_name, coordinator_phone,
    status, party_size, budget, currency, starts_on, ends_on, prefs)
 values
   ('7a000000-0000-4000-a000-000000000001', null, '0d000000-0000-4000-a000-000000000001',
    'Amalfi Coast — Sharma party', 'Ananya Sharma', 'ananya@example.com', '+91 98000 00000',
+   -- The guide on the ground. Named in plain text rather than joined to a
+   -- profile because profiles hang off auth.users, and there is no sign-in yet.
+   'Marco Ferrara', '+39 089 000 006',
    'in_progress', 2, 4500.00, 'EUR', current_date, current_date + 4,
    '{"interests":["food","scenic","water"],"pace":"relaxed","dietary":["vegetarian"],
      "mobility":"no steep climbs","style":"boutique"}'::jsonb);

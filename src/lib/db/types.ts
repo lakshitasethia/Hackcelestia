@@ -51,6 +51,7 @@ export type VendorType = VendorsRow["type"];
 export type ItemType = ItineraryItemsRow["type"];
 export type TripStatus = TripsRow["status"];
 export type ItemStatus = ItineraryItemsRow["status"];
+export type FieldState = ItineraryItemsRow["field_state"];
 export type BookingState = BookingsRow["state"];
 export type DisruptionSource = DisruptionsRow["source"];
 export type Severity = DisruptionsRow["severity"];

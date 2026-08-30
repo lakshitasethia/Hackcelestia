@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { clearDisruptions } from "@/lib/disruption/engine";
 import { runScenario, type ScenarioId } from "@/lib/disruption/scenarios";
+import { notifyTrip } from "@/lib/realtime/notify";
 
 /**
  * Demo controls. Server actions rather than API routes because they mutate and
@@ -20,7 +21,13 @@ export async function injectScenarioAction(formData: FormData): Promise<void> {
   // and the traveler disagree about whether the boat is sailing.
   revalidatePath("/ops");
   revalidatePath(`/trip/${tripId}`);
+  revalidatePath(`/field/${tripId}`);
   revalidatePath("/app");
+
+  // revalidatePath only re-renders for whoever clicked. The traveler's tab and
+  // the guide's phone are told separately, or they keep showing a plan that is
+  // no longer true.
+  await notifyTrip(tripId, "disruption_opened");
 }
 
 export async function clearDisruptionsAction(formData: FormData): Promise<void> {
@@ -29,5 +36,8 @@ export async function clearDisruptionsAction(formData: FormData): Promise<void> 
 
   revalidatePath("/ops");
   revalidatePath(`/trip/${tripId}`);
+  revalidatePath(`/field/${tripId}`);
   revalidatePath("/app");
+
+  await notifyTrip(tripId, "disruption_cleared");
 }

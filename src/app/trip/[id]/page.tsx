@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import AppNav from "@/components/layout/AppNav";
+import LiveRefresh from "@/components/realtime/LiveRefresh";
 import TripSummary from "@/components/trip/TripSummary";
 import DayTimeline from "@/components/trip/DayTimeline";
 import { getBookings, getItems, getTrip, groupByDay } from "@/lib/db/queries";
@@ -42,9 +43,12 @@ export default async function TripPage({
       <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 pt-28 pb-24">
         <header className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-end">
           <div className="lg:col-span-8">
-            <span className="eyebrow">
-              · {trip.status.replace(/_/g, " ")} ·
-            </span>
+            <div className="flex items-center gap-4 flex-wrap mb-6">
+              <span className="eyebrow !mb-0">
+                · {trip.status.replace(/_/g, " ")} ·
+              </span>
+              <LiveRefresh tripIds={[trip.id]} />
+            </div>
             <h1 className="font-display text-display-lg font-semibold uppercase text-fg text-balance">
               {trip.title}
             </h1>

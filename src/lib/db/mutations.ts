@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { ItineraryItem, ReplanOp, TripPrefs } from "./types";
+import type { FieldState, ItineraryItem, ReplanOp, TripPrefs } from "./types";
 
 /**
  * Writes for the traveler planner.
@@ -434,4 +434,53 @@ export async function applyProposal(proposalId: string): Promise<{
   ]);
 
   return { applied, tripId };
+}
+
+// ----------------------------------------------------------- coordinator --
+
+/**
+ * The guide reporting on a stop.
+ *
+ * Writes only the field columns — `status` stays the operator's to set. A stop
+ * that the group finished and a booking the office confirmed are different
+ * facts, and the schema keeps them apart so neither can overwrite the other.
+ */
+export async function reportFieldState(
+  itemId: string,
+  state: FieldState,
+  note?: string
+): Promise<{ tripId: string; title: string }> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from("itinerary_items")
+    .update({
+      field_state: state,
+      // An empty textarea should clear a stale note, not preserve it, but an
+      // omitted argument (the plain state buttons) must leave it alone.
+      ...(note === undefined ? {} : { field_note: note.trim() || null }),
+    })
+    .eq("id", itemId)
+    .select("trip_id, title")
+    .single();
+
+  if (error) throw new Error(`reportFieldState: ${error.message}`);
+  const row = data as { trip_id: string; title: string };
+  return { tripId: row.trip_id, title: row.title };
+}
+
+/** An open disruption already rooted at this item, if there is one. */
+export async function findOpenDisruptionFor(
+  itemId: string
+): Promise<string | null> {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("disruptions")
+    .select("id")
+    .eq("root_item_id", itemId)
+    .eq("state", "open")
+    .limit(1)
+    .maybeSingle();
+
+  return (data as { id: string } | null)?.id ?? null;
 }

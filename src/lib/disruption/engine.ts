@@ -292,5 +292,16 @@ export async function clearDisruptions(tripId: string): Promise<number> {
 
   if (resetError) throw new Error(`clearDisruptions reset: ${resetError.message}`);
 
+  // Anything the coordinator flagged goes back to unreported too. A reset that
+  // left "Flagged on the ground" sitting on the run sheet would have the guide
+  // and the office disagreeing on the second rehearsal.
+  const { error: fieldError } = await supabase
+    .from("itinerary_items")
+    .update({ field_state: "pending", field_note: null })
+    .eq("trip_id", tripId)
+    .neq("field_state", "pending");
+
+  if (fieldError) throw new Error(`clearDisruptions field: ${fieldError.message}`);
+
   return (cleared ?? []).length;
 }

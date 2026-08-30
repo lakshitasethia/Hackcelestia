@@ -45,11 +45,13 @@ export default async function AppHome() {
     {
       label: "Field",
       icon: Radio,
-      href: "#",
+      href: "/field",
       blurb:
         "The coordinator on the ground: today's stops, confirm or flag, re-plans pushed live.",
-      stat: "Arrives with realtime",
-      ready: false,
+      stat: trip?.coordinator_name
+        ? `${trip.coordinator_name} is with the group`
+        : "No coordinator assigned",
+      ready: true,
     },
   ];
 

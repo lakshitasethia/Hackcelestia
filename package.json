@@ -8,10 +8,12 @@
     "start": "next start",
     "lint": "next lint",
     "db:push": "supabase db push",
+    "db:setup": "node scripts/db-setup.mjs",
     "db:seed": "node scripts/sql.mjs supabase/seed.sql",
     "db:types": "node scripts/gen-types.mjs > src/lib/db/generated.ts",
     "db:verify": "node scripts/sql.mjs supabase/verify.sql",
     "test:disruption": "tsx --conditions=react-server scripts/test-disruption.mts",
+    "test:field": "tsx --conditions=react-server scripts/test-field.mts",
     "test:agent": "tsx --conditions=react-server scripts/test-agent.mts"
   },
   "dependencies": {

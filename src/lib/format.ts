@@ -58,3 +58,34 @@ export function formatDuration(startIso: string, endIso: string): string {
   if (rest === 0) return `${hours}h`;
   return `${hours}h ${rest}m`;
 }
+
+/** How far the zone sits from UTC at that instant — handles DST. */
+function zoneOffsetMs(at: Date, tz: string): number {
+  const asZone = new Date(at.toLocaleString("en-US", { timeZone: tz })).getTime();
+  const asUtc = new Date(at.toLocaleString("en-US", { timeZone: "UTC" })).getTime();
+  return asZone - asUtc;
+}
+
+/**
+ * Midnight in the trip's zone, `offsetDays` from today, as a real instant.
+ *
+ * The coordinator's run sheet asks "what is happening today", and today is
+ * defined in Positano, not on whichever Vercel region rendered the page. A
+ * naive `new Date().setHours(0,0,0,0)` puts the boundary at 02:00 local in
+ * summer and silently drops the first two hours of the day.
+ */
+export function startOfLocalDay(offsetDays = 0, tz = TRIP_TZ): Date {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: tz });
+  const midnight = new Date(`${today}T00:00:00Z`);
+  midnight.setUTCDate(midnight.getUTCDate() + offsetDays);
+  return new Date(midnight.getTime() - zoneOffsetMs(midnight, tz));
+}
+
+/** "Today" / "Tomorrow" / a weekday, for a run sheet that spans a day boundary. */
+export function relativeDayLabel(iso: string, tz = TRIP_TZ): string {
+  const key = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: tz });
+  const when = key(new Date(iso));
+  if (when === key(startOfLocalDay(0, tz))) return "Today";
+  if (when === key(startOfLocalDay(1, tz))) return "Tomorrow";
+  return formatDate(iso, tz);
+}

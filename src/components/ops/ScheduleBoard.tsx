@@ -1,6 +1,17 @@
-import { AlertTriangle, Bot, User } from "lucide-react";
+import { AlertTriangle, Bot, Check, CircleDot, Flag, User } from "lucide-react";
 import type { ScheduleEntry } from "@/lib/db/queries";
+import type { FieldState } from "@/lib/db/types";
 import { formatDateLong, formatMoney, formatTime } from "@/lib/format";
+
+/** What the guide has said about a movement, if anything. `pending` is the
+ *  overwhelming majority and renders nothing — an unreported stop is the
+ *  normal case, and a badge on every row would drown the ones that matter. */
+const FIELD_BADGE: Record<FieldState, { label: string; icon: typeof Check } | null> = {
+  pending: null,
+  on_track: { label: "On track", icon: CircleDot },
+  done: { label: "Done", icon: Check },
+  issue: { label: "Flagged", icon: Flag },
+};
 
 /**
  * The operator's working view: every movement across every group for the next
@@ -37,6 +48,7 @@ export default function ScheduleBoard({ entries }: { entries: ScheduleEntry[] })
               <ul className="mt-3">
                 {dayEntries.map((entry) => {
                   const flagged = entry.status === "at_risk";
+                  const field = FIELD_BADGE[entry.field_state];
                   const dropped =
                     entry.status === "cancelled" || entry.status === "replaced";
 
@@ -73,6 +85,18 @@ export default function ScheduleBoard({ entries }: { entries: ScheduleEntry[] })
                               <User className="w-3 h-3" />
                             )}
                             {entry.vendors.name}
+                          </span>
+                        )}
+                        {field && (
+                          <span
+                            className={`inline-flex items-center gap-1 font-sans text-xs uppercase tracking-wider mt-1 ${
+                              entry.field_state === "issue"
+                                ? "text-accent"
+                                : "text-muted"
+                            }`}
+                          >
+                            <field.icon className="w-3 h-3" />
+                            {field.label} from the field
                           </span>
                         )}
                       </span>

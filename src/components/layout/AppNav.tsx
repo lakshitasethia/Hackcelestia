@@ -17,11 +17,12 @@ import { ArrowUpRight, Compass, Radio, LayoutGrid } from "lucide-react";
  */
 
 /** `ready: false` keeps a surface out of the nav until it exists — a dead link
- *  in the middle of a demo is worse than a missing one. Flip it when built. */
+ *  in the middle of a demo is worse than a missing one. All three are built
+ *  now; the flag stays because the next one will need it. */
 const SURFACES = [
   { label: "Traveler", href: "/app/trip", icon: Compass, match: "/trip", ready: true },
   { label: "Operations", href: "/ops", icon: LayoutGrid, match: "/ops", ready: true },
-  { label: "Field", href: "/field", icon: Radio, match: "/field", ready: false },
+  { label: "Field", href: "/field", icon: Radio, match: "/field", ready: true },
 ];
 
 export default function AppNav() {

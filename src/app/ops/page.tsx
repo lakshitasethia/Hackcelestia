@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AlertTriangle, ArrowUpRight } from "lucide-react";
 import AppNav from "@/components/layout/AppNav";
+import LiveRefresh from "@/components/realtime/LiveRefresh";
 import ScheduleBoard from "@/components/ops/ScheduleBoard";
 import VendorTable from "@/components/ops/VendorTable";
 import DemoControls from "@/components/ops/DemoControls";
@@ -43,7 +44,14 @@ export default async function OpsPage() {
       <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 pt-28 pb-24">
         <header className="flex flex-wrap items-end justify-between gap-6">
           <div>
-            <span className="eyebrow">· {operators[0]?.name ?? "Operations"} ·</span>
+            <div className="flex items-center gap-4 flex-wrap mb-6">
+              <span className="eyebrow !mb-0">
+                · {operators[0]?.name ?? "Operations"} ·
+              </span>
+              {/* The board watches every group it lists, so a problem reported
+                  from the field appears here without anyone refreshing. */}
+              <LiveRefresh tripIds={trips.map((t) => t.id)} />
+            </div>
             <h1 className="font-display text-display-lg font-semibold uppercase text-fg">
               Operations
             </h1>
@@ -144,6 +152,11 @@ export default async function OpsPage() {
                           {trip.party_size} pax
                           {trip.starts_on && ` · from ${formatDate(trip.starts_on)}`}
                         </span>
+                        {trip.coordinator_name && (
+                          <span className="font-sans text-xs text-muted block mt-0.5">
+                            Guide: {trip.coordinator_name}
+                          </span>
+                        )}
                       </div>
                       <span className="font-sans text-xs uppercase tracking-wider text-muted whitespace-nowrap group-hover:text-accent transition-colors">
                         {trip.status.replace(/_/g, " ")}

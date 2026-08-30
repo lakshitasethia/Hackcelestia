@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Bot, Lock, Sparkles, User } from "lucide-react";
 import AppNav from "@/components/layout/AppNav";
+import LiveRefresh from "@/components/realtime/LiveRefresh";
 import { assessDisruption } from "@/lib/disruption/engine";
 import { getAgentRuns, getItems, getProposals } from "@/lib/db/queries";
 import TracePanel from "@/components/agent/TracePanel";
@@ -43,10 +44,13 @@ export default async function DisruptionPage({
 
       <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 pt-28 pb-24">
         <header>
-          <span className="eyebrow flex items-center gap-2">
-            <AlertTriangle className="w-3.5 h-3.5" />· {disruption.source} ·{" "}
-            {disruption.severity} severity ·
-          </span>
+          <div className="flex items-center gap-4 flex-wrap mb-6">
+            <span className="eyebrow flex items-center gap-2 !mb-0">
+              <AlertTriangle className="w-3.5 h-3.5" />· {disruption.source} ·{" "}
+              {disruption.severity} severity ·
+            </span>
+            <LiveRefresh tripIds={[disruption.trip_id]} />
+          </div>
           <h1 className="font-display text-display-lg font-semibold uppercase text-fg text-balance max-w-4xl">
             {disruption.headline}
           </h1>

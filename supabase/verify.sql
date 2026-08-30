@@ -81,6 +81,32 @@ with checks as (
   select 'seeded trip is live today',
          (select starts_on <= current_date and ends_on >= current_date
             from trips where id = '7a000000-0000-4000-a000-000000000001')
+
+  union all
+  select 'the group has a coordinator, so /field has something to show',
+         (select coordinator_name from trips
+           where id = '7a000000-0000-4000-a000-000000000001') is not null
+
+  union all
+  select 'nothing is reported from the field on a fresh seed',
+         not exists (select 1 from itinerary_items where field_state <> 'pending')
+
+  union all
+  -- The run sheet spans today and tomorrow. If the boat day fell outside it the
+  -- coordinator would never see the stop the whole demo is about.
+  select 'the boat day falls inside the two-day run sheet',
+         (select count(*) from itinerary_items
+           where id = '17000000-0000-4000-a000-000000000011'
+             and starts_at >= (current_date at time zone 'Europe/Rome')
+             and starts_at <  ((current_date + 2) at time zone 'Europe/Rome')) = 1
+
+  union all
+  select 'a coordinator can only be pointed at a real profile',
+         (select count(*) from information_schema.table_constraints tc
+            join information_schema.key_column_usage k
+              on k.constraint_name = tc.constraint_name
+           where tc.table_name = 'trips' and tc.constraint_type = 'FOREIGN KEY'
+             and k.column_name = 'coordinator_id') = 1
 )
 select case when ok then 'PASS' else 'FAIL' end as result, label
 from checks

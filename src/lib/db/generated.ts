@@ -122,9 +122,12 @@ export interface ItineraryItemsRow {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  field_state: "pending" | "on_track" | "done" | "issue";
+  field_note: string | null;
+  field_updated_at: string | null;
 }
 
-export type ItineraryItemsInsert = Omit<ItineraryItemsRow, "id" | "seq" | "inventory_id" | "vendor_id" | "lat" | "lng" | "cost" | "status" | "depends_on" | "lock_reason" | "notes" | "created_at" | "updated_at"> & Partial<ItineraryItemsRow>;
+export type ItineraryItemsInsert = Omit<ItineraryItemsRow, "id" | "seq" | "inventory_id" | "vendor_id" | "lat" | "lng" | "cost" | "status" | "depends_on" | "lock_reason" | "notes" | "created_at" | "updated_at" | "field_state" | "field_note" | "field_updated_at"> & Partial<ItineraryItemsRow>;
 
 export interface MessagesRow {
   id: string;
@@ -194,9 +197,12 @@ export interface TripsRow {
   prefs: Json;
   created_at: string;
   updated_at: string;
+  coordinator_id: string | null;
+  coordinator_name: string | null;
+  coordinator_phone: string | null;
 }
 
-export type TripsInsert = Omit<TripsRow, "id" | "traveler_id" | "operator_id" | "title" | "contact_name" | "contact_email" | "contact_phone" | "status" | "party_size" | "budget" | "currency" | "starts_on" | "ends_on" | "prefs" | "created_at" | "updated_at"> & Partial<TripsRow>;
+export type TripsInsert = Omit<TripsRow, "id" | "traveler_id" | "operator_id" | "title" | "contact_name" | "contact_email" | "contact_phone" | "status" | "party_size" | "budget" | "currency" | "starts_on" | "ends_on" | "prefs" | "created_at" | "updated_at" | "coordinator_id" | "coordinator_name" | "coordinator_phone"> & Partial<TripsRow>;
 
 export interface VendorsRow {
   id: string;
