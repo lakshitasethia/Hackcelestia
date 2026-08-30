@@ -139,16 +139,17 @@ export default function Navbar() {
 
           {/* Desktop Right CTAs */}
           <div className="hidden md:flex items-center gap-4">
-            {/* Accounts do not exist yet, so this deliberately goes nowhere
-                rather than dumping the reader into an unrelated section. */}
-            <button
-              type="button"
-              aria-disabled="true"
-              title="Accounts are not live yet"
-              className="font-sans text-xs uppercase tracking-wider font-bold py-2 px-3 text-fg opacity-50 cursor-not-allowed"
+            {/* Sign-in does not exist yet, but the product behind it does — so
+                this opens the app rather than sitting there greyed out. A
+                reader clicking "Log in" wants to be inside the thing, and /app
+                is exactly that: pick a lens and go. */}
+            <a
+              href="/app"
+              className="font-sans text-xs uppercase tracking-wider font-bold py-1 px-3 text-fg hover:text-accent transition-colors duration-150 relative group"
             >
               Log In
-            </button>
+              <span className="absolute left-3 right-3 -bottom-0.5 h-px bg-accent w-0 group-hover:w-[calc(100%-1.5rem)] opacity-0 group-hover:opacity-100 transition-all duration-300" />
+            </a>
             <a
               href={PLAN_HREF}
               className="btn-solid py-2.5 px-5 text-xs tracking-wider"

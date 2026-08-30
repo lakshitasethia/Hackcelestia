@@ -265,6 +265,50 @@ export async function applyProposal(proposalId: string): Promise<{
   if (row.state === "accepted") return { applied: 0, tripId: row.disruptions.trip_id };
 
   const tripId = row.disruptions.trip_id;
+
+  /**
+   * Check the whole plan before writing any of it.
+   *
+   * This function used to apply operations one at a time and ignore the result
+   * of the insert. A `replace` whose row was rejected by the database — a
+   * missing timestamp was the real case — still went on to mark the original
+   * `replaced`, so the trip ended up with the boat cancelled and nothing in its
+   * place, and nobody was told. A half-applied re-plan is worse than a refused
+   * one: the operator believes the group is covered.
+   */
+  const problems: string[] = [];
+  for (const [idx, op] of row.plan.entries()) {
+    if (op.op === "drop") continue;
+
+    if (!op.starts_at || !op.ends_at) {
+      problems.push(`operation ${idx} (${op.op}) has no start or end time`);
+      continue;
+    }
+    if (new Date(op.ends_at) <= new Date(op.starts_at)) {
+      problems.push(`operation ${idx} (${op.op}) ends before it starts`);
+      continue;
+    }
+    if (op.op === "replace" || op.op === "add") {
+      const inventoryId =
+        op.op === "replace" ? op.with_inventory_id : op.inventory_id;
+      const { data: exists } = await supabase
+        .from("inventory")
+        .select("id")
+        .eq("id", inventoryId)
+        .maybeSingle();
+      if (!exists) {
+        problems.push(`operation ${idx} names inventory ${inventoryId}, which does not exist`);
+      }
+    }
+  }
+
+  if (problems.length > 0) {
+    throw new Error(
+      `This plan cannot be applied and the itinerary was left untouched:\n` +
+        problems.map((p) => `  · ${p}`).join("\n")
+    );
+  }
+
   let applied = 0;
 
   for (const op of row.plan) {
@@ -310,7 +354,7 @@ export async function applyProposal(proposalId: string): Promise<{
         vendors: { id: string } | null;
       };
 
-      const { data: inserted } = await supabase
+      const { data: inserted, error: insertError } = await supabase
         .from("itinerary_items")
         .insert({
           trip_id: tripId,
@@ -334,6 +378,18 @@ export async function applyProposal(proposalId: string): Promise<{
         .select("id")
         .single();
 
+      // The original is only stood down once its replacement exists. The
+      // pre-flight above should make this unreachable; it stays because the
+      // failure it guards against is silent and the cost is a trip with a hole
+      // in it.
+      if (insertError || !inserted) {
+        throw new Error(
+          `Could not create the replacement for "${previous.title}" ` +
+            `(${insertError?.message ?? "no row returned"}). The original stop ` +
+            `was left in place.`
+        );
+      }
+
       await supabase
         .from("itinerary_items")
         .update({ status: "replaced", notes: op.reason })
@@ -341,7 +397,7 @@ export async function applyProposal(proposalId: string): Promise<{
 
       // Anything that needed the old stop now needs the new one, or the
       // downstream chain is quietly orphaned.
-      if (inserted) {
+      {
         const newId = (inserted as { id: string }).id;
         const { data: dependents } = await supabase
           .from("itinerary_items")

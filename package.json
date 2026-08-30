@@ -14,6 +14,7 @@
     "db:verify": "node scripts/sql.mjs supabase/verify.sql",
     "test:disruption": "tsx --conditions=react-server scripts/test-disruption.mts",
     "test:field": "tsx --conditions=react-server scripts/test-field.mts",
+    "test:apply": "tsx --conditions=react-server scripts/test-apply.mts",
     "test:realtime": "tsx --conditions=react-server scripts/test-realtime.mts",
     "test:agent": "tsx --conditions=react-server scripts/test-agent.mts"
   },

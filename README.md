@@ -191,6 +191,8 @@ npm run dev          # http://localhost:3000/app
 npm run db:verify        # schema and seed invariants — every row should say PASS
 npm run test:disruption  # the deterministic engine, against the live database
 npm run test:field       # the coordinator run sheet, reporting and escalation
+npm run test:apply       # the write path — a plan that cannot fully apply must not half-apply
+npm run test:realtime    # a browser-key subscriber receives what the server broadcasts
 npm run test:agent       # a full re-planner run, including its trace
 ```
 

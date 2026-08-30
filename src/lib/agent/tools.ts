@@ -269,19 +269,39 @@ export function buildTools(
 
     const [{ data: items }, { data: inventory }, { data: trip }, { data: bookings }] =
       await Promise.all([
-        supabase.from("itinerary_items").select("id, day, cost").eq("trip_id", tripId),
-        supabase.from("inventory").select("id, base_cost"),
+        supabase
+          .from("itinerary_items")
+          .select("id, day, cost, starts_at, ends_at")
+          .eq("trip_id", tripId),
+        supabase.from("inventory").select("id, base_cost, duration_min"),
         supabase.from("trips").select("starts_on, ends_on").eq("id", tripId).single(),
         supabase.from("bookings").select("item_id, penalty").eq("trip_id", tripId),
       ]);
 
-    const itemRows = (items ?? []) as { id: string; cost: number }[];
-    const inventoryRows = (inventory ?? []) as { id: string; base_cost: number }[];
+    const itemRows = (items ?? []) as {
+      id: string;
+      cost: number;
+      starts_at: string;
+      ends_at: string;
+    }[];
+    const inventoryRows = (inventory ?? []) as {
+      id: string;
+      base_cost: number;
+      duration_min: number;
+    }[];
     const itemIds = new Set(itemRows.map((i) => i.id));
     const inventoryIds = new Set(inventoryRows.map((i) => i.id));
 
     const costOf = new Map(itemRows.map((i) => [i.id, Number(i.cost)]));
+    const startOf = new Map(itemRows.map((i) => [i.id, i.starts_at]));
     const priceOf = new Map(inventoryRows.map((i) => [i.id, Number(i.base_cost)]));
+    const durationOf = new Map(
+      inventoryRows.map((i) => [i.id, Number(i.duration_min)])
+    );
+    /** The real bookable slot for a candidate, from the availability search. */
+    const slotOf = new Map(
+      assessment.candidates.map((c) => [c.inventory.id, c.startsAt])
+    );
     const penaltyOf = new Map(
       ((bookings ?? []) as { item_id: string | null; penalty: number }[])
         .filter((b) => b.item_id)
@@ -345,6 +365,55 @@ export function buildTools(
 
       if (errors.length) return;
 
+      /**
+       * Times the model left out, filled in from data rather than rejected.
+       *
+       * A replace has an unambiguous correct answer — the substitute goes in
+       * its real bookable slot, or failing that where the broken stop sat, and
+       * runs for the catalogue duration. Bouncing the plan back over a field
+       * the model can only guess at costs a round trip against an 8000
+       * token-per-minute budget, and it guesses dates badly: that is what the
+       * window check above exists to catch.
+       *
+       * A `move` or an `add` gets no such default. For those the time *is* the
+       * decision, and inventing one would be putting a number in front of an
+       * operator that nobody chose.
+       */
+      const resolveWindow = (): { startsAt?: string; endsAt?: string } => {
+        const invId = op.with_inventory_id ?? op.item_id;
+        let startsAt = op.starts_at;
+
+        if (!startsAt && op.op === "replace") {
+          startsAt = slotOf.get(invId ?? "") ?? startOf.get(op.item_id ?? "");
+        }
+        if (!startsAt) return { startsAt: op.starts_at, endsAt: op.ends_at };
+
+        let endsAt = op.ends_at;
+        if (!endsAt) {
+          const minutes = durationOf.get(invId ?? "") ?? 60;
+          endsAt = new Date(
+            new Date(startsAt).getTime() + minutes * 60_000
+          ).toISOString();
+        }
+        return { startsAt, endsAt };
+      };
+
+      const { startsAt, endsAt } = resolveWindow();
+
+      // Whatever we could not resolve is a hard error. Storing an operation
+      // with no time produced a proposal that looked fine on screen and then
+      // failed at apply time, leaving the itinerary with a replaced stop and
+      // nothing in its place.
+      if (op.op !== "drop") {
+        if (!startsAt) errors.push(`op ${idx}: "${op.op}" needs starts_at (ISO 8601 UTC).`);
+        if (!endsAt) errors.push(`op ${idx}: "${op.op}" needs ends_at (ISO 8601 UTC).`);
+        else if (startsAt && new Date(endsAt) <= new Date(startsAt)) {
+          errors.push(`op ${idx}: ends_at must be after starts_at.`);
+        }
+      }
+
+      if (errors.length) return;
+
       const penalty = op.item_id ? penaltyOf.get(op.item_id) ?? 0 : 0;
       const oldCost = op.item_id ? costOf.get(op.item_id) ?? 0 : 0;
       const newPrice = priceOf.get(op.with_inventory_id ?? op.item_id ?? "") ?? 0;
@@ -359,8 +428,8 @@ export function buildTools(
         normalised.push({
           op: "move",
           item_id: op.item_id!,
-          starts_at: op.starts_at!,
-          ends_at: op.ends_at!,
+          starts_at: startsAt!,
+          ends_at: endsAt!,
           reason: op.reason,
         });
       } else if (op.op === "replace") {
@@ -368,8 +437,8 @@ export function buildTools(
           op: "replace",
           item_id: op.item_id!,
           with_inventory_id: (op.with_inventory_id ?? op.item_id)!,
-          starts_at: op.starts_at!,
-          ends_at: op.ends_at!,
+          starts_at: startsAt!,
+          ends_at: endsAt!,
           reason: op.reason,
         });
       } else {
@@ -377,8 +446,8 @@ export function buildTools(
           op: "add",
           inventory_id: (op.with_inventory_id ?? op.item_id)!,
           day: op.day!,
-          starts_at: op.starts_at!,
-          ends_at: op.ends_at!,
+          starts_at: startsAt!,
+          ends_at: endsAt!,
           depends_on: op.depends_on ?? [],
           reason: op.reason,
         });

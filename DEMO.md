@@ -160,6 +160,8 @@ judge why the boat is missing.
 |---|---|
 | Agent is rate-limited (429) | It retries and waits out the token window. If it fails, say so and pivot: *"the deterministic assessment above is the part that has to be right, and it's still there"* — then show a completed run from a previous disruption. |
 | Agent proposes nothing | Reset, re-run. The loop pins its first and last turns to `propose_replan` precisely because prose records nothing, but a bad generation is still possible. |
+| Accepting a plan errors with "cannot be applied" | Working as intended — the plan was incomplete and the itinerary was left untouched rather than half-changed. Accept the other proposal, or re-run the agent. |
+| The agent takes much longer than 60s | Groq's free tier varies a lot: runs have taken 55s, 111s and 242s on identical input. Nothing is wrong. This is the strongest argument for cutting the wait in a recording. |
 | Realtime does not fire | Reload B and C manually and keep going. `revalidatePath` has already made them correct; only the liveness is lost. The `Live`/`Offline` pill tells you which case you are in before you point at it. |
 | Database is unreachable | `npm run db:setup` and check the hostname resolves — a paused or deleted Supabase project fails with `ENOTFOUND`. See the README. |
 | The itinerary looks wrong from a previous run | `npm run db:seed`. Takes about a second and restores the group exactly. |

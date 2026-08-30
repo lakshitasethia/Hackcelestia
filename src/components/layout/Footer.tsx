@@ -5,6 +5,18 @@ import { usePathname } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { XIcon, InstagramIcon, LinkedInIcon, GitHubIcon } from "@/components/ui/BrandIcons";
 
+/** `href: null` means the channel does not exist yet. */
+const SOCIALS: { Icon: typeof XIcon; label: string; href: string | null }[] = [
+  { Icon: XIcon, label: "X", href: null },
+  { Icon: InstagramIcon, label: "Instagram", href: null },
+  { Icon: LinkedInIcon, label: "LinkedIn", href: null },
+  {
+    Icon: GitHubIcon,
+    label: "GitHub",
+    href: "https://github.com/lakshitasethia/Hackcelestia",
+  },
+];
+
 const STANDARDS_LINKS = [
   { label: "Privacy Policy", href: "/privacy" },
   { label: "Terms of Service", href: "/terms" },
@@ -53,25 +65,41 @@ export default function Footer() {
               </p>
             </div>
 
-            {/* Social row — official brand marks, see BrandIcons.tsx */}
-            {/* No accounts are live yet, so these stay inert instead of
-                pointing at "#". Swap in real URLs when the channels exist. */}
+            {/* Social row — official brand marks, see BrandIcons.tsx.
+                GitHub is a real link. The other three have no accounts behind
+                them yet, so they lift on hover like everything else here but
+                keep a "coming soon" title and no pointer cursor — greying them
+                out read as broken, and faking a link that goes nowhere is
+                worse than saying it is not there yet. */}
             <div className="flex items-center gap-3 mt-8">
-              {[
-                { Icon: XIcon, label: "X" },
-                { Icon: InstagramIcon, label: "Instagram" },
-                { Icon: LinkedInIcon, label: "LinkedIn" },
-                { Icon: GitHubIcon, label: "GitHub" },
-              ].map(({ Icon, label }) => (
-                <span
-                  key={label}
-                  aria-label={`${label} — coming soon`}
-                  title={`${label} — coming soon`}
-                  className="w-10 h-10 border border-line bg-surface text-muted flex items-center justify-center opacity-60 cursor-not-allowed"
-                >
-                  <Icon className="w-[18px] h-[18px]" />
-                </span>
-              ))}
+              {SOCIALS.map(({ Icon, label, href }) => {
+                const shared =
+                  "w-10 h-10 border border-line bg-surface text-muted flex items-center justify-center " +
+                  "transition-colors duration-200 hover:text-accent hover:border-accent";
+
+                return href ? (
+                  <a
+                    key={label}
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    aria-label={label}
+                    title={label}
+                    className={shared}
+                  >
+                    <Icon className="w-[18px] h-[18px]" />
+                  </a>
+                ) : (
+                  <span
+                    key={label}
+                    aria-label={`${label} — coming soon`}
+                    title={`${label} — coming soon`}
+                    className={`${shared} cursor-default`}
+                  >
+                    <Icon className="w-[18px] h-[18px]" />
+                  </span>
+                );
+              })}
             </div>
           </div>
 
