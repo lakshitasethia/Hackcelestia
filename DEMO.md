@@ -142,9 +142,15 @@ Point at Window B, then Window C. Both have already changed.
 
 ## Reset between runs
 
-`/ops` → Demo controls → **Reset trip**. That clears the disruption, restores
-every at-risk stop, and wipes the field reports. It does not re-seed, so it takes
-under a second and you can do it while someone is asking a question.
+**Which reset you need depends on how far you got.**
+
+| You stopped at | Use | Why |
+|---|---|---|
+| Anywhere before **Accept** | `/ops` → Demo controls → **Reset trip** | Clears the disruption, restores every at-risk stop, wipes the field reports. Instant, no re-seed, and you can do it while someone is asking a question. |
+| You **accepted a plan** | `npm run db:seed` (~1s) | Accepting is a real, permanent write — the boat is `replaced`, three stops are `cancelled`, and a substitute now sits in the itinerary. **Reset trip cannot undo that**, and it is not supposed to: an operator cannot un-cancel a supplier by clicking a button. Re-seeding rebuilds the group from `supabase/seed.sql`. |
+
+Between rehearsals of the full path, re-seed. It is faster than explaining to a
+judge why the boat is missing.
 
 ---
 
@@ -156,6 +162,7 @@ under a second and you can do it while someone is asking a question.
 | Agent proposes nothing | Reset, re-run. The loop pins its first and last turns to `propose_replan` precisely because prose records nothing, but a bad generation is still possible. |
 | Realtime does not fire | Reload B and C manually and keep going. `revalidatePath` has already made them correct; only the liveness is lost. The `Live`/`Offline` pill tells you which case you are in before you point at it. |
 | Database is unreachable | `npm run db:setup` and check the hostname resolves — a paused or deleted Supabase project fails with `ENOTFOUND`. See the README. |
+| The itinerary looks wrong from a previous run | `npm run db:seed`. Takes about a second and restores the group exactly. |
 
 ---
 

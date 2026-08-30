@@ -134,7 +134,13 @@ export default function StopCard({
           {/* Escalation is one tap plus a sentence. Anything longer and a guide
               standing in the problem rings the office instead, which is the
               behaviour this surface exists to replace. */}
-          <details className="w-full">
+          {/* Keyed on the item so the open/closed state and the typed note are
+              tied to the stop they describe. A live refresh arriving mid-
+              sentence must not wipe what the guide is writing (same key, state
+              kept), but an accepted re-plan that swaps this stop for another
+              must not leave the old note sitting under the new one (new key,
+              fresh form). */}
+          <details key={item.id} className="w-full">
             <summary
               className={`flex items-center justify-center gap-2 px-3 py-3 border font-sans text-xs uppercase tracking-wider font-bold cursor-pointer transition-colors ${
                 flagged
