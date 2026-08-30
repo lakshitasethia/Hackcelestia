@@ -5,7 +5,9 @@ for (const l of fs.readFileSync(".env.local", "utf8").split("\n")) {
   const i = t.indexOf("="); if (i > 0) process.env[t.slice(0, i).trim()] ||= t.slice(i + 1).trim();
 }
 
-const { DEMO_TRIP_ID, getItems } = await import("../src/lib/db/queries.js");
+const { DEMO_TRIP_ID, getItems, getBookings, summarize } = await import(
+  "../src/lib/db/queries.js"
+);
 const { applyProposal } = await import("../src/lib/db/mutations.js");
 const { runScenario } = await import("../src/lib/disruption/scenarios.js");
 const { clearDisruptions } = await import("../src/lib/disruption/engine.js");
@@ -109,6 +111,8 @@ const { data: good } = await supabase
   .from("replan_proposals")
   .insert({
     disruption_id: disruption.id,
+    // A replace *and* a drop, so the drop assertions below are not vacuous:
+    // lunch on Capri cannot happen once the boat to Capri is gone.
     plan: [
       {
         op: "replace",
@@ -118,8 +122,13 @@ const { data: good } = await supabase
         ends_at: boat.ends_at,
         reason: "valid swap",
       },
+      {
+        op: "drop",
+        item_id: "17000000-0000-4000-a000-000000000012",
+        reason: "lunch on Capri is unreachable",
+      },
     ],
-    cost_delta: -695,
+    cost_delta: -805,
     rationale: "regression fixture",
     state: "draft",
   })
@@ -127,7 +136,7 @@ const { data: good } = await supabase
   .single();
 
 const { applied } = await applyProposal((good as { id: string }).id);
-check("a valid plan still applies", applied === 1, `${applied} operations`);
+check("a valid plan still applies", applied === 2, `${applied} operations`);
 
 const final = await getItems(DEMO_TRIP_ID);
 check(
@@ -147,6 +156,71 @@ check(
     .every((i) => i.status === "cancelled" || i.status === "replaced"),
   "nothing live still points at the replaced stop"
 );
+
+// -- the money follows the itinerary ---------------------------------------
+//
+// The itinerary being right is only half of it. Before this, accepting a plan
+// left the boat's booking `confirmed` and its seat consumed, so the traveler's
+// summary went on quoting a EUR 195 cancellation penalty for a stop that was
+// no longer on the trip.
+
+const bookings = await getBookings(DEMO_TRIP_ID);
+const boatBooking = bookings.find((b) => b.item_id === boat.id);
+check("the replaced stop's booking is cancelled", boatBooking?.state === "cancelled",
+  boatBooking?.state ?? "no booking row");
+
+const subBooking = bookings.find((b) => b.item_id === substitute?.id);
+check("the substitute has a booking of its own", !!subBooking, subBooking?.state);
+check("the substitute's booking is worth what the stop costs",
+  Number(subBooking?.amount) === Number(substitute?.cost),
+  `${subBooking?.amount} vs ${substitute?.cost}`);
+// Lemon grove walk is Marco's, and Marco is an `auto` vendor, so it needs no
+// phone call. A `manual` vendor would come back `held` instead.
+check("an auto-channel vendor is booked outright, not held",
+  subBooking?.state === "confirmed", subBooking?.state);
+check("a fresh booking carries no sunk penalty yet",
+  Number(subBooking?.penalty) === 0, String(subBooking?.penalty));
+
+const dropped = final.filter((i) => i.status === "cancelled");
+check("the plan actually dropped something, so the next check means something",
+  dropped.length > 0, `${dropped.length} dropped`);
+check("every dropped stop had its booking cancelled too",
+  dropped.every((i) => {
+    const b = bookings.find((x) => x.item_id === i.id);
+    return !!b && b.state === "cancelled";
+  }),
+  dropped.map((i) => i.title).join(", "));
+
+// The number that was wrong on screen.
+const { penaltyIfCancelled } = summarize(final, bookings);
+check("the summary no longer counts the dead stop's penalty",
+  penaltyIfCancelled === 1280,
+  `EUR ${penaltyIfCancelled} (hotel 1280 only; the boat's 195 is spent, not pending)`);
+
+// -- seats move with the bookings -------------------------------------------
+
+const seatRows = await supabase
+  .from("availability")
+  .select("inventory_id, date, slots_taken")
+  .in("inventory_id", [
+    "19000000-0000-4000-a000-00000000000d", // lemon grove walk, now booked
+    "19000000-0000-4000-a000-000000000002", // the boat, released
+  ]);
+
+const day = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-CA", { timeZone: "Europe/Rome" });
+
+const taken = (inv: string, on: string) =>
+  ((seatRows.data ?? []) as { inventory_id: string; date: string; slots_taken: number }[])
+    .find((r) => r.inventory_id === inv && r.date === on)?.slots_taken;
+
+check("booking the substitute consumed one of its seats",
+  taken("19000000-0000-4000-a000-00000000000d", day(substitute!.starts_at)) === 1,
+  String(taken("19000000-0000-4000-a000-00000000000d", day(substitute!.starts_at))));
+// The seeded boat never consumed a seat, so releasing it must not push the
+// count below zero — the clamp in adjust_availability is what guarantees that.
+check("releasing a seat never drives the count negative",
+  (taken("19000000-0000-4000-a000-000000000002", day(boat.starts_at)) ?? 0) >= 0);
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

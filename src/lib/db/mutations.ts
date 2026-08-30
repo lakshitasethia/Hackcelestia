@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { TRIP_TZ } from "@/lib/format";
 import type { FieldState, ItineraryItem, ReplanOp, TripPrefs } from "./types";
 
 /**
@@ -155,12 +156,18 @@ export async function removeItem(itemId: string): Promise<void> {
 
   const { data: item } = await supabase
     .from("itinerary_items")
-    .select("id, trip_id, depends_on")
+    .select("id, trip_id, depends_on, inventory_id, starts_at")
     .eq("id", itemId)
     .single();
 
   if (!item) return;
-  const doomed = item as { id: string; trip_id: string; depends_on: string[] };
+  const doomed = item as {
+    id: string;
+    trip_id: string;
+    depends_on: string[];
+    inventory_id: string | null;
+    starts_at: string;
+  };
 
   const { data: dependents } = await supabase
     .from("itinerary_items")
@@ -182,6 +189,11 @@ export async function removeItem(itemId: string): Promise<void> {
       .eq("id", dependent.id);
   }
 
+  // Stand the booking down before the row goes. `bookings.item_id` is ON
+  // DELETE SET NULL, so deleting first would leave a confirmed booking with
+  // nothing to point at — money held against a stop nobody can find.
+  await releaseBooking(supabase, doomed);
+
   const { error } = await supabase
     .from("itinerary_items")
     .delete()
@@ -189,16 +201,80 @@ export async function removeItem(itemId: string): Promise<void> {
   if (error) throw new Error(`removeItem: ${error.message}`);
 }
 
-export async function setTripStatus(
-  tripId: string,
-  status: "draft" | "confirmed" | "in_progress"
-): Promise<void> {
+/**
+ * Confirm a trip the traveler has built, and actually book it.
+ *
+ * This used to be a status update and nothing else: the stops stayed `planned`,
+ * no booking rows existed, and the operator inherited a "confirmed" group with
+ * nothing reserved behind it. Confirming is the moment a plan becomes
+ * commitments, so it books every planned stop, takes its seat, and returns what
+ * still needs a human — the `manual` vendors, which are held rather than
+ * confirmed and are exactly the calls the office has to make.
+ */
+export async function confirmTrip(tripId: string): Promise<{
+  confirmed: number;
+  held: number;
+}> {
   const supabase = createAdminClient();
-  const { error } = await supabase
-    .from("trips")
-    .update({ status })
-    .eq("id", tripId);
-  if (error) throw new Error(`setTripStatus: ${error.message}`);
+
+  const { data: items, error } = await supabase
+    .from("itinerary_items")
+    .select("id, inventory_id, starts_at, cost, vendor_id, inventory(vendors(channel))")
+    .eq("trip_id", tripId)
+    .eq("status", "planned");
+
+  if (error) throw new Error(`confirmTrip: ${error.message}`);
+
+  type Row = {
+    id: string;
+    inventory_id: string | null;
+    starts_at: string;
+    cost: number;
+    vendor_id: string | null;
+    inventory: { vendors: { channel: "auto" | "manual" } | null } | null;
+  };
+
+  let confirmed = 0;
+  let held = 0;
+
+  for (const row of ((items ?? []) as unknown as Row[])) {
+    // A stop with no catalogue entry is something the operator added by hand;
+    // there is nothing to reserve and no seat to take.
+    if (row.inventory_id) {
+      const channel = row.inventory?.vendors?.channel ?? "manual";
+
+      // Re-confirming a trip must not book the same stop twice.
+      const { data: existing } = await supabase
+        .from("bookings")
+        .select("id")
+        .eq("item_id", row.id)
+        .in("state", ["held", "confirmed"])
+        .maybeSingle();
+
+      if (!existing) {
+        await bookItem(supabase, {
+          tripId,
+          itemId: row.id,
+          inventoryId: row.inventory_id,
+          vendorId: row.vendor_id,
+          channel,
+          amount: Number(row.cost),
+          startsAt: row.starts_at,
+        });
+      }
+      if (channel === "auto") confirmed++;
+      else held++;
+    }
+
+    await supabase
+      .from("itinerary_items")
+      .update({ status: "confirmed" })
+      .eq("id", row.id);
+  }
+
+  await supabase.from("trips").update({ status: "confirmed" }).eq("id", tripId);
+
+  return { confirmed, held };
 }
 
 /**
@@ -230,6 +306,109 @@ function zonedTime(
   ).getTime();
 
   return new Date(naive.getTime() - (asZone - asUtc));
+}
+
+type Client = ReturnType<typeof createAdminClient>;
+
+/** The calendar day a stop falls on where the trip is, which is the unit
+ *  availability is published in. "YYYY-MM-DD", matching the SQL side. */
+function localDay(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: TRIP_TZ });
+}
+
+/**
+ * Move the consumed count on the availability row a stop sits in.
+ *
+ * Delegated to SQL because the increment has to be atomic — PostgREST can set
+ * `slots_taken = 3` but not `slots_taken = slots_taken + 1`, and a read-then-
+ * write from here races two operators booking the last seat. A stop whose day
+ * the catalogue does not publish simply has no row to move, which the function
+ * reports as -1 rather than treating as an error.
+ */
+async function adjustAvailability(
+  supabase: Client,
+  inventoryId: string | null,
+  startsAt: string,
+  delta: 1 | -1
+): Promise<void> {
+  if (!inventoryId) return;
+  await supabase.rpc("adjust_availability", {
+    p_inventory_id: inventoryId,
+    p_starts_at: startsAt,
+    p_delta: delta,
+  });
+}
+
+/**
+ * Stand down the booking behind a stop that is no longer happening, and give
+ * its seat back to the catalogue.
+ *
+ * Without this an accepted re-plan left the traveler's summary counting the
+ * cancellation penalty of a stop that had already been cancelled — the number
+ * the whole "do not just drop it" argument rests on, wrong on screen.
+ *
+ * The penalty on the released row is left as it was on purpose. It is what the
+ * cancellation actually cost, it is already priced into the proposal's
+ * cost_delta, and an operator reconciling the month needs to see it.
+ */
+async function releaseBooking(
+  supabase: Client,
+  item: { id: string; inventory_id: string | null; starts_at: string }
+): Promise<void> {
+  const { data: released } = await supabase
+    .from("bookings")
+    .update({ state: "cancelled" })
+    .eq("item_id", item.id)
+    .in("state", ["held", "confirmed"])
+    .select("id");
+
+  // Only give the seat back if a booking was actually holding it.
+  if ((released ?? []).length > 0) {
+    await adjustAvailability(supabase, item.inventory_id, item.starts_at, -1);
+  }
+}
+
+/**
+ * Book a stop the re-plan just created, and take its seat.
+ *
+ * The state is decided by how the vendor is reachable, which the schema
+ * already records: an `auto` vendor is one the platform can rebook without a
+ * human, so the booking is confirmed outright; a `manual` one is held until
+ * somebody in the office calls them. That distinction is the difference
+ * between a re-plan that is done and one that still needs a phone call, and
+ * the operator has to be able to see which they are looking at.
+ */
+async function bookItem(
+  supabase: Client,
+  input: {
+    tripId: string;
+    itemId: string;
+    inventoryId: string;
+    vendorId: string | null;
+    channel: "auto" | "manual";
+    amount: number;
+    startsAt: string;
+  }
+): Promise<void> {
+  const { error } = await supabase.from("bookings").insert({
+    trip_id: input.tripId,
+    item_id: input.itemId,
+    vendor_id: input.vendorId,
+    state: input.channel === "auto" ? "confirmed" : "held",
+    amount: input.amount,
+    // Newly booked, so nothing is sunk yet. It grows as the date approaches;
+    // that is a vendor policy question this slice does not model.
+    penalty: 0,
+    external_ref: `RP-${Date.now().toString(36).toUpperCase()}`,
+  });
+
+  if (error) {
+    throw new Error(
+      `Applied the re-plan but could not book the replacement: ${error.message}`
+    );
+  }
+
+  await adjustAvailability(supabase, input.inventoryId, input.startsAt, 1);
 }
 
 /**
@@ -313,14 +492,35 @@ export async function applyProposal(proposalId: string): Promise<{
 
   for (const op of row.plan) {
     if (op.op === "drop") {
+      // Read before writing: once the row says `cancelled` we can no longer
+      // tell which availability day it was holding.
+      const { data: doomed } = await supabase
+        .from("itinerary_items")
+        .select("id, inventory_id, starts_at")
+        .eq("id", op.item_id)
+        .maybeSingle();
+
       await supabase
         .from("itinerary_items")
         .update({ status: "cancelled", notes: op.reason })
         .eq("id", op.item_id);
+
+      if (doomed) {
+        await releaseBooking(
+          supabase,
+          doomed as { id: string; inventory_id: string | null; starts_at: string }
+        );
+      }
       applied++;
     }
 
     if (op.op === "move") {
+      const { data: before } = await supabase
+        .from("itinerary_items")
+        .select("id, inventory_id, starts_at")
+        .eq("id", op.item_id)
+        .maybeSingle();
+
       await supabase
         .from("itinerary_items")
         .update({
@@ -330,6 +530,21 @@ export async function applyProposal(proposalId: string): Promise<{
           notes: op.reason,
         })
         .eq("id", op.item_id);
+
+      // A move that crosses midnight is consuming a different day's capacity.
+      // The booking itself is untouched — it is the same stop with the same
+      // vendor, just later.
+      const previous = before as
+        | { inventory_id: string | null; starts_at: string }
+        | null;
+      if (previous?.inventory_id) {
+        const wasDay = localDay(previous.starts_at);
+        const nowDay = localDay(op.starts_at);
+        if (wasDay !== nowDay) {
+          await adjustAvailability(supabase, previous.inventory_id, previous.starts_at, -1);
+          await adjustAvailability(supabase, previous.inventory_id, op.starts_at, 1);
+        }
+      }
       applied++;
     }
 
@@ -338,7 +553,7 @@ export async function applyProposal(proposalId: string): Promise<{
         supabase.from("itinerary_items").select("*").eq("id", op.item_id).single(),
         supabase
           .from("inventory")
-          .select("*, vendors(id)")
+          .select("*, vendors(id, channel)")
           .eq("id", op.with_inventory_id)
           .single(),
       ]);
@@ -351,7 +566,7 @@ export async function applyProposal(proposalId: string): Promise<{
         base_cost: number;
         lat: number | null;
         lng: number | null;
-        vendors: { id: string } | null;
+        vendors: { id: string; channel: "auto" | "manual" } | null;
       };
 
       const { data: inserted, error: insertError } = await supabase
@@ -395,6 +610,21 @@ export async function applyProposal(proposalId: string): Promise<{
         .update({ status: "replaced", notes: op.reason })
         .eq("id", op.item_id);
 
+      // The swap is only real once the money follows it: the old booking is
+      // stood down and its seat returned, and the stand-in gets a booking of
+      // its own. Leaving this out is what had the traveler's summary quoting a
+      // penalty for a boat that was no longer on the itinerary.
+      await releaseBooking(supabase, previous);
+      await bookItem(supabase, {
+        tripId,
+        itemId: (inserted as { id: string }).id,
+        inventoryId: op.with_inventory_id,
+        vendorId: replacement.vendors?.id ?? null,
+        channel: replacement.vendors?.channel ?? "manual",
+        amount: Number(replacement.base_cost),
+        startsAt: op.starts_at,
+      });
+
       // Anything that needed the old stop now needs the new one, or the
       // downstream chain is quietly orphaned.
       {
@@ -428,7 +658,7 @@ export async function applyProposal(proposalId: string): Promise<{
     if (op.op === "add") {
       const { data: inv } = await supabase
         .from("inventory")
-        .select("*, vendors(id)")
+        .select("*, vendors(id, channel)")
         .eq("id", op.inventory_id)
         .single();
       if (!inv) continue;
@@ -439,10 +669,12 @@ export async function applyProposal(proposalId: string): Promise<{
         base_cost: number;
         lat: number | null;
         lng: number | null;
-        vendors: { id: string } | null;
+        vendors: { id: string; channel: "auto" | "manual" } | null;
       };
 
-      await supabase.from("itinerary_items").insert({
+      const { data: added, error: addError } = await supabase
+        .from("itinerary_items")
+        .insert({
         trip_id: tripId,
         day: op.day,
         seq: 99,
@@ -458,6 +690,27 @@ export async function applyProposal(proposalId: string): Promise<{
         status: "confirmed",
         depends_on: op.depends_on ?? [],
         notes: op.reason,
+      })
+        .select("id")
+        .single();
+
+      // Same rule as a replacement: a stop nobody could book is not an
+      // addition, it is a promise. Fail loudly rather than quietly.
+      if (addError || !added) {
+        throw new Error(
+          `Could not add "${addition.title}" to the itinerary ` +
+            `(${addError?.message ?? "no row returned"}).`
+        );
+      }
+
+      await bookItem(supabase, {
+        tripId,
+        itemId: (added as { id: string }).id,
+        inventoryId: op.inventory_id,
+        vendorId: addition.vendors?.id ?? null,
+        channel: addition.vendors?.channel ?? "manual",
+        amount: Number(addition.base_cost),
+        startsAt: op.starts_at,
       });
       applied++;
     }

@@ -64,9 +64,12 @@ in Postgres so the UI and the agent cannot disagree about it.
    calls the same tools, and writes two or three genuinely different plans.
 4. Every tool call it made is rendered in the trace panel, with arguments,
    results and timings.
-5. The operator accepts one. `applyProposal` rewrites the itinerary
-   deterministically, rewires the dependency edges around the swap, and marks
-   the losing options superseded rather than deleting them.
+5. The operator accepts one. `applyProposal` checks the whole plan is
+   applicable before writing any of it, then rewrites the itinerary
+   deterministically: it rewires the dependency edges around the swap, cancels
+   the bookings behind dropped stops and books the substitutes, returns and
+   takes the matching `availability` seats, and marks the losing options
+   superseded rather than deleting them.
 6. The traveler's tab and the coordinator's phone update in place.
 
 ### The boundary that matters
@@ -94,12 +97,22 @@ Worth saying plainly, because the alternative is being caught:
   model sees anything. The model does preference-ordering and explains its
   reasoning. It is not doing the optimization, and the writeup does not claim it.
 - **Payments are a state machine, not a payment processor.** `bookings.state`
-  moves; no money does.
-- **There is no sign-in yet.** RLS policies exist and are correct — travelers see
-  their own trips, operators their org, coordinators their assigned groups — but
-  with no `auth.uid()` to key off, server reads go through the service-role
-  client. Every one of those reads is marked in `src/lib/db/queries.ts` so the
-  swap is a small, findable change rather than an audit.
+  moves through held → confirmed → cancelled and the penalties are real numbers
+  the re-planner prices against; no money moves.
+- **There is no sign-in yet, and the RLS is therefore untested.** Policies are
+  written — travelers see their own trips, operators their org, coordinators
+  their assigned groups, and a trigger stops a coordinator writing anything but
+  the field columns. But with no `auth.uid()` to key off, every server read goes
+  through the service-role client, which *bypasses all of it*. So the policies
+  are unexercised code, not a verified boundary, and `src/lib/supabase/server.ts`
+  — the RLS-scoped client they are written for — is imported nowhere. Every
+  service-role read is marked in `src/lib/db/queries.ts` so the swap is a small,
+  findable change; the policies themselves will need testing when it happens.
+- **Inventory is reserved, not brokered.** Confirming a trip or accepting a
+  re-plan creates real `bookings` rows and moves `availability.slots_taken`
+  atomically, so a seat taken by one group is gone for the next. What it does
+  not do is talk to a vendor system — an `auto` vendor's booking is marked
+  confirmed on the strength of nothing but the schema saying they are reachable.
 - **Weather is seeded.** `OPENWEATHER_API_KEY` is optional and unused by the
   demo path on purpose: a live API that flakes on stage is a liability.
 
@@ -188,10 +201,13 @@ npm run dev          # http://localhost:3000/app
 ### Checks
 
 ```bash
+npm run test:all         # everything below except the agent, in order, leaving a clean database
+
 npm run db:verify        # schema and seed invariants — every row should say PASS
 npm run test:disruption  # the deterministic engine, against the live database
 npm run test:field       # the coordinator run sheet, reporting and escalation
 npm run test:apply       # the write path — a plan that cannot fully apply must not half-apply
+npm run test:flow        # the whole product end to end on a trip built from scratch
 npm run test:realtime    # a browser-key subscriber receives what the server broadcasts
 npm run test:agent       # a full re-planner run, including its trace
 ```
@@ -200,6 +216,21 @@ npm run test:agent       # a full re-planner run, including its trace
 ordering was deliberate — the blast radius has to be provably correct *before*
 an agent reasons over it, or a wrong re-plan could mean a bad graph or a bad
 model and you end up debugging both at once.
+
+`test:flow` is the one that catches seams. Every other suite exercises one layer
+against the seeded group; this one plans a trip from nothing, confirms it, books
+it, breaks it, re-plans it, accepts, checks the guide's run sheet, and deletes
+itself — including giving back every seat it took. A layer can pass alone and
+still fail here.
+
+`test:agent` is excluded from `test:all` on purpose: it costs a real model call,
+takes anywhere from 55 to 240 seconds on Groq's free tier, and can be
+rate-limited. Run it deliberately.
+
+> **Do not run `npm run build` while `npm run dev` is running.** They share the
+> `.next` directory, and the production build overwrites the dev server's
+> chunks — the symptom is every route suddenly 404ing with `MODULE_NOT_FOUND`
+> in the terminal. Stop the dev server, or `rm -rf .next` and restart it.
 
 ---
 
@@ -218,7 +249,7 @@ src/
     realtime/   the broadcast contract and the server-side sender
     supabase/   admin (service role), server (RLS), browser clients
 supabase/
-  migrations/  schema, RLS, the blast_radius function, the field columns
+  migrations/  schema, RLS, blast_radius, the field columns, atomic seat moves
   seed.sql     one operator, six vendors, eighteen inventory items, one group
   verify.sql   invariants — run after every migration
 scripts/       db setup, type generation, the test suites

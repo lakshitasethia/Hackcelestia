@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { addItem, removeItem, setTripStatus } from "@/lib/db/mutations";
+import { addItem, confirmTrip, removeItem } from "@/lib/db/mutations";
 import { TRIP_TZ } from "@/lib/format";
+import { notifyTrip } from "@/lib/realtime/notify";
 
 export async function addItemAction(formData: FormData): Promise<void> {
   const tripId = String(formData.get("tripId"));
@@ -18,6 +19,7 @@ export async function addItemAction(formData: FormData): Promise<void> {
   revalidatePath(`/trip/${tripId}/build`);
   revalidatePath(`/trip/${tripId}`);
   revalidatePath("/ops");
+  await notifyTrip(tripId, "itinerary_changed");
 }
 
 export async function removeItemAction(formData: FormData): Promise<void> {
@@ -26,14 +28,20 @@ export async function removeItemAction(formData: FormData): Promise<void> {
 
   revalidatePath(`/trip/${tripId}/build`);
   revalidatePath(`/trip/${tripId}`);
+  revalidatePath(`/field/${tripId}`);
   revalidatePath("/ops");
+  await notifyTrip(tripId, "itinerary_changed");
 }
 
 export async function confirmTripAction(formData: FormData): Promise<void> {
   const tripId = String(formData.get("tripId"));
-  await setTripStatus(tripId, "confirmed");
+
+  // Confirming books every planned stop, so the operator inherits real
+  // reservations rather than a trip that only says "confirmed".
+  await confirmTrip(tripId);
 
   revalidatePath(`/trip/${tripId}`);
   revalidatePath("/ops");
+  await notifyTrip(tripId, "itinerary_changed");
   redirect(`/trip/${tripId}`);
 }

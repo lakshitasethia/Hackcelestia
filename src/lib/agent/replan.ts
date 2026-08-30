@@ -139,7 +139,7 @@ export async function runReplanAgent(disruptionId: string): Promise<ReplanResult
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
       pruneHistory(messages);
 
-      const completion = await withRateLimitRetry(() =>
+      const completion = await withRateLimitRetry((relaxed) =>
         groq.chat.completions.create({
           model: MODEL,
           // A proposal with five operations serialises to well over 2k, and a
@@ -155,8 +155,15 @@ export async function runReplanAgent(disruptionId: string): Promise<ReplanResult
           // prices every candidate until the iteration budget is gone without
           // ever committing. So the first turn and the last two are pinned to
           // the only tool that actually saves anything.
+          //
+          // `relaxed` lifts the pin. Groq validates tool_choice server-side and
+          // rejects the whole request with a 400 when the model reaches for a
+          // different tool — so a model that insists on pricing first does not
+          // get a nudge, it gets a dead run. Retrying the identical request
+          // fails identically; letting it have its way once is what actually
+          // recovers.
           tool_choice:
-            iteration === 0 || iteration >= MAX_ITERATIONS - 2
+            !relaxed && (iteration === 0 || iteration >= MAX_ITERATIONS - 2)
               ? { type: "function", function: { name: "propose_replan" } }
               : "auto",
         })
@@ -337,12 +344,16 @@ function parseDuration(value: string | undefined): number | null {
 }
 
 async function withRateLimitRetry<T>(
-  call: () => Promise<T>,
+  call: (relaxed: boolean) => Promise<T>,
   attempts = 4
 ): Promise<T> {
+  // Once the pinned tool has been refused, stay relaxed for the rest of this
+  // call. Flipping back would just reproduce the rejection.
+  let relaxed = false;
+
   for (let attempt = 0; ; attempt++) {
     try {
-      return await call();
+      return await call(relaxed);
     } catch (error) {
       const status = (error as { status?: number })?.status;
       const body = String((error as { message?: string })?.message ?? "");
@@ -352,7 +363,13 @@ async function withRateLimitRetry<T>(
       const isBadGeneration = status === 400 && body.includes("tool_use_failed");
       if ((!isRateLimit && !isBadGeneration) || attempt >= attempts - 1) throw error;
 
-      if (isBadGeneration) continue;
+      if (isBadGeneration) {
+        // Distinguish "the model emitted broken JSON" — worth retrying as-is —
+        // from "the model wanted a tool we forbade", where the request itself
+        // is what needs to change.
+        if (body.includes("tool_choice")) relaxed = true;
+        continue;
+      }
 
       const headers = (error as { headers?: Record<string, string> })?.headers ?? {};
       const tokenReset = parseDuration(headers["x-ratelimit-reset-tokens"]);

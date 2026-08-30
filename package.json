@@ -15,15 +15,15 @@
     "test:disruption": "tsx --conditions=react-server scripts/test-disruption.mts",
     "test:field": "tsx --conditions=react-server scripts/test-field.mts",
     "test:apply": "tsx --conditions=react-server scripts/test-apply.mts",
+    "test:flow": "tsx --conditions=react-server scripts/test-flow.mts",
     "test:realtime": "tsx --conditions=react-server scripts/test-realtime.mts",
-    "test:agent": "tsx --conditions=react-server scripts/test-agent.mts"
+    "test:agent": "tsx --conditions=react-server scripts/test-agent.mts",
+    "test:all": "npm run db:seed && npm run db:verify && npm run test:disruption && npm run test:field && npm run test:apply && npm run test:flow && npm run test:realtime && npm run db:seed"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.120.0",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
     "clsx": "^2.1.1",
-    "framer-motion": "^11.18.2",
     "groq-sdk": "^1.5.0",
     "gsap": "^3.12.7",
     "lenis": "^1.3.26",

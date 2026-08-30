@@ -281,6 +281,11 @@ insert into bookings (trip_id, item_id, vendor_id, state, amount, penalty, exter
 values
   ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000001',
    '0e000000-0000-4000-a000-000000000001', 'confirmed', 1280.00, 1280.00, 'LS-4471'),
+  -- Tonight's dinner. Missing until an end-to-end check noticed that one
+  -- confirmed stop had nothing reserved behind it, which quietly understated
+  -- the operator's booked value. verify.sql now refuses to let that recur.
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000002',
+   '0e000000-0000-4000-a000-000000000004', 'confirmed', 180.00, 0.00, 'DE-3300'),
   ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000011',
    '0e000000-0000-4000-a000-000000000002', 'confirmed', 780.00, 195.00, 'ABC-8820'),
   ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000010',

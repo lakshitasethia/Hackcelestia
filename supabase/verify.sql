@@ -83,6 +83,28 @@ with checks as (
             from trips where id = '7a000000-0000-4000-a000-000000000001')
 
   union all
+  -- A confirmed stop with nothing reserved behind it understates the operator's
+  -- booked value and the traveler's exposure, and neither screen says so.
+  select 'every confirmed stop has a booking behind it',
+         not exists (
+           select 1 from itinerary_items i
+            where i.status = 'confirmed'
+              and i.inventory_id is not null
+              and not exists (
+                select 1 from bookings b
+                 where b.item_id = i.id and b.state in ('held', 'confirmed')
+              )
+         )
+
+  union all
+  select 'no booking is left pointing at a stop that no longer exists',
+         not exists (select 1 from bookings where item_id is null)
+
+  union all
+  select 'the catalogue starts with every seat free',
+         not exists (select 1 from availability where slots_taken <> 0)
+
+  union all
   select 'the group has a coordinator, so /field has something to show',
          (select coordinator_name from trips
            where id = '7a000000-0000-4000-a000-000000000001') is not null

@@ -49,9 +49,20 @@ await client.connect();
 try {
   const result = await client.query(sql);
   const results = Array.isArray(result) ? result : [result];
+  let failed = 0;
   for (const r of results) {
     if (r.rows?.length) console.table(r.rows);
     else if (r.command) console.log(`${r.command} ${r.rowCount ?? ""}`.trim());
+
+    // verify.sql reports its findings as rows rather than errors, so without
+    // this the script exits 0 with FAIL printed on screen — which means it
+    // cannot gate anything that runs after it.
+    failed += (r.rows ?? []).filter((row) => row.result === "FAIL").length;
+  }
+
+  if (failed > 0) {
+    console.error(`\n${failed} check(s) FAILED.`);
+    process.exitCode = 1;
   }
 } catch (err) {
   // Postgres puts the useful part in position/detail, which the bare message drops.

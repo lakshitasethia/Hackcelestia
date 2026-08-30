@@ -93,6 +93,75 @@ const { data: items } = await supabase
   .from("itinerary_items").select("status").eq("trip_id", DEMO_TRIP_ID);
 const statuses = new Set((items ?? []).map((i: { status: string }) => i.status));
 console.log("\nitem statuses after run:", [...statuses].join(", "));
-console.log(statuses.has("cancelled") || statuses.has("replaced")
+const mutated = statuses.has("cancelled") || statuses.has("replaced");
+console.log(mutated
   ? "FAIL — the agent mutated the live itinerary"
   : "PASS — live itinerary untouched, proposals are drafts");
+if (mutated) process.exitCode = 1;
+
+/**
+ * The other half of the boundary.
+ *
+ * Everything above proves the agent proposes without touching anything. This
+ * proves a human accepting one of *its* plans — not a fixture written by the
+ * test — carries the bookings and the seats with it. test:apply covers the same
+ * write path with hand-built plans; only this reaches it through a real
+ * generation, which is where the shapes are unpredictable.
+ */
+console.log("\n--- accepting an agent-authored plan ---");
+
+const { applyProposal } = await import("../src/lib/db/mutations.js");
+const { getItems, getBookings, summarize } = await import("../src/lib/db/queries.js");
+
+const { data: drafts } = await supabase
+  .from("replan_proposals")
+  .select("id, cost_delta, plan, rationale")
+  .eq("state", "draft")
+  .order("cost_delta")
+  .limit(1);
+
+const chosen = (drafts ?? [])[0] as
+  | { id: string; cost_delta: number; plan: unknown[]; rationale: string }
+  | undefined;
+
+if (!chosen) {
+  console.log("SKIP — the agent recorded no draft to accept");
+} else {
+  console.log(`plan: ${chosen.rationale.split("\n")[0]} (EUR ${chosen.cost_delta}, ${chosen.plan.length} ops)`);
+  const { applied } = await applyProposal(chosen.id);
+
+  const after = await getItems(DEMO_TRIP_ID);
+  const bookings = await getBookings(DEMO_TRIP_ID);
+  const check = (label: string, ok: boolean, detail = "") => {
+    console.log(`${ok ? "PASS" : "FAIL"} — ${label}${detail ? `  (${detail})` : ""}`);
+    if (!ok) process.exitCode = 1;
+  };
+
+  check("every operation applied", applied === chosen.plan.length,
+    `${applied}/${chosen.plan.length}`);
+
+  const stoodDown = after.filter((i) => i.status === "cancelled" || i.status === "replaced");
+  check("stops that were dropped or replaced had their bookings cancelled",
+    stoodDown.every((i) => {
+      const b = bookings.find((x) => x.item_id === i.id);
+      return !b || b.state === "cancelled";
+    }),
+    `${stoodDown.length} stood down`);
+
+  const unbooked = after.filter(
+    (i) =>
+      i.status === "confirmed" &&
+      i.inventory_id &&
+      !bookings.some((b) => b.item_id === i.id && (b.state === "confirmed" || b.state === "held"))
+  );
+  check("every stop still on the trip has a live booking", unbooked.length === 0,
+    unbooked.map((i) => i.title).join(", ") || "none missing");
+
+  check("nothing is left flagged at risk", !after.some((i) => i.status === "at_risk"));
+
+  const { penaltyIfCancelled } = summarize(after, bookings);
+  check("pending penalties exclude what was already cancelled",
+    penaltyIfCancelled === 1280, `EUR ${penaltyIfCancelled}`);
+
+  console.log("\nThis suite leaves the trip re-planned. Run `npm run db:seed` to reset.");
+}
