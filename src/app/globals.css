@@ -130,6 +130,49 @@
 }
 
 @layer components {
+  /* ---------- Vela ---------- */
+  /* The concierge's idle blink and her working breath. Both are transforms on
+     their own group so they compose with the parent's hover transitions rather
+     than fighting them, and both are switched off by the reduced-motion rule in
+     the base layer — a blinking face is exactly the kind of thing somebody
+     turns that setting on for. */
+  .vela-blink {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: vela-blink 6.5s infinite;
+  }
+  .vela-eyes-shut {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: vela-blink 1.1s infinite;
+  }
+  .vela-breathe {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: vela-breathe 2.2s ease-in-out infinite;
+  }
+
+  @keyframes vela-blink {
+    0%, 92%, 100% { transform: scaleY(1); }
+    95%, 97% { transform: scaleY(0.12); }
+  }
+  @keyframes vela-breathe {
+    0%, 100% { transform: scale(1); opacity: 0.85; }
+    50% { transform: scale(1.08); opacity: 1; }
+  }
+
+  /* Three dots, staggered, for "she is working on it". */
+  .vela-dot {
+    animation: vela-dot 1.25s ease-in-out infinite;
+  }
+  .vela-dot:nth-child(2) { animation-delay: 0.16s; }
+  .vela-dot:nth-child(3) { animation-delay: 0.32s; }
+
+  @keyframes vela-dot {
+    0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-2px); }
+  }
+
   /* ---------- Typography ---------- */
   /* Son Daven sets nearly everything uppercase. */
   .eyebrow {

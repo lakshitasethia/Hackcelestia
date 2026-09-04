@@ -4,9 +4,11 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import AppNav from "@/components/layout/AppNav";
 import LiveRefresh from "@/components/realtime/LiveRefresh";
+import Concierge from "@/components/concierge/Concierge";
 import TripSummary from "@/components/trip/TripSummary";
 import DayTimeline from "@/components/trip/DayTimeline";
 import { getBookings, getItems, getTrip, groupByDay } from "@/lib/db/queries";
+import { getConciergeThread } from "@/lib/agent/thread";
 import { formatDate } from "@/lib/format";
 
 /** Always hit the database — an itinerary that re-plans mid-trip must never be
@@ -25,9 +27,10 @@ export default async function TripPage({
   const trip = await getTrip(params.id);
   if (!trip) notFound();
 
-  const [items, bookings] = await Promise.all([
+  const [items, bookings, thread] = await Promise.all([
     getItems(trip.id),
     getBookings(trip.id),
+    getConciergeThread(trip.id),
   ]);
 
   const days = groupByDay(items);
@@ -121,6 +124,11 @@ export default async function TripPage({
           </Link>
         </div>
       </div>
+
+      {/* The traveler's own agent. It reads this trip and writes drafts; the
+          Accept button on a draft is the only path from a conversation to a
+          booking, and it runs the same code an operator's re-plan does. */}
+      <Concierge tripId={trip.id} initialThread={thread} />
     </main>
   );
 }

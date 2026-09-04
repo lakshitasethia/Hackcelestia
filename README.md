@@ -51,6 +51,10 @@ in Postgres so the UI and the agent cannot disagree about it.
 | Impact assessment | `/ops/disruption/[id]` | Operator — blast radius, candidates, the agent, the accept flow |
 | Field run sheet | `/field/[id]` | Coordinator — today and tomorrow, report or escalate, on a phone |
 
+Two of those surfaces carry a chat agent: **Vela**, the traveler's concierge, on
+`/trip/[id]`, and a read-only **copilot** on `/ops`. `/plan` has a third, smaller
+one — describe the trip in a sentence and the form fills itself in.
+
 ### The disruption path, end to end
 
 1. A disruption is injected — a seeded scenario from the operator's demo
@@ -72,13 +76,39 @@ in Postgres so the UI and the agent cannot disagree about it.
    superseded rather than deleting them.
 6. The traveler's tab and the coordinator's phone update in place.
 
+### The concierge, and why it is the same thing
+
+A traveler types "add a wine tasting on day four" into the panel on their own
+itinerary. What happens next is deliberately the disruption path with the storm
+taken out:
+
+1. Vela reads the trip. The whole itinerary and the whole catalogue ride in her
+   opening brief, so the usual request needs no lookup at all.
+2. She calls `propose_change`, which emits the **same four operations** the
+   re-planner emits — `drop`, `move`, `replace`, `add` — and they go through the
+   **same validator** (`src/lib/agent/plan.ts`). Invented ids are rejected, a
+   locked stop cannot be dropped, and the cost delta is recomputed rather than
+   believed.
+3. The draft appears in the chat as a card: what changes, what it costs, and two
+   buttons.
+4. Accepting runs `applyProposal` — the identical deterministic code an operator
+   runs. The operator's board and the guide's phone update in place.
+
+She cannot touch a stop the operator is already re-planning. A traveler moving a
+dinner that a storm had threatened would have set it back to `confirmed` on the
+way through, quietly un-flagging a problem nobody had dealt with.
+
 ### The boundary that matters
 
-**The agent proposes; a human accepts.** `propose_replan` writes a row to
-`replan_proposals`. It cannot touch a booking. The only code that changes a live
-itinerary is `applyProposal`, which is ordinary deterministic TypeScript. So the
-worst thing a bad generation can do is put a bad suggestion in front of someone
-who declines it.
+**The agent proposes; a human accepts.** `propose_replan` and `propose_change`
+both write a row to `replan_proposals`. Neither can touch a booking. The only
+code that changes a live itinerary is `applyProposal`, which is ordinary
+deterministic TypeScript behind a button. So the worst thing a bad generation can
+do is put a bad suggestion in front of someone who declines it.
+
+That is one approval path, not one per agent, and it is the reason a chat box was
+safe to add at all. The copilot does not even have that: every tool behind it is
+a read, so it has no way to write anything anywhere.
 
 ---
 
@@ -86,16 +116,33 @@ who declines it.
 
 Worth saying plainly, because the alternative is being caught:
 
-- **One agent is an agent.** The re-planner is a real tool-using loop —
-  multi-step, depth decided at runtime, five tools, its trace persisted to
-  `agent_steps`. It runs on Groq (`openai/gpt-oss-120b` by default).
-- **Intake is a form, not a model.** `/plan` collects structured preferences
-  directly. The plan called for a prose-to-`prefs` extraction agent; it is not
-  built, and the form is not pretending to be one.
+- **Four agents, and they are not equally impressive.** The re-planner is the
+  real one: a tool-using loop, depth decided at runtime, five tools, its trace
+  persisted to `agent_steps`. The concierge and the copilot are the same loop
+  with different tools and a tighter iteration cap. Intake is a single
+  structured call and no loop at all — calling it an agent would be generous.
+- **Three of them cannot write anything.** The copilot's tools are all reads.
+  Intake returns a spec to a form and touches no table. The concierge writes
+  drafts only. One code path — `applyProposal` — changes a live itinerary, and a
+  person clicks it.
+- **The chat is fast until it is not.** A single request is 1–2 seconds. Groq's
+  free tier allows 8000 tokens a minute and an agent loop resends its history
+  every iteration, so a burst of questions inside one minute will hit that
+  window and wait it out — 15 to 35 seconds, once, before returning to normal.
+  The chat runs on `openai/gpt-oss-20b` and the re-planner on `120b` partly for
+  this reason: the limits are per model, so a demo typing at the concierge
+  cannot slow the re-plan it is about to show.
 - **Feasibility is a solver, not the model.** Availability, transit distance,
   cancellation penalties and cost deltas are all computed in code before the
   model sees anything. The model does preference-ordering and explains its
   reasoning. It is not doing the optimization, and the writeup does not claim it.
+  The same is true in chat: the figure on a proposal card is recomputed by
+  `validateOps`, never the number Vela said.
+- **Vendor comms was cut.** The build spec listed five agents and ranked them;
+  the one that drafts a message to a vendor and parses the reply back into
+  structured availability is the one that did not get built. `check_vendor`
+  writes the outbound approach to `messages`, so the trail exists — nothing
+  reads a reply.
 - **Payments are a state machine, not a payment processor.** `bookings.state`
   moves through held → confirmed → cancelled and the penalties are real numbers
   the re-planner prices against; no money moves.
@@ -168,6 +215,9 @@ Database**:
 | `SUPABASE_DB_PASSWORD` | Settings → Database |
 | `GROQ_API_KEY` | console.groq.com — free tier, no card |
 
+`GROQ_MODEL` and `GROQ_CHAT_MODEL` are optional overrides; see `.env.example`
+for why they are two settings and not one.
+
 ### 2. Database
 
 ```bash
@@ -210,6 +260,9 @@ npm run test:apply       # the write path — a plan that cannot fully apply mus
 npm run test:flow        # the whole product end to end on a trip built from scratch
 npm run test:realtime    # a browser-key subscriber receives what the server broadcasts
 npm run test:agent       # a full re-planner run, including its trace
+npm run test:concierge   # the traveler's concierge, through to an accepted change
+npm run test:copilot     # the operator's copilot, including that it refuses to write
+npm run test:intake      # prose to a trip spec, including inventing nothing
 ```
 
 `db:verify` is the one to run after any migration or re-seed. The plan's
@@ -223,9 +276,17 @@ it, breaks it, re-plans it, accepts, checks the guide's run sheet, and deletes
 itself — including giving back every seat it took. A layer can pass alone and
 still fail here.
 
-`test:agent` is excluded from `test:all` on purpose: it costs a real model call,
-takes anywhere from 55 to 240 seconds on Groq's free tier, and can be
-rate-limited. Run it deliberately.
+The last four are excluded from `test:all` on purpose: each costs real model
+calls, and the re-planner takes anywhere from 55 to 240 seconds on Groq's free
+tier. Run them deliberately.
+
+They are worth running deliberately, though. `test:concierge` is the one that
+caught the bug this feature was most likely to ship with: an added stop with no
+declared prerequisites is an orphan in the graph, so nothing upstream reaches it
+and every later blast radius is quietly smaller. The manual planner had always
+chained a new stop to whatever preceded it; the agent path had not, which means
+the re-planner had the same hole. `applyProposal` now chains through the same
+helper `addItem` uses, and `verify.sql` asserts no itinerary has two roots.
 
 > **Do not run `npm run build` while `npm run dev` is running.** They share the
 > `.next` directory, and the production build overwrites the dev server's
@@ -239,13 +300,13 @@ rate-limited. Run it deliberately.
 ```
 src/
   app/
-    plan/  trip/[id]/  trip/[id]/build/   traveler
+    plan/  trip/[id]/  trip/[id]/build/   traveler (+ the concierge panel)
     ops/   ops/disruption/[id]/           operator
     field/ field/[id]/                    coordinator
   lib/
     db/         queries, mutations, generated row types
     disruption/ the deterministic engine and the demo scenarios
-    agent/      the re-planning loop and its five tools
+    agent/      the loop, the shared plan validator, and the four agents
     realtime/   the broadcast contract and the server-side sender
     supabase/   admin (service role), server (RLS), browser clients
 supabase/

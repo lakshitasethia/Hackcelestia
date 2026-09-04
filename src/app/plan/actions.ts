@@ -3,7 +3,20 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createTrip } from "@/lib/db/mutations";
+import { extractTripSpec, type TripSpec } from "@/lib/agent/intake";
 import type { TripPrefs } from "@/lib/db/types";
+
+/**
+ * Read a description and hand back a spec for the form to display.
+ *
+ * Deliberately returns rather than writes. The trip is still created by the
+ * form below it, from values the traveler has seen.
+ */
+export async function readDescriptionAction(
+  description: string
+): Promise<TripSpec> {
+  return extractTripSpec(description);
+}
 
 export async function createTripAction(formData: FormData): Promise<void> {
   const title = String(formData.get("title") || "").trim();

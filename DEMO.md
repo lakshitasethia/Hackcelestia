@@ -13,16 +13,21 @@ npm run db:verify     # every row must say PASS
 npm run dev
 ```
 
-Then **pre-warm the agent once and reset**:
+Then **pre-warm both agents once and reset**:
 
 1. `/ops` → Demo controls → **Storm front**
 2. Open the disruption → **Run the re-planner** → let it finish
-3. `/ops` → Demo controls → **Reset trip**
+3. Open `/trip/<id>`, press **Ask Vela**, send one message
+4. `/ops` → Demo controls → **Reset trip** (this also wipes the chat)
 
 This matters for two reasons. The first run pays the cold start. And Groq's free
 tier meters tokens per minute across an agent loop that resends its history each
 iteration — a run that has just been exercised is a run whose rate-limit window
 you understand.
+
+The two run on different models on purpose, so warming one does not eat the
+other's minute. That is also why you can let a judge type at Vela without
+risking the re-plan you are about to show them.
 
 **Windows, arranged before you start talking:**
 
@@ -57,6 +62,39 @@ Window B, `/trip/<id>`. Scroll to Day 02.
 
 > "That's not decoration — the itinerary is a dependency graph, not a list. It's
 > the reason the next sixty seconds work at all."
+
+### *(optional, +30s)* — The traveler changes their own plan
+
+**Take this out if you are tight; keep it if there is any chance the judges will
+want to touch something.** It is the only part of the demo somebody else can
+drive, and it makes the accept boundary concrete before the storm makes it
+dramatic. Everything after it shifts thirty seconds later.
+
+Still in Window B. Press **Ask Vela**, and type:
+
+```
+Add a wine tasting on day 4
+```
+
+> "Same trip, same graph — this time nothing has gone wrong. She reads the
+> itinerary and the catalogue, and she writes a draft."
+
+The card appears: what changes, and what it costs.
+
+> "That's the whole product in one card. She hasn't booked anything. She
+> *can't* — the only tool she has that writes at all writes a draft, and this
+> button is the same code an operator runs when they accept a re-plan."
+
+Press **Do it**. Point at Window A.
+
+> "One traveler, one sentence, and the operator's board already knows."
+
+Then say the honest part out loud, because someone will ask:
+
+> "The model is not choosing this. The dates, the price and the dependency
+> wiring are computed before it sees anything, and the number on that card is
+> recomputed by the server — in testing the model was out by €670 on its own
+> arithmetic, which is why nothing takes its word for it."
 
 ### 0:45 — The operator's board *(20s)*
 
@@ -146,7 +184,8 @@ Point at Window B, then Window C. Both have already changed.
 
 | You stopped at | Use | Why |
 |---|---|---|
-| Anywhere before **Accept** | `/ops` → Demo controls → **Reset trip** | Clears the disruption, restores every at-risk stop, wipes the field reports. Instant, no re-seed, and you can do it while someone is asking a question. |
+| Anywhere before **Accept** | `/ops` → Demo controls → **Reset trip** | Clears the disruption, restores every at-risk stop, wipes the field reports, and deletes the concierge and copilot conversations along with any undecided drafts. Instant, no re-seed, and you can do it while someone is asking a question. |
+| You accepted a **concierge** suggestion | `npm run db:seed` (~1s) | Same reason as below: accepting is a real write. Reset trip deliberately keeps an accepted change, because deleting the record of a decision somebody made is not what "reset" should mean. |
 | You **accepted a plan** | `npm run db:seed` (~1s) | Accepting is a real, permanent write — the boat is `replaced`, three stops are `cancelled`, and a substitute now sits in the itinerary. **Reset trip cannot undo that**, and it is not supposed to: an operator cannot un-cancel a supplier by clicking a button. Re-seeding rebuilds the group from `supabase/seed.sql`. |
 
 Between rehearsals of the full path, re-seed. It is faster than explaining to a
@@ -162,6 +201,9 @@ judge why the boat is missing.
 | Agent proposes nothing | Reset, re-run. The loop pins its first and last turns to `propose_replan` precisely because prose records nothing, but a bad generation is still possible. |
 | Terminal shows a 400 `tool_use_failed` mentioning `tool_choice` | Already handled — Groq rejects the request when the model reaches for a tool the pin forbids, so the loop lifts the pin and retries. You will see it in the log and nothing on screen. |
 | Accepting a plan errors with "cannot be applied" | Working as intended — the plan was incomplete and the itinerary was left untouched rather than half-changed. Accept the other proposal, or re-run the agent. |
+| Vela takes 20-30 seconds to answer | Groq's free tier meters 8000 tokens a minute and the loop resends its history, so a burst of questions inside one minute waits out the window once. Say so — *"free tier, metered by the minute"* — and carry on; the panel says the same thing on screen after eleven seconds. A single question from cold is one to two seconds. |
+| Vela says she cannot change something | Read the reason out; it is almost always right and it is almost always the point. A locked stop is prepaid, an at-risk stop is one the operator is already re-planning, and anything outside the catalogue does not exist. The validator refuses these before the model gets a say. |
+| The copilot answers something you can see is wrong | It reads the board and nothing else. Point at the board — the answer is checkable in a way a chatbot's usually is not, which is the argument for putting it next to the data rather than in front of it. |
 | The agent takes much longer than 60s | Groq's free tier varies a lot: runs have taken 55s, 111s and 242s on identical input. Nothing is wrong. This is the strongest argument for cutting the wait in a recording. |
 | Realtime does not fire | Reload B and C manually and keep going. `revalidatePath` has already made them correct; only the liveness is lost. The `Live`/`Offline` pill tells you which case you are in before you point at it. |
 | Database is unreachable | `npm run db:setup` and check the hostname resolves — a paused or deleted Supabase project fails with `ENOTFOUND`. See the README. |
@@ -185,7 +227,17 @@ The schema does — vendors, inventory and availability are generic, and the tri
 carries its own dates and preferences. The seed is one region because depth on
 the disruption path scores better than breadth nobody demos.
 
+**"Is the chatbot just a wrapper around your form?"**
+No, and the difference is the validator. It emits the same four operations the
+re-planner emits, into the same table, checked by the same code — invented ids
+rejected, locked stops refused, cost recomputed — and applied by the same
+function behind a human click. The chat is a second way into one approval path,
+not a second approval path.
+
 **"What's missing?"**
-Sign-in. RLS policies are written and correct, but with no `auth.uid()` the
-server reads run through the service-role client. Every one of those is marked
-in `src/lib/db/queries.ts`.
+Sign-in, and one of the five planned agents. RLS policies are written and
+correct, but with no `auth.uid()` the server reads run through the service-role
+client; every one of those is marked in `src/lib/db/queries.ts`. The agent that
+was cut is vendor comms — drafting a message to a supplier and parsing the reply
+back into structured availability. The outbound half exists (`check_vendor`
+writes to `messages`); nothing reads a reply.

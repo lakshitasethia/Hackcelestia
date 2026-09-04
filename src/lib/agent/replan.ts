@@ -1,38 +1,25 @@
 import "server-only";
-import Groq from "groq-sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assessDisruption } from "@/lib/disruption/engine";
-import { buildTools, type AgentTool, type StepRecorder } from "./tools";
+import { buildTools } from "./tools";
+import { MODEL, runToolLoop, type ChatMessage } from "./runtime";
+import type { StepRecorder } from "./tool";
 import { TRIP_TZ, formatTime } from "@/lib/format";
 
 /**
  * The re-planning agent.
  *
- * This is the one place in the product where a model decides anything, and the
- * shape is deliberate: it reads a deterministic assessment, calls tools that
- * already existed and were tested without it, and writes drafts. It cannot
- * change a live booking — `propose_replan` inserts into `replan_proposals` and
- * a human accepts. So the worst failure mode is a bad suggestion, not a
- * traveler stranded in Positano.
+ * This is the flagship: a genuine tool-using loop whose depth is decided at
+ * runtime, over a disruption a deterministic engine has already assessed. It
+ * reads that assessment, calls tools that existed and were tested before it
+ * did, and writes drafts. It cannot change a live booking — `propose_replan`
+ * inserts into `replan_proposals` and a human accepts. So the worst failure
+ * mode is a bad suggestion, not a traveler stranded in Positano.
  *
- * Runs on Groq. The loop is hand-written rather than an SDK helper, which is
- * what a plain `/chat/completions` API gives you — and it means the iteration
- * cap, the trace, and the recovery behaviour are all ours to control.
+ * The loop itself lives in `runtime.ts`, shared with the concierge and the
+ * copilot. What is here is what is specific to re-planning: the prompt, the
+ * brief built from the assessment, and the two guardrails below.
  */
-
-/**
- * Overridable so a weaker or stronger model can be tried without a deploy.
- *
- * Trimmed and emptiness-checked rather than `??`, which only falls back on
- * undefined — a declared-but-empty `GROQ_MODEL=` in an env file otherwise wins
- * and sends `model: ""`, which fails as an unhelpful 404 model_not_found.
- *
- * The default is chosen from what `GET /v1/models` actually returns, not from
- * the docs: Groq's tool-use page still lists llama-3.3-70b-versatile, which no
- * longer exists on the platform. `groq/compound*` is excluded deliberately —
- * those support only Groq's built-in tools, not custom function calling.
- */
-const MODEL = process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-120b";
 
 /** Guards against a model that keeps calling tools and never concludes. Each
  *  iteration is one inference call plus its tool results. */
@@ -122,131 +109,37 @@ export async function runReplanAgent(disruptionId: string): Promise<ReplanResult
   };
 
   try {
-    const groq = new Groq({ apiKey: requireKey() });
     const tools = buildTools(assessment, record);
-    const byName = new Map(tools.map((tool) => [tool.name, tool]));
 
-    const messages: Groq.Chat.ChatCompletionMessageParam[] = [
+    const messages: ChatMessage[] = [
       { role: "system", content: SYSTEM },
       { role: "user", content: briefFor(assessment) },
     ];
 
-    let summary = "";
+    // Two failure modes seen in testing, both handled here. Left to itself the
+    // model either answers in prose (recording nothing) or prices every
+    // candidate until the iteration budget is gone without ever committing. So
+    // the first turn and the last two are pinned to the only tool that actually
+    // saves anything, and finishing with nothing recorded earns one nudge.
     let nudged = false;
-    let inputTokens = 0;
-    let outputTokens = 0;
 
-    for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-      pruneHistory(messages);
-
-      const completion = await withRateLimitRetry((relaxed) =>
-        groq.chat.completions.create({
-          model: MODEL,
-          // A proposal with five operations serialises to well over 2k, and a
-          // truncated tool call comes back as a 400 tool_use_failed with the
-          // half-written JSON attached — the output cap has to clear the
-          // largest single tool call, not the average one.
-          max_tokens: 4096,
-          temperature: 0.4,
-          messages,
-          tools: tools.map(toGroqTool),
-          // Two failure modes seen in testing, both fixed here. Left to
-          // itself the model either answers in prose (recording nothing) or
-          // prices every candidate until the iteration budget is gone without
-          // ever committing. So the first turn and the last two are pinned to
-          // the only tool that actually saves anything.
-          //
-          // `relaxed` lifts the pin. Groq validates tool_choice server-side and
-          // rejects the whole request with a 400 when the model reaches for a
-          // different tool — so a model that insists on pricing first does not
-          // get a nudge, it gets a dead run. Retrying the identical request
-          // fails identically; letting it have its way once is what actually
-          // recovers.
-          tool_choice:
-            !relaxed && (iteration === 0 || iteration >= MAX_ITERATIONS - 2)
-              ? { type: "function", function: { name: "propose_replan" } }
-              : "auto",
-        })
-      );
-
-      inputTokens += completion.usage?.prompt_tokens ?? 0;
-      outputTokens += completion.usage?.completion_tokens ?? 0;
-
-      const choice = completion.choices[0];
-      const message = choice?.message;
-      if (!message) break;
-
-      messages.push({
-        role: "assistant",
-        content: message.content ?? "",
-        tool_calls: message.tool_calls,
-      } as Groq.Chat.ChatCompletionMessageParam);
-
-      const calls = message.tool_calls ?? [];
-      if (calls.length === 0) {
-        // gpt-oss returns its prose in `reasoning` and leaves `content` null,
-        // so reading only content yields an empty summary on every clean finish.
-        const text =
-          message.content ??
-          (message as { reasoning?: string }).reasoning ??
-          "";
-        summary = text.trim();
-
-        // Finishing without a single proposal is a failed run, not a quiet
-        // success — nudge once before accepting it.
-        if (!nudged && (await countProposals(supabase, disruptionId)) === 0) {
-          nudged = true;
-          messages.push({
-            role: "user",
-            content:
-              "You have not recorded anything. Call propose_replan now for each option you described. Nothing is saved until you do.",
-          });
-          continue;
-        }
-        break;
-      }
-
-      // Parallel calls come back in one message and every one of them needs a
-      // matching tool result, or the next request is rejected as malformed.
-      const results = await Promise.all(
-        calls.map(async (call) => {
-          const tool = byName.get(call.function.name);
-          if (!tool) {
-            return {
-              role: "tool" as const,
-              tool_call_id: call.id,
-              content: JSON.stringify({
-                error: `No such tool: ${call.function.name}`,
-              }),
-            };
-          }
-
-          let args: unknown = {};
-          try {
-            // Arguments arrive as a JSON *string*; never pattern-match on it.
-            args = call.function.arguments
-              ? JSON.parse(call.function.arguments)
-              : {};
-          } catch {
-            return {
-              role: "tool" as const,
-              tool_call_id: call.id,
-              content: JSON.stringify({
-                error: "Arguments were not valid JSON. Send a JSON object.",
-              }),
-            };
-          }
-
-          return {
-            role: "tool" as const,
-            tool_call_id: call.id,
-            content: await tool.run(args),
-          };
-        })
-      );
-
-      messages.push(...results);
-    }
+    const { text: summary, inputTokens, outputTokens } = await runToolLoop({
+      model: MODEL,
+      messages,
+      tools,
+      maxIterations: MAX_ITERATIONS,
+      keepRecent: KEEP_RECENT_EXCHANGES,
+      pin: (iteration) =>
+        iteration === 0 || iteration >= MAX_ITERATIONS - 2
+          ? "propose_replan"
+          : null,
+      onIdle: async () => {
+        if (nudged) return null;
+        if ((await countProposals(supabase, disruptionId)) > 0) return null;
+        nudged = true;
+        return "You have not recorded anything. Call propose_replan now for each option you described. Nothing is saved until you do.";
+      },
+    });
 
     const { count } = await supabase
       .from("replan_proposals")
@@ -293,97 +186,6 @@ export async function runReplanAgent(disruptionId: string): Promise<ReplanResult
   }
 }
 
-/**
- * Drop the middle of the transcript, keeping the system prompt, the brief, and
- * the most recent exchanges.
- *
- * An assistant message carrying tool_calls must keep its matching tool results
- * or the next request is rejected, so the cut point is moved back to a clean
- * boundary rather than taken literally.
- */
-function pruneHistory(messages: Groq.Chat.ChatCompletionMessageParam[]): void {
-  const PRESERVED = 2; // system + opening brief
-  const budget = PRESERVED + KEEP_RECENT_EXCHANGES;
-  if (messages.length <= budget) return;
-
-  let cut = messages.length - KEEP_RECENT_EXCHANGES;
-  // Never begin the kept window on an orphaned tool result.
-  while (cut < messages.length && messages[cut].role === "tool") cut++;
-
-  messages.splice(PRESERVED, cut - PRESERVED);
-}
-
-/**
- * Wait out a token-per-minute breach instead of failing the run.
- *
- * Groq's free tier has two independent windows and they reset on wildly
- * different clocks: tokens refill in seconds, requests in ~16 minutes. A
- * `retry-after` header reflects the slower one, so honouring it blindly turned
- * a 4-second token pause into a 9-minute sleep — twice — and made a 30-second
- * run take 19 minutes. Prefer the token-reset header, and cap the wait
- * regardless, because a run that gives up is better than one nobody watches.
- */
-const MAX_BACKOFF_MS = 30_000;
-
-/** Groq formats durations as "3.682s", "1m30s", "550ms". */
-function parseDuration(value: string | undefined): number | null {
-  if (!value) return null;
-  const match = value.match(
-    /^(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s)?(?:(\d+(?:\.\d+)?)ms)?$/
-  );
-  if (!match || !match.slice(1).some(Boolean)) {
-    const seconds = Number(value);
-    return Number.isFinite(seconds) ? seconds * 1000 : null;
-  }
-  const [, m, sec, ms] = match;
-  return (
-    (m ? Number(m) * 60_000 : 0) +
-    (sec ? Number(sec) * 1000 : 0) +
-    (ms ? Number(ms) : 0)
-  );
-}
-
-async function withRateLimitRetry<T>(
-  call: (relaxed: boolean) => Promise<T>,
-  attempts = 4
-): Promise<T> {
-  // Once the pinned tool has been refused, stay relaxed for the rest of this
-  // call. Flipping back would just reproduce the rejection.
-  let relaxed = false;
-
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await call(relaxed);
-    } catch (error) {
-      const status = (error as { status?: number })?.status;
-      const body = String((error as { message?: string })?.message ?? "");
-      const isRateLimit = status === 429 || status === 413;
-      // A malformed tool call is a one-off generation glitch; retrying costs a
-      // little budget and usually succeeds.
-      const isBadGeneration = status === 400 && body.includes("tool_use_failed");
-      if ((!isRateLimit && !isBadGeneration) || attempt >= attempts - 1) throw error;
-
-      if (isBadGeneration) {
-        // Distinguish "the model emitted broken JSON" — worth retrying as-is —
-        // from "the model wanted a tool we forbade", where the request itself
-        // is what needs to change.
-        if (body.includes("tool_choice")) relaxed = true;
-        continue;
-      }
-
-      const headers = (error as { headers?: Record<string, string> })?.headers ?? {};
-      const tokenReset = parseDuration(headers["x-ratelimit-reset-tokens"]);
-      const wait = Math.min(
-        tokenReset ?? 5_000 * (attempt + 1),
-        MAX_BACKOFF_MS
-      );
-      // A little headroom past the stated reset, since the window is a moving
-      // average rather than a hard tick.
-      await new Promise((resolve) => setTimeout(resolve, wait + 1_000));
-    }
-  }
-}
-
 async function countProposals(
   supabase: ReturnType<typeof createAdminClient>,
   disruptionId: string
@@ -393,27 +195,6 @@ async function countProposals(
     .select("id", { count: "exact", head: true })
     .eq("disruption_id", disruptionId);
   return count ?? 0;
-}
-
-function requireKey(): string {
-  const key = process.env.GROQ_API_KEY;
-  if (!key) {
-    throw new Error(
-      "GROQ_API_KEY is not set. Get a free key at console.groq.com and add it to .env.local."
-    );
-  }
-  return key;
-}
-
-function toGroqTool(tool: AgentTool): Groq.Chat.ChatCompletionTool {
-  return {
-    type: "function",
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.parameters,
-    },
-  };
 }
 
 /**

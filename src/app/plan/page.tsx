@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ArrowRight } from "lucide-react";
 import AppNav from "@/components/layout/AppNav";
 import { getInterestTags, getOperators } from "@/lib/db/queries";
+import IntakeBox from "@/components/concierge/IntakeBox";
 import { createTripAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +42,11 @@ export default async function PlanPage() {
           inventory on the next screen, and change it whenever you like.
         </p>
 
-        <form action={createTripAction} className="mt-14 max-w-3xl">
+        <div className="mt-14 max-w-3xl">
+          <IntakeBox />
+        </div>
+
+        <form action={createTripAction} className="max-w-3xl">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="sm:col-span-2">
               <label className={label} htmlFor="title">

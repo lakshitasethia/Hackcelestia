@@ -15,7 +15,7 @@ export type Json =
 export interface AgentRunsRow {
   id: string;
   trip_id: string | null;
-  kind: "intake" | "compose" | "replan" | "comms" | "copilot";
+  kind: "intake" | "compose" | "replan" | "comms" | "copilot" | "concierge";
   status: "running" | "succeeded" | "failed";
   input: Json;
   output: Json | null;
@@ -167,7 +167,7 @@ export type ProfilesInsert = Omit<ProfilesRow, "role" | "full_name" | "email" | 
 
 export interface ReplanProposalsRow {
   id: string;
-  disruption_id: string;
+  disruption_id: string | null;
   run_id: string | null;
   plan: Json;
   cost_delta: number;
@@ -176,9 +176,11 @@ export interface ReplanProposalsRow {
   created_at: string;
   decided_at: string | null;
   decided_by: string | null;
+  trip_id: string | null;
+  source: "replan" | "concierge";
 }
 
-export type ReplanProposalsInsert = Omit<ReplanProposalsRow, "id" | "run_id" | "plan" | "cost_delta" | "rationale" | "state" | "created_at" | "decided_at" | "decided_by"> & Partial<ReplanProposalsRow>;
+export type ReplanProposalsInsert = Omit<ReplanProposalsRow, "id" | "disruption_id" | "run_id" | "plan" | "cost_delta" | "rationale" | "state" | "created_at" | "decided_at" | "decided_by" | "trip_id" | "source"> & Partial<ReplanProposalsRow>;
 
 export interface TripsRow {
   id: string;

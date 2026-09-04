@@ -123,6 +123,38 @@ with checks as (
              and starts_at <  ((current_date + 2) at time zone 'Europe/Rome')) = 1
 
   union all
+  -- A proposal with neither owner is unreachable from every surface and
+  -- impossible to apply, so the constraint that forbids it has to be present.
+  select 'every proposal belongs to a disruption or a trip',
+         (select count(*) from pg_constraint
+           where conname = 'proposals_have_an_owner') = 1
+
+  union all
+  select 'a concierge proposal is scoped to its trip',
+         not exists (select 1 from replan_proposals
+                      where source = 'concierge' and trip_id is null)
+
+  union all
+  -- Both chat agents write their step trace like the re-planner does, which
+  -- only works if the kinds are allowed by the check constraint.
+  select 'the agent kinds include the chat agents',
+         (select pg_get_constraintdef(oid) from pg_constraint
+           where conname = 'agent_runs_kind_check') like '%concierge%'
+
+  union all
+  -- The bug this catches: an added stop with no prerequisites is an orphan the
+  -- blast radius can never reach, so every later impact assessment silently
+  -- gets smaller. One root per trip is correct; two is a severed graph.
+  select 'no itinerary has more than one root',
+         not exists (
+           select 1 from itinerary_items
+            where cardinality(depends_on) = 0
+              and status not in ('cancelled', 'replaced')
+            group by trip_id
+           having count(*) > 1
+         )
+
+  union all
   select 'a coordinator can only be pointed at a real profile',
          (select count(*) from information_schema.table_constraints tc
             join information_schema.key_column_usage k

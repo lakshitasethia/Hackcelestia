@@ -6,6 +6,7 @@ import LiveRefresh from "@/components/realtime/LiveRefresh";
 import ScheduleBoard from "@/components/ops/ScheduleBoard";
 import VendorTable from "@/components/ops/VendorTable";
 import DemoControls from "@/components/ops/DemoControls";
+import Copilot from "@/components/concierge/Copilot";
 import {
   getAllOpenDisruptions,
   getOperatorTrips,
@@ -14,6 +15,7 @@ import {
   getVendors,
   operatorTotals,
 } from "@/lib/db/queries";
+import { getCopilotThread } from "@/lib/agent/copilot";
 import { formatDate, formatMoney } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -21,13 +23,15 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Operations" };
 
 export default async function OpsPage() {
-  const [trips, vendors, schedule, disruptions, operators] = await Promise.all([
-    getOperatorTrips(),
-    getVendors(),
-    getSchedule(3),
-    getAllOpenDisruptions(),
-    getOperators(),
-  ]);
+  const [trips, vendors, schedule, disruptions, operators, copilotThread] =
+    await Promise.all([
+      getOperatorTrips(),
+      getVendors(),
+      getSchedule(3),
+      getAllOpenDisruptions(),
+      getOperators(),
+      getCopilotThread(),
+    ]);
 
   const { liveTrips, travellers, booked, atRisk } = operatorTotals(
     trips,
@@ -173,6 +177,9 @@ export default async function OpsPage() {
 
         {trips[0] && <DemoControls tripId={trips[0].id} />}
       </div>
+
+      {/* Read-only by construction: every tool behind this panel is a query. */}
+      <Copilot initialThread={copilotThread} />
     </main>
   );
 }

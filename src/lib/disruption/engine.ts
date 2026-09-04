@@ -303,5 +303,24 @@ export async function clearDisruptions(tripId: string): Promise<number> {
 
   if (fieldError) throw new Error(`clearDisruptions field: ${fieldError.message}`);
 
+  // The concierge conversation goes with them, for the same reason. A reset
+  // that left yesterday's chat on screen would replay it as history on the next
+  // question, and the second rehearsal would start mid-sentence.
+  //
+  // Undecided drafts go too. An accepted one does not: it is a real change to
+  // the itinerary, and deleting the record of a decision somebody made is not
+  // what "reset the demo" should mean.
+  await supabase
+    .from("messages")
+    .delete()
+    .eq("thread_key", `concierge:${tripId}`);
+
+  await supabase
+    .from("replan_proposals")
+    .delete()
+    .eq("trip_id", tripId)
+    .eq("source", "concierge")
+    .in("state", ["draft", "rejected"]);
+
   return (cleared ?? []).length;
 }

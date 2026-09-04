@@ -89,3 +89,35 @@ export function relativeDayLabel(iso: string, tz = TRIP_TZ): string {
   if (when === key(startOfLocalDay(1, tz))) return "Tomorrow";
   return formatDate(iso, tz);
 }
+
+/**
+ * Build an instant from a wall-clock time in a named zone.
+ *
+ * `new Date("2026-08-24T09:00")` is parsed in the *server's* zone, which is UTC
+ * on Vercel — the same class of bug that shifted the seeded itinerary by two
+ * hours. This finds the offset for that date and subtracts it.
+ */
+export function zonedTime(
+  startsOn: string,
+  day: number,
+  localTime: string,
+  timeZone: string
+): Date {
+  const base = new Date(`${startsOn}T00:00:00Z`);
+  base.setUTCDate(base.getUTCDate() + (day - 1));
+
+  const [hours, minutes] = localTime.split(":").map(Number);
+  const naive = new Date(base);
+  naive.setUTCHours(hours, minutes, 0, 0);
+
+  // How far the target zone sits from UTC on that date (handles DST).
+  const asUtc = new Date(
+    naive.toLocaleString("en-US", { timeZone: "UTC" })
+  ).getTime();
+  const asZone = new Date(
+    naive.toLocaleString("en-US", { timeZone })
+  ).getTime();
+
+  return new Date(naive.getTime() - (asZone - asUtc));
+}
+

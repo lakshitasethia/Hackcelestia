@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { TRIP_TZ } from "@/lib/format";
+import { TRIP_TZ, zonedTime } from "@/lib/format";
 import type { FieldState, ItineraryItem, ReplanOp, TripPrefs } from "./types";
 
 /**
@@ -92,39 +92,19 @@ export async function addItem(input: {
   );
   const endsAt = new Date(startsAt.getTime() + inv.duration_min * 60_000);
 
-  // Chain to the latest existing stop that day, so the graph stays connected.
-  const { data: existing } = await supabase
-    .from("itinerary_items")
-    .select("id, starts_at, seq")
-    .eq("trip_id", input.tripId)
-    .eq("day", input.day)
-    .order("starts_at");
-
-  const priorSameDay = ((existing ?? []) as { id: string; starts_at: string }[])
-    .filter((i) => new Date(i.starts_at) <= startsAt)
-    .pop();
-
-  // Nothing earlier today — hang it off the last stop of a previous day, so a
-  // day-one disruption still reaches day two.
-  let dependsOn: string[] = priorSameDay ? [priorSameDay.id] : [];
-  if (!priorSameDay) {
-    const { data: earlier } = await supabase
-      .from("itinerary_items")
-      .select("id")
-      .eq("trip_id", input.tripId)
-      .lt("day", input.day)
-      .order("starts_at", { ascending: false })
-      .limit(1);
-    const previous = (earlier ?? []) as { id: string }[];
-    if (previous.length) dependsOn = [previous[0].id];
-  }
+  const { dependsOn, seq } = await chainInto(
+    supabase,
+    input.tripId,
+    input.day,
+    startsAt.toISOString()
+  );
 
   const { data, error } = await supabase
     .from("itinerary_items")
     .insert({
       trip_id: input.tripId,
       day: input.day,
-      seq: (existing ?? []).length + 1,
+      seq,
       inventory_id: input.inventoryId,
       vendor_id: inv.vendors?.id ?? null,
       title: inv.title,
@@ -277,43 +257,63 @@ export async function confirmTrip(tripId: string): Promise<{
   return { confirmed, held };
 }
 
-/**
- * Build an instant from a wall-clock time in a named zone.
- *
- * `new Date("2026-08-24T09:00")` is parsed in the *server's* zone, which is UTC
- * on Vercel — the same class of bug that shifted the seeded itinerary by two
- * hours. This finds the offset for that date and subtracts it.
- */
-function zonedTime(
-  startsOn: string,
-  day: number,
-  localTime: string,
-  timeZone: string
-): Date {
-  const base = new Date(`${startsOn}T00:00:00Z`);
-  base.setUTCDate(base.getUTCDate() + (day - 1));
-
-  const [hours, minutes] = localTime.split(":").map(Number);
-  const naive = new Date(base);
-  naive.setUTCHours(hours, minutes, 0, 0);
-
-  // How far the target zone sits from UTC on that date (handles DST).
-  const asUtc = new Date(
-    naive.toLocaleString("en-US", { timeZone: "UTC" })
-  ).getTime();
-  const asZone = new Date(
-    naive.toLocaleString("en-US", { timeZone })
-  ).getTime();
-
-  return new Date(naive.getTime() - (asZone - asUtc));
-}
-
 type Client = ReturnType<typeof createAdminClient>;
 
 /** The calendar day a stop falls on where the trip is, which is the unit
  *  availability is published in. "YYYY-MM-DD", matching the SQL side. */
 function localDay(iso: string): string {
   return new Date(iso).toLocaleDateString("en-CA", { timeZone: TRIP_TZ });
+}
+
+/**
+ * Where a new stop hangs in the graph, and where it sits in the day.
+ *
+ * A user adding "lunch on Capri" should not have to declare that it needs the
+ * boat that gets them there — but something has to, or the DAG is a flat list
+ * and impact analysis has nothing to traverse. So a new stop is chained to
+ * whatever precedes it, and the user can rewire it afterwards.
+ *
+ * This is shared by the manual planner and by an accepted `add` operation, and
+ * that sharing is the point. An added stop that declared no dependencies was an
+ * orphan: nothing upstream reached it, so every later blast radius quietly got
+ * smaller and the `trip root reaches every item` invariant in verify.sql failed.
+ * The manual path had always chained; the agent path had not.
+ */
+async function chainInto(
+  supabase: Client,
+  tripId: string,
+  day: number,
+  startsAtIso: string
+): Promise<{ dependsOn: string[]; seq: number }> {
+  const startsAt = new Date(startsAtIso);
+
+  const { data: existing } = await supabase
+    .from("itinerary_items")
+    .select("id, starts_at")
+    .eq("trip_id", tripId)
+    .eq("day", day)
+    .order("starts_at");
+
+  const sameDay = (existing ?? []) as { id: string; starts_at: string }[];
+  const priorSameDay = sameDay
+    .filter((i) => new Date(i.starts_at) <= startsAt)
+    .pop();
+
+  const seq = sameDay.length + 1;
+  if (priorSameDay) return { dependsOn: [priorSameDay.id], seq };
+
+  // Nothing earlier today — hang it off the last stop of a previous day, so a
+  // day-one disruption still reaches day two.
+  const { data: earlier } = await supabase
+    .from("itinerary_items")
+    .select("id")
+    .eq("trip_id", tripId)
+    .lt("day", day)
+    .order("starts_at", { ascending: false })
+    .limit(1);
+
+  const previous = (earlier ?? []) as { id: string }[];
+  return { dependsOn: previous.length ? [previous[0].id] : [], seq };
 }
 
 /**
@@ -438,12 +438,18 @@ export async function applyProposal(proposalId: string): Promise<{
     id: string;
     plan: ReplanOp[];
     state: string;
+    trip_id: string | null;
     disruptions: { id: string; trip_id: string } | null;
   };
-  if (!row.disruptions) throw new Error("applyProposal: orphaned proposal");
-  if (row.state === "accepted") return { applied: 0, tripId: row.disruptions.trip_id };
 
-  const tripId = row.disruptions.trip_id;
+  // A proposal is owned by a disruption (the re-planner) or by a trip
+  // directly (the concierge). Both are applied identically — the difference is
+  // only what else has to be tidied up afterwards.
+  const tripId = row.trip_id ?? row.disruptions?.trip_id ?? null;
+  if (!tripId) throw new Error("applyProposal: orphaned proposal");
+  if (row.state === "accepted") return { applied: 0, tripId };
+
+  const disruption = row.disruptions;
 
   /**
    * Check the whole plan before writing any of it.
@@ -457,6 +463,31 @@ export async function applyProposal(proposalId: string): Promise<{
    */
   const problems: string[] = [];
   for (const [idx, op] of row.plan.entries()) {
+    // A draft is checked when it is written and again here, because the
+    // itinerary can move in between — most easily in the concierge, where a
+    // suggestion can sit in a chat thread while something else changes the
+    // stop it names. Applying an operation against a stop that is already gone
+    // would cancel a second booking or fail halfway.
+    if (op.op !== "add") {
+      const { data: target } = await supabase
+        .from("itinerary_items")
+        .select("title, status")
+        .eq("id", op.item_id)
+        .maybeSingle();
+
+      const stop = target as { title: string; status: string } | null;
+      if (!stop) {
+        problems.push(`operation ${idx} names a stop that is no longer on the itinerary`);
+        continue;
+      }
+      if (stop.status === "cancelled" || stop.status === "replaced") {
+        problems.push(
+          `operation ${idx} changes "${stop.title}", which is already ${stop.status}`
+        );
+        continue;
+      }
+    }
+
     if (op.op === "drop") continue;
 
     if (!op.starts_at || !op.ends_at) {
@@ -672,25 +703,32 @@ export async function applyProposal(proposalId: string): Promise<{
         vendors: { id: string; channel: "auto" | "manual" } | null;
       };
 
+      // A stop that declares no prerequisites is an orphan the blast radius can
+      // never reach, which silently shrinks every future impact assessment. The
+      // model is not asked to get this right — the itinerary already knows what
+      // comes before a 15:00 stop on day three.
+      const chain = await chainInto(supabase, tripId, op.day, op.starts_at);
+      const dependsOn = op.depends_on?.length ? op.depends_on : chain.dependsOn;
+
       const { data: added, error: addError } = await supabase
         .from("itinerary_items")
         .insert({
-        trip_id: tripId,
-        day: op.day,
-        seq: 99,
-        inventory_id: op.inventory_id,
-        vendor_id: addition.vendors?.id ?? null,
-        title: addition.title,
-        type: addition.type,
-        starts_at: op.starts_at,
-        ends_at: op.ends_at,
-        lat: addition.lat,
-        lng: addition.lng,
-        cost: addition.base_cost,
-        status: "confirmed",
-        depends_on: op.depends_on ?? [],
-        notes: op.reason,
-      })
+          trip_id: tripId,
+          day: op.day,
+          seq: chain.seq,
+          inventory_id: op.inventory_id,
+          vendor_id: addition.vendors?.id ?? null,
+          title: addition.title,
+          type: addition.type,
+          starts_at: op.starts_at,
+          ends_at: op.ends_at,
+          lat: addition.lat,
+          lng: addition.lng,
+          cost: addition.base_cost,
+          status: "confirmed",
+          depends_on: dependsOn,
+          notes: op.reason,
+        })
         .select("id")
         .single();
 
@@ -716,31 +754,38 @@ export async function applyProposal(proposalId: string): Promise<{
     }
   }
 
-  // Anything still flagged survived the disruption untouched, so clear it.
   await supabase
-    .from("itinerary_items")
-    .update({ status: "confirmed" })
-    .eq("trip_id", tripId)
-    .eq("status", "at_risk");
+    .from("replan_proposals")
+    .update({ state: "accepted", decided_at: new Date().toISOString() })
+    .eq("id", proposalId);
 
-  await Promise.all([
-    supabase
-      .from("replan_proposals")
-      .update({ state: "accepted", decided_at: new Date().toISOString() })
-      .eq("id", proposalId),
-    // Competing options are superseded, not deleted — the operator should be
-    // able to see what else was on the table when this call was made.
-    supabase
-      .from("replan_proposals")
-      .update({ state: "superseded" })
-      .eq("disruption_id", row.disruptions.id)
-      .neq("id", proposalId)
-      .eq("state", "draft"),
-    supabase
-      .from("disruptions")
-      .update({ state: "resolved", resolved_at: new Date().toISOString() })
-      .eq("id", row.disruptions.id),
-  ]);
+  // Everything below closes out a disruption, and a concierge change has none.
+  // Scoping it matters rather than being tidy: clearing `at_risk` across the
+  // whole trip after a traveler added a wine tasting would silently un-flag an
+  // unrelated storm that nobody had dealt with yet.
+  if (disruption) {
+    // Anything still flagged survived the disruption untouched, so clear it.
+    await supabase
+      .from("itinerary_items")
+      .update({ status: "confirmed" })
+      .eq("trip_id", tripId)
+      .eq("status", "at_risk");
+
+    await Promise.all([
+      // Competing options are superseded, not deleted — the operator should be
+      // able to see what else was on the table when this call was made.
+      supabase
+        .from("replan_proposals")
+        .update({ state: "superseded" })
+        .eq("disruption_id", disruption.id)
+        .neq("id", proposalId)
+        .eq("state", "draft"),
+      supabase
+        .from("disruptions")
+        .update({ state: "resolved", resolved_at: new Date().toISOString() })
+        .eq("id", disruption.id),
+    ]);
+  }
 
   return { applied, tripId };
 }
