@@ -1,10 +1,7 @@
 import type { MetadataRoute } from "next";
+import { siteUrl as resolveSiteUrl } from "@/lib/site-url";
 
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : "http://localhost:3000");
+const siteUrl = resolveSiteUrl();
 
 export default function robots(): MetadataRoute.Robots {
   return {

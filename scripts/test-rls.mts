@@ -26,7 +26,7 @@ const { createClient } = await import("@supabase/supabase-js");
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const service = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const password = process.env.DEMO_PASSWORD ?? "voyage-demo-2026";
+const password = process.env.DEMO_PASSWORD?.trim() || "voyage-demo-2026";
 
 const TRIP = "7a000000-0000-4000-a000-000000000001";
 

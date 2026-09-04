@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Archivo, Saira } from "next/font/google";
 import "./globals.css";
+import { siteUrl as resolveSiteUrl } from "@/lib/site-url";
 import ConstellationLoader from "@/components/ui/ConstellationLoader";
 import ScrollEffects from "@/components/ui/ScrollEffects";
 
@@ -42,11 +43,7 @@ const DESCRIPTION =
  * env once the domain is known; the Vercel-provided URL is used otherwise, and
  * localhost only as a last resort in development.
  */
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : "http://localhost:3000");
+const siteUrl = resolveSiteUrl();
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

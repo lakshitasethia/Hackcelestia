@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { configuredSiteUrl } from "@/lib/site-url";
 
 /**
  * The shape every form on this page reads back. `useFormState` needs the
@@ -37,10 +38,10 @@ function origin(): string {
   const forwarded = h.get("x-forwarded-host");
   const host = forwarded ?? h.get("host");
   const proto = h.get("x-forwarded-proto") ?? (host?.startsWith("localhost") ? "http" : "https");
-  return (
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    (host ? `${proto}://${host}` : "http://localhost:3000")
-  );
+  // configuredSiteUrl() rather than the raw variable: a blank value here would
+  // send OAuth back to an empty origin, which fails after the user has already
+  // authorised — the most confusing place to break.
+  return configuredSiteUrl() ?? (host ? `${proto}://${host}` : "http://localhost:3000");
 }
 
 export async function signInAction(

@@ -31,9 +31,17 @@ export function loadEnv(file = ".env.local") {
   }
 }
 
+/** Blank means unset. `Number("")` is 0, which as a port is a baffling
+ *  connection refusal rather than an obvious misconfiguration — and every
+ *  optional key in .env.example ships blank, so this case is the norm. */
+function envValue(name) {
+  const v = process.env[name]?.trim();
+  return v ? v : undefined;
+}
+
 export function connectionConfig() {
   // A full connection string pasted from the dashboard wins outright.
-  const explicit = process.env.SUPABASE_DB_URL;
+  const explicit = envValue("SUPABASE_DB_URL");
   if (explicit) {
     return { connectionString: explicit, ssl: { rejectUnauthorized: false } };
   }
@@ -42,7 +50,7 @@ export function connectionConfig() {
   if (!url) throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set in .env.local");
   const ref = new URL(url).hostname.split(".")[0];
 
-  const password = process.env.SUPABASE_DB_PASSWORD;
+  const password = envValue("SUPABASE_DB_PASSWORD");
   if (!password) throw new Error("SUPABASE_DB_PASSWORD is not set in .env.local");
 
   /**
@@ -57,11 +65,11 @@ export function connectionConfig() {
    * The pooler authenticates by tenant, which is why the user is
    * `postgres.<project-ref>` here and a bare `postgres` on the direct host.
    */
-  const pooler = process.env.SUPABASE_POOLER_HOST;
+  const pooler = envValue("SUPABASE_POOLER_HOST");
   if (pooler) {
     return {
       host: pooler,
-      port: Number(process.env.SUPABASE_POOLER_PORT ?? 5432),
+      port: Number(envValue("SUPABASE_POOLER_PORT") ?? 5432),
       user: `postgres.${ref}`,
       password,
       database: "postgres",
