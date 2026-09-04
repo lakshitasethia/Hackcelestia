@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
+import { getViewer, firstName } from "@/lib/auth/session";
 import Footer from "@/components/layout/Footer";
 
 /**
@@ -8,7 +9,7 @@ import Footer from "@/components/layout/Footer";
  * security, API. They share the marketing chrome but drop the scroll-theme
  * inversion: these are read top to bottom, so the palette stays put.
  */
-export default function ContentPage({
+export default async function ContentPage({
   eyebrow,
   title,
   intro,
@@ -21,12 +22,14 @@ export default function ContentPage({
   updated: string;
   children: React.ReactNode;
 }) {
+  const viewer = await getViewer();
+
   return (
     <main
       data-scroll-theme="dark"
       className="min-h-screen bg-surface text-fg selection:bg-fg selection:text-bg"
     >
-      <Navbar />
+      <Navbar viewer={viewer ? { name: firstName(viewer) } : null} />
 
       <article className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 pt-36 sm:pt-44 pb-20">
         <header className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-end pb-12 border-b border-line">

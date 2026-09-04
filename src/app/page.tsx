@@ -1,4 +1,5 @@
 import Navbar from "@/components/layout/Navbar";
+import { getViewer, firstName } from "@/lib/auth/session";
 import HeroSection from "@/components/sections/HeroSection";
 import TrustTicker from "@/components/sections/TrustTicker";
 import JourneyStrip from "@/components/sections/JourneyStrip";
@@ -10,11 +11,16 @@ import PricingSection from "@/components/sections/PricingSection";
 import FinalCTA from "@/components/sections/FinalCTA";
 import Footer from "@/components/layout/Footer";
 
-export default function Home() {
+/** Reading the session cookie makes this page dynamic, which is the price of
+ *  a header that knows who is looking at it. Everything below the header is
+ *  identical for everyone, so nothing else changes. */
+export default async function Home() {
+  const viewer = await getViewer();
+
   return (
     <main className="min-h-screen bg-surface text-fg selection:bg-fg selection:text-bg">
       {/* Sticky Header */}
-      <Navbar />
+      <Navbar viewer={viewer ? { name: firstName(viewer) } : null} />
 
       {/* 1. Hero with interactive Itinerary Builder UI Preview */}
       <HeroSection />

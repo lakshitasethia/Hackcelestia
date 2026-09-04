@@ -45,6 +45,7 @@ in Postgres so the UI and the agent cannot disagree about it.
 | Surface | Route | Who it is for |
 |---|---|---|
 | Landing site | `/` | The pitch |
+| Sign in | `/login` | Everyone — email and password, or Google |
 | Planner | `/plan`, `/trip/[id]/build` | Traveler — dates, budget, interests, then build from real inventory |
 | Itinerary | `/trip/[id]` | Traveler — the plan, live costs, what is at risk |
 | Operations | `/ops` | Operator — groups, vendors, 72-hour schedule, open disruptions |
@@ -146,15 +147,21 @@ Worth saying plainly, because the alternative is being caught:
 - **Payments are a state machine, not a payment processor.** `bookings.state`
   moves through held → confirmed → cancelled and the penalties are real numbers
   the re-planner prices against; no money moves.
-- **There is no sign-in yet, and the RLS is therefore untested.** Policies are
-  written — travelers see their own trips, operators their org, coordinators
-  their assigned groups, and a trigger stops a coordinator writing anything but
-  the field columns. But with no `auth.uid()` to key off, every server read goes
-  through the service-role client, which *bypasses all of it*. So the policies
-  are unexercised code, not a verified boundary, and `src/lib/supabase/server.ts`
-  — the RLS-scoped client they are written for — is imported nowhere. Every
-  service-role read is marked in `src/lib/db/queries.ts` so the swap is a small,
-  findable change; the policies themselves will need testing when it happens.
+- **Sign-in exists; the RLS behind it still does not run.** There is a real
+  `/login` — email and password, Google, sessions that survive a restart, and a
+  middleware that turns an anonymous visitor away from `/app`, `/ops`, `/field`,
+  `/trip` and `/plan`. What that gets you is *identity*: `getViewer()` returns a
+  verified user and the role on their `profiles` row, which is enough to guard a
+  route and greet someone by name. What it does not yet get you is
+  authorization. Every read in `src/lib/db/queries.ts` still goes through the
+  service-role client, which *bypasses RLS entirely*, so the policies —
+  travelers see their own trips, operators their org, coordinators their
+  assigned groups — remain unexercised code rather than a verified boundary. Two
+  people signed in as different travelers see the same data today. The swap is a
+  findable change (every service-role read is marked, and
+  `src/lib/supabase/server.ts` is the client to move them to), and the policies
+  will need testing when it happens. Filtering the nav by role is deliberately
+  *not* done in the meantime: hiding a link you do not enforce is theatre.
 - **Inventory is reserved, not brokered.** Confirming a trip or accepting a
   re-plan creates real `bookings` rows and moves `availability.slots_taken`
   atomically, so a seat taken by one group is gone for the next. What it does
@@ -217,6 +224,26 @@ Database**:
 
 `GROQ_MODEL` and `GROQ_CHAT_MODEL` are optional overrides; see `.env.example`
 for why they are two settings and not one.
+
+**Google sign-in** needs two things set up outside this repo, and it is inert
+until both are done:
+
+1. Google Cloud console → *APIs & Services → Credentials → OAuth client ID*
+   (Web application). The authorized redirect URI must be exactly
+   `https://YOUR-PROJECT-REF.supabase.co/auth/v1/callback` — Supabase's, not
+   this app's.
+2. Supabase → *Authentication → Providers → Google* → enable it and paste in
+   that client ID and secret. Then, under *Authentication → URL Configuration*,
+   add `http://localhost:3000` and the deployed origin to **Redirect URLs**, or
+   the callback is refused.
+
+Until then, set `NEXT_PUBLIC_GOOGLE_AUTH=off` to hide the button: Supabase
+rejects an unconfigured provider at its own `/authorize` endpoint, so the user
+lands on raw JSON that this app never gets the chance to intercept. Email and
+password work with no setup at all.
+
+`AUTH_ENFORCED=false` turns the route guard off while leaving session refresh
+alone — the switch to reach for if sign-in breaks shortly before a demo.
 
 ### 2. Database
 
@@ -303,12 +330,15 @@ src/
     plan/  trip/[id]/  trip/[id]/build/   traveler (+ the concierge panel)
     ops/   ops/disruption/[id]/           operator
     field/ field/[id]/                    coordinator
+    login/ auth/callback/             sign in, and where OAuth lands
   lib/
+    auth/       who is looking at this page
     db/         queries, mutations, generated row types
     disruption/ the deterministic engine and the demo scenarios
     agent/      the loop, the shared plan validator, and the four agents
     realtime/   the broadcast contract and the server-side sender
     supabase/   admin (service role), server (RLS), browser clients
+  middleware.ts   session refresh + the route guard
 supabase/
   migrations/  schema, RLS, blast_radius, the field columns, atomic seat moves
   seed.sql     one operator, six vendors, eighteen inventory items, one group

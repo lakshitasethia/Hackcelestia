@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowUpRight, Compass, Radio, LayoutGrid } from "lucide-react";
+import { ArrowUpRight, Compass, Radio, LayoutGrid, LogOut } from "lucide-react";
+import { signOutAction } from "@/app/login/actions";
 
 /**
  * Navigation for the product surfaces, distinct from the marketing Navbar.
@@ -12,8 +13,14 @@ import { ArrowUpRight, Compass, Radio, LayoutGrid } from "lucide-react";
  * three lenses on the same data — a disruption is one event seen three ways,
  * and the demo walks all three, so switching has to be one click.
  *
- * There is no auth yet, so this shows every surface to everyone. When sign-in
- * lands, the list gets filtered by the viewer's role.
+ * Every surface is still shown to everyone. Sign-in now exists, but the data
+ * layer underneath still reads through the service-role client, so filtering
+ * this list by role would hide a link without actually protecting anything —
+ * security theatre, and worse, a lie about what the app enforces. It becomes
+ * real in the same change that moves those reads onto the RLS client.
+ *
+ * The presentational half of AppNav. `AppNav` itself is the server component
+ * that reads the session and renders this.
  */
 
 /** `ready: false` keeps a surface out of the nav until it exists — a dead link
@@ -25,7 +32,11 @@ const SURFACES = [
   { label: "Field", href: "/field", icon: Radio, match: "/field", ready: true },
 ];
 
-export default function AppNav() {
+export default function AppNavClient({
+  viewer,
+}: {
+  viewer: { name: string; role: string } | null;
+}) {
   const pathname = usePathname();
 
   return (
@@ -61,13 +72,42 @@ export default function AppNav() {
           })}
         </nav>
 
-        <Link
-          href="/"
-          className="shrink-0 font-sans text-xs uppercase tracking-wider text-muted hover:text-accent transition-colors items-center gap-1 hidden md:flex"
-        >
-          Site
-          <ArrowUpRight className="w-3.5 h-3.5" />
-        </Link>
+        <div className="shrink-0 flex items-center gap-4">
+          {viewer && (
+            <span className="hidden lg:flex items-baseline gap-2 font-sans text-xs uppercase tracking-wider">
+              <span className="text-fg font-bold">{viewer.name}</span>
+              <span className="text-muted">{viewer.role}</span>
+            </span>
+          )}
+
+          <Link
+            href="/"
+            className="font-sans text-xs uppercase tracking-wider text-muted hover:text-accent transition-colors items-center gap-1 hidden md:flex"
+          >
+            Site
+            <ArrowUpRight className="w-3.5 h-3.5" />
+          </Link>
+
+          {viewer ? (
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                title="Sign out"
+                className="flex items-center gap-1.5 font-sans text-xs uppercase tracking-wider text-muted hover:text-accent transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Out</span>
+              </button>
+            </form>
+          ) : (
+            <Link
+              href="/login"
+              className="flex items-center gap-1.5 font-sans text-xs uppercase tracking-wider text-fg hover:text-accent transition-colors"
+            >
+              Log in
+            </Link>
+          )}
+        </div>
       </div>
     </header>
   );

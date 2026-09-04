@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { Menu, X, ArrowRight, Sparkles } from "lucide-react";
+import { Menu, X, ArrowRight, Sparkles, LogOut } from "lucide-react";
+import { signOutAction } from "@/app/login/actions";
 
 /**
  * Every entry points at a section that exists on the page; ScrollEffects
@@ -21,7 +22,17 @@ const NAV_LINKS = [
  *  sectionHref() — that only prefixes hashes. */
 const PLAN_HREF = "/app";
 
-export default function Navbar() {
+/**
+ * The signed-in half of the header.
+ *
+ * Passed down from the server components that render this one rather than
+ * fetched here: the marketing page is a server component and already has the
+ * cookie in hand, and doing it client-side would flash "Log In" at a
+ * signed-in reader on every load.
+ */
+export type NavViewer = { name: string } | null;
+
+export default function Navbar({ viewer = null }: { viewer?: NavViewer }) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("");
@@ -139,22 +150,32 @@ export default function Navbar() {
 
           {/* Desktop Right CTAs */}
           <div className="hidden md:flex items-center gap-4">
-            {/* Sign-in does not exist yet, but the product behind it does — so
-                this opens the app rather than sitting there greyed out. A
-                reader clicking "Log in" wants to be inside the thing, and /app
-                is exactly that: pick a lens and go. */}
-            <a
-              href="/app"
-              className="font-sans text-xs uppercase tracking-wider font-bold py-1 px-3 text-fg hover:text-accent transition-colors duration-150 relative group"
-            >
-              Log In
-              <span className="absolute left-3 right-3 -bottom-0.5 h-px bg-accent w-0 group-hover:w-[calc(100%-1.5rem)] opacity-0 group-hover:opacity-100 transition-all duration-300" />
-            </a>
+            {/* Signed in, the useful thing is a way back into the trip and a
+                way out — not an invitation to log in again. */}
+            {viewer ? (
+              <form action={signOutAction}>
+                <button
+                  type="submit"
+                  className="font-sans text-xs uppercase tracking-wider font-bold py-1 px-3 text-muted hover:text-accent transition-colors duration-150 flex items-center gap-1.5"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Sign out
+                </button>
+              </form>
+            ) : (
+              <a
+                href="/login"
+                className="font-sans text-xs uppercase tracking-wider font-bold py-1 px-3 text-fg hover:text-accent transition-colors duration-150 relative group"
+              >
+                Log In
+                <span className="absolute left-3 right-3 -bottom-0.5 h-px bg-accent w-0 group-hover:w-[calc(100%-1.5rem)] opacity-0 group-hover:opacity-100 transition-all duration-300" />
+              </a>
+            )}
             <a
               href={PLAN_HREF}
               className="btn-solid py-2.5 px-5 text-xs tracking-wider"
             >
-              <span>Start Planning</span>
+              <span>{viewer ? `Resume, ${viewer.name}` : "Start Planning"}</span>
               <ArrowRight className="w-3.5 h-3.5 ml-1.5 inline" />
             </a>
           </div>
@@ -225,9 +246,25 @@ export default function Navbar() {
               Start Planning Trip
               <ArrowRight className="w-4 h-4 ml-2 inline" />
             </a>
-            <span className="font-sans text-xs uppercase tracking-wider text-muted text-center">
-              Accounts are not live yet
-            </span>
+            {viewer ? (
+              <form action={signOutAction}>
+                <button
+                  type="submit"
+                  className="btn-outline w-full py-4 text-sm font-bold tracking-wider"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Sign out
+                </button>
+              </form>
+            ) : (
+              <a
+                href="/login"
+                onClick={() => setMobileMenuOpen(false)}
+                className="btn-outline w-full py-4 text-sm font-bold tracking-wider"
+              >
+                Log in
+              </a>
+            )}
           </div>
         </div>
       )}
