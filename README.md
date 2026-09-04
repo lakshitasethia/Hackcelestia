@@ -327,6 +327,7 @@ npm run test:field       # the coordinator run sheet, reporting and escalation
 npm run test:apply       # the write path — a plan that cannot fully apply must not half-apply
 npm run test:flow        # the whole product end to end on a trip built from scratch
 npm run test:realtime    # a browser-key subscriber receives what the server broadcasts
+npm run test:replan-tools # the re-planner's five tools, without the model — costs no tokens
 npm run test:agent       # a full re-planner run, including its trace
 npm run test:concierge   # the traveler's concierge, through to an accepted change
 npm run test:copilot     # the operator's copilot, including that it refuses to write
