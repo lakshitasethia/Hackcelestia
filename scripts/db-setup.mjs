@@ -59,8 +59,8 @@ try {
         ? "\nThe host resolves over IPv6 but this network has no IPv6 route, so\n" +
             "the project is fine — it just cannot be reached from here. Copy the\n" +
             "transaction pooler string (Supabase -> Settings -> Database ->\n" +
-            "Connection string -> Transaction pooler) into SUPABASE_DB_URL in\n" +
-            ".env.local and run this again. The pooler is dual-stack."
+            "Connection string) into SUPABASE_POOLER_HOST in .env.local and run\n" +
+            "this again. The pooler is dual-stack."
         : "\nThat hostname does not resolve at all, which means the project is\n" +
             "paused or gone rather than merely unreachable. Restore or recreate it\n" +
             "at supabase.com/dashboard, then put the new URL, anon key, service\n" +

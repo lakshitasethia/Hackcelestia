@@ -287,11 +287,13 @@ rather than remembered.
 > **If a script says `ENOTFOUND db.<ref>.supabase.co`.** That host publishes
 > only an AAAA record, so on a network with no IPv6 route — a lot of conference
 > wifi — it cannot be reached and every `pg`-based script dies looking exactly
-> like a deleted project. It is not. Copy the transaction pooler string from
-> Supabase → Settings → Database → Connection string into `SUPABASE_DB_URL` in
-> `.env.local`; the pooler is dual-stack and every script prefers it when set.
+> like a deleted project. It is not. `SUPABASE_POOLER_HOST` in `.env.local`
+> takes the pooler hostname from Supabase → Settings → Database → Connection
+> string (`aws-0-<region>.pooler.supabase.com`); the pooler is dual-stack and
+> every script prefers it when set, assembling the user and password from what
+> is already configured so a password rotation has one place to change.
 > `scripts/db-setup.mjs` checks for the AAAA record and tells you which of the
-> two you are looking at.
+> two problems you are looking at.
 
 `db:setup` records applied migrations in `supabase_migrations.schema_migrations`
 — the same ledger the Supabase CLI uses — so it and `supabase db push` agree

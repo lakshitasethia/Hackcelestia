@@ -16,10 +16,11 @@ npm run dev
 
 > **If any of those says `ENOTFOUND db.<ref>.supabase.co`,** the project is
 > almost certainly fine — that host is IPv6-only and the venue's wifi has no
-> IPv6 route. Put the transaction pooler string (Supabase → Settings →
-> Database → Connection string → Transaction pooler) into `SUPABASE_DB_URL` in
-> `.env.local` and run it again. **Get this into `.env.local` before you
-> travel**, not while a judge waits.
+> IPv6 route. `SUPABASE_POOLER_HOST` in `.env.local` takes the pooler
+> hostname from Supabase → Settings → Database → Connection string, and the
+> pooler is dual-stack. **It is already set in this checkout** — if you clone
+> fresh onto another laptop, set it again before you travel rather than while
+> a judge waits.
 
 ### Sign the three windows in
 
