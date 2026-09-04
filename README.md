@@ -147,21 +147,26 @@ Worth saying plainly, because the alternative is being caught:
 - **Payments are a state machine, not a payment processor.** `bookings.state`
   moves through held → confirmed → cancelled and the penalties are real numbers
   the re-planner prices against; no money moves.
-- **Sign-in exists; the RLS behind it still does not run.** There is a real
-  `/login` — email and password, Google, sessions that survive a restart, and a
-  middleware that turns an anonymous visitor away from `/app`, `/ops`, `/field`,
-  `/trip` and `/plan`. What that gets you is *identity*: `getViewer()` returns a
-  verified user and the role on their `profiles` row, which is enough to guard a
-  route and greet someone by name. What it does not yet get you is
-  authorization. Every read in `src/lib/db/queries.ts` still goes through the
-  service-role client, which *bypasses RLS entirely*, so the policies —
-  travelers see their own trips, operators their org, coordinators their
-  assigned groups — remain unexercised code rather than a verified boundary. Two
-  people signed in as different travelers see the same data today. The swap is a
-  findable change (every service-role read is marked, and
-  `src/lib/supabase/server.ts` is the client to move them to), and the policies
-  will need testing when it happens. Filtering the nav by role is deliberately
-  *not* done in the meantime: hiding a link you do not enforce is theatre.
+- **RLS runs on the reads; the writes are still service-role, on purpose.**
+  Every read in `src/lib/db/queries.ts` goes through the cookie-scoped client,
+  so the policies are what decide which rows come back — `getTrip` takes an id
+  and applies no ownership filter of its own. Signed in as someone else, the
+  demo trip's URL is a 404. `npm run test:rls` signs in as four different
+  people and proves it, including the case nothing else could catch: the
+  `items_via_trip` policy carries no auth check of its own and works only
+  because Postgres applies `trips`' RLS to the subquery inside it. If that
+  assumption were wrong every itinerary would be readable by anyone with an
+  account, and no amount of reading the policy would tell you.
+
+  The writes still run as the service role, and that is a decision rather than
+  a leftover: `applyProposal` moves `availability.slots_taken` and cancels
+  vendor bookings — catalogue rows no user-facing policy grants a write on, and
+  should not. So authorization for writes lives one layer up, in
+  `src/lib/auth/guard.ts`: every mutating server action calls
+  `assertTripAccess`, which asks RLS the same question the read path asks. A
+  new mutating action that forgets it is a hole, and there is no second line of
+  defence beneath it. That is the remaining soft spot, and it is a convention
+  rather than a mechanism.
 - **Inventory is reserved, not brokered.** Confirming a trip or accepting a
   re-plan creates real `bookings` rows and moves `availability.slots_taken`
   atomically, so a seat taken by one group is gone for the next. What it does
@@ -253,6 +258,31 @@ npm run db:setup     # migrations, seed, and verification in one pass
 npm run db:types     # regenerate row types from the live schema
 ```
 
+`db:seed` now runs `scripts/seed-auth.mjs` after the SQL, which creates three
+real accounts and points the seeded trip at them. That step is not optional:
+`trips_read` matches on `traveler_id = auth.uid()`, and the SQL seeds that
+column null, so without it the demo trip is invisible to everybody once RLS is
+doing the filtering.
+
+| Sign in as | Email | Sees |
+|---|---|---|
+| Traveler | `ananya@example.com` | Her own itinerary, and Vela |
+| Operator | `ops@costiera-dmc.example` | The board, every group and vendor |
+| Coordinator | `marco@costiera-dmc.example` | The run sheet for her group |
+
+All three use `voyage-demo-2026` (override with `DEMO_PASSWORD`). They are
+recreated on every re-seed, so a password changed in the dashboard is undone
+rather than remembered.
+
+> **If a script says `ENOTFOUND db.<ref>.supabase.co`.** That host publishes
+> only an AAAA record, so on a network with no IPv6 route — a lot of conference
+> wifi — it cannot be reached and every `pg`-based script dies looking exactly
+> like a deleted project. It is not. Copy the transaction pooler string from
+> Supabase → Settings → Database → Connection string into `SUPABASE_DB_URL` in
+> `.env.local`; the pooler is dual-stack and every script prefers it when set.
+> `scripts/db-setup.mjs` checks for the AAAA record and tells you which of the
+> two you are looking at.
+
 `db:setup` records applied migrations in `supabase_migrations.schema_migrations`
 — the same ledger the Supabase CLI uses — so it and `supabase db push` agree
 about what has run. It is safe to re-run; already-applied migrations are
@@ -281,6 +311,7 @@ npm run dev          # http://localhost:3000/app
 npm run test:all         # everything below except the agent, in order, leaving a clean database
 
 npm run db:verify        # schema and seed invariants — every row should say PASS
+npm run test:rls         # four people sign in; nobody sees anyone else's trip
 npm run test:disruption  # the deterministic engine, against the live database
 npm run test:field       # the coordinator run sheet, reporting and escalation
 npm run test:apply       # the write path — a plan that cannot fully apply must not half-apply
@@ -332,8 +363,8 @@ src/
     field/ field/[id]/                    coordinator
     login/ auth/callback/             sign in, and where OAuth lands
   lib/
-    auth/       who is looking at this page
-    db/         queries, mutations, generated row types
+    auth/       who is looking at this page, and what they may act on
+    db/         queries (RLS), mutations (service role), row types
     disruption/ the deterministic engine and the demo scenarios
     agent/      the loop, the shared plan validator, and the four agents
     realtime/   the broadcast contract and the server-side sender

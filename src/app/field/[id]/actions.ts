@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { findOpenDisruptionFor, reportFieldState } from "@/lib/db/mutations";
 import { injectDisruption } from "@/lib/disruption/engine";
 import { notifyTrip } from "@/lib/realtime/notify";
+import { assertItemAccess } from "@/lib/auth/guard";
 import type { DisruptionSource, FieldState } from "@/lib/db/types";
 
 /**
@@ -24,6 +25,8 @@ async function refresh(tripId: string): Promise<void> {
 
 export async function reportStopAction(formData: FormData): Promise<void> {
   const itemId = String(formData.get("itemId"));
+  await assertItemAccess(itemId);
+
   const state = String(formData.get("state")) as FieldState;
 
   const { tripId, title } = await reportFieldState(itemId, state);
@@ -36,6 +39,8 @@ const CAUSES: DisruptionSource[] = ["weather", "transport", "vendor", "manual"];
 
 export async function flagStopAction(formData: FormData): Promise<void> {
   const itemId = String(formData.get("itemId"));
+  await assertItemAccess(itemId);
+
   const note = String(formData.get("note") ?? "").trim();
 
   // Validated against the list rather than cast, because this value reaches a

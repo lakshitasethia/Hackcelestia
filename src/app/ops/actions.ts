@@ -5,7 +5,8 @@ import { clearDisruptions } from "@/lib/disruption/engine";
 import { runScenario, type ScenarioId } from "@/lib/disruption/scenarios";
 import { notifyTrip } from "@/lib/realtime/notify";
 import { askCopilot, getCopilotThread, COPILOT_THREAD } from "@/lib/agent/copilot";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { serviceRoleClient } from "@/lib/db/client";
+import { assertRole, assertTripAccess } from "@/lib/auth/guard";
 import type { ThreadMessage } from "@/lib/agent/thread-types";
 
 /**
@@ -16,8 +17,9 @@ import type { ThreadMessage } from "@/lib/agent/thread-types";
 
 export async function injectScenarioAction(formData: FormData): Promise<void> {
   const tripId = String(formData.get("tripId"));
-  const scenario = String(formData.get("scenario")) as ScenarioId;
+  await assertTripAccess(tripId);
 
+  const scenario = String(formData.get("scenario")) as ScenarioId;
   await runScenario(tripId, scenario);
 
   // Every surface that shows item status has to move at once, or the operator
@@ -35,13 +37,15 @@ export async function injectScenarioAction(formData: FormData): Promise<void> {
 
 export async function clearDisruptionsAction(formData: FormData): Promise<void> {
   const tripId = String(formData.get("tripId"));
+  await assertTripAccess(tripId);
+
   await clearDisruptions(tripId);
 
   // The console's own conversation is not scoped to a trip, so `clearDisruptions`
   // cannot reach it — but this is the demo reset button, and a copilot still
   // answering questions about a storm that no longer exists is exactly the kind
   // of thing that gets noticed from the front row.
-  await createAdminClient().from("messages").delete().eq("thread_key", COPILOT_THREAD);
+  await serviceRoleClient().from("messages").delete().eq("thread_key", COPILOT_THREAD);
 
   revalidatePath("/ops");
   revalidatePath(`/trip/${tripId}`);
@@ -58,6 +62,11 @@ export async function clearDisruptionsAction(formData: FormData): Promise<void> 
 export async function askCopilotAction(
   question: string
 ): Promise<ThreadMessage[]> {
+  // The copilot reads across the whole operation — every group, every vendor,
+  // every open disruption — so unlike the trip-scoped actions the question is
+  // not "which trip" but "are you staff at all".
+  await assertRole("operator");
+
   const asked = question.trim();
   if (asked) {
     if (asked.length > 500) {

@@ -3,12 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { runReplanAgent } from "@/lib/agent/replan";
 import { applyProposal } from "@/lib/db/mutations";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { serviceRoleClient } from "@/lib/db/client";
+import { assertProposalAccess, assertTripAccess } from "@/lib/auth/guard";
 import { notifyTrip } from "@/lib/realtime/notify";
 
 export async function runAgentAction(formData: FormData): Promise<void> {
   const disruptionId = String(formData.get("disruptionId"));
   const tripId = String(formData.get("tripId"));
+  await assertTripAccess(tripId);
 
   const { proposals } = await runReplanAgent(disruptionId);
 
@@ -22,6 +24,7 @@ export async function runAgentAction(formData: FormData): Promise<void> {
 export async function acceptProposalAction(formData: FormData): Promise<void> {
   const proposalId = String(formData.get("proposalId"));
   const disruptionId = String(formData.get("disruptionId"));
+  await assertProposalAccess(proposalId);
 
   const { tripId } = await applyProposal(proposalId);
 
@@ -38,8 +41,9 @@ export async function acceptProposalAction(formData: FormData): Promise<void> {
 export async function rejectProposalAction(formData: FormData): Promise<void> {
   const proposalId = String(formData.get("proposalId"));
   const disruptionId = String(formData.get("disruptionId"));
+  await assertProposalAccess(proposalId);
 
-  const supabase = createAdminClient();
+  const supabase = serviceRoleClient();
   await supabase
     .from("replan_proposals")
     .update({ state: "rejected", decided_at: new Date().toISOString() })

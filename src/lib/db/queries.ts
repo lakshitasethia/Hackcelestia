@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { readClient } from "./client";
 import { relativeDayLabel, startOfLocalDay } from "@/lib/format";
 import type {
   AffectedItem,
@@ -15,20 +15,28 @@ import type {
 } from "./types";
 
 /**
- * Server-side reads for the traveler and operator surfaces.
+ * Server-side reads for the traveler, operator and coordinator surfaces.
  *
- * These run through the admin client for now because auth does not exist yet —
- * there is no signed-in user for RLS to key off, so every read would return
- * nothing. Once auth lands, the traveler and coordinator paths move to the
- * cookie-scoped server client and let RLS do the filtering; only the agent
- * routes and the injector keep the admin client. Marked so that swap is easy
- * to find.
+ * Every one of these goes through `readClient()`, which inside a request is
+ * the cookie-scoped client — so RLS is what decides which rows come back, not
+ * a filter somebody remembered to write here. `getTrip` is the clearest case:
+ * it takes a trip id and applies no ownership condition of its own, because
+ * `trips_read` already says `traveler_id = auth.uid() or operator_id =
+ * current_operator_id() or coordinator_id = auth.uid()`. Pass someone else's
+ * trip id and you get null.
+ *
+ * That means an empty result is now ambiguous in a way it was not before: it
+ * can mean "no rows" or "not yours". Callers that need to tell the difference
+ * should say so explicitly rather than inferring it from a length check.
+ *
+ * Nothing in this file uses the service role. The three places that
+ * legitimately do are named in `./client`.
  */
 
 export const DEMO_TRIP_ID = "7a000000-0000-4000-a000-000000000001";
 
 export async function getTrip(tripId: string): Promise<Trip | null> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
   const { data, error } = await supabase
     .from("trips")
     .select("*")
@@ -40,7 +48,7 @@ export async function getTrip(tripId: string): Promise<Trip | null> {
 }
 
 export async function getItems(tripId: string): Promise<ItineraryItem[]> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
   const { data, error } = await supabase
     .from("itinerary_items")
     .select("*")
@@ -53,7 +61,7 @@ export async function getItems(tripId: string): Promise<ItineraryItem[]> {
 }
 
 export async function getBookings(tripId: string): Promise<Booking[]> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
   const { data, error } = await supabase
     .from("bookings")
     .select("*")
@@ -64,7 +72,7 @@ export async function getBookings(tripId: string): Promise<Booking[]> {
 }
 
 export async function getOpenDisruptions(tripId: string): Promise<Disruption[]> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
   const { data, error } = await supabase
     .from("disruptions")
     .select("*")
@@ -84,7 +92,7 @@ export async function getOpenDisruptions(tripId: string): Promise<Disruption[]> 
  * implementation of the rule, which both this UI and the re-planner agent call.
  */
 export async function getBlastRadius(itemId: string): Promise<AffectedItem[]> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
 
   const { data: radius, error } = await supabase.rpc("blast_radius", {
     root: itemId,
@@ -146,7 +154,7 @@ export function summarize(items: ItineraryItem[], bookings: Booking[]) {
 
 /** Every trip this operator runs, soonest first. */
 export async function getOperatorTrips(): Promise<Trip[]> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
   const { data, error } = await supabase
     .from("trips")
     .select("*")
@@ -157,7 +165,7 @@ export async function getOperatorTrips(): Promise<Trip[]> {
 }
 
 export async function getVendors(): Promise<Vendor[]> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
   const { data, error } = await supabase
     .from("vendors")
     .select("*")
@@ -174,7 +182,7 @@ export async function getVendors(): Promise<Vendor[]> {
  * which group it belongs to, since that is the first thing a coordinator asks.
  */
 export async function getSchedule(days = 3): Promise<ScheduleEntry[]> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
 
   const from = new Date();
   from.setHours(0, 0, 0, 0);
@@ -201,7 +209,7 @@ export type ScheduleEntry = ItineraryItem & {
 export async function getAllOpenDisruptions(): Promise<
   (Disruption & { trips: { title: string } | null })[]
 > {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
   const { data, error } = await supabase
     .from("disruptions")
     .select("*, trips(title)")
@@ -234,7 +242,7 @@ export type InventoryOption = Inventory & {
 
 /** Everything bookable, for the traveler's picker. */
 export async function getInventory(): Promise<InventoryOption[]> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
   const { data, error } = await supabase
     .from("inventory")
     .select("*, vendors(id, name, channel)")
@@ -248,7 +256,7 @@ export async function getInventory(): Promise<InventoryOption[]> {
 /** Distinct interest tags across the catalogue, so the trip form offers what
  *  actually exists rather than a hard-coded list that drifts from inventory. */
 export async function getInterestTags(): Promise<string[]> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
   const { data, error } = await supabase.from("inventory").select("tags");
   if (error) throw new Error(`getInterestTags: ${error.message}`);
 
@@ -260,7 +268,7 @@ export async function getInterestTags(): Promise<string[]> {
 }
 
 export async function getOperators(): Promise<Operator[]> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
   const { data, error } = await supabase.from("operators").select("*").order("name");
   if (error) throw new Error(`getOperators: ${error.message}`);
   return (data ?? []) as Operator[];
@@ -276,7 +284,7 @@ export interface AgentRunWithSteps extends AgentRun {
 export async function getAgentRuns(
   disruptionId: string
 ): Promise<AgentRunWithSteps[]> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
   const { data, error } = await supabase
     .from("agent_runs")
     .select("*, agent_steps(*)")
@@ -294,7 +302,7 @@ export async function getAgentRuns(
 export async function getProposals(
   disruptionId: string
 ): Promise<ReplanProposal[]> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
   const { data, error } = await supabase
     .from("replan_proposals")
     .select("*")
@@ -316,7 +324,7 @@ export async function getProposals(
  * a single `.eq("coordinator_id", user.id)`, marked here so it is easy to find.
  */
 export async function getCoordinatorTrips(): Promise<Trip[]> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
   const { data, error } = await supabase
     .from("trips")
     .select("*")
@@ -341,7 +349,7 @@ export async function getRunSheet(
   tripId: string,
   days = 2
 ): Promise<ItineraryItem[]> {
-  const supabase = createAdminClient();
+  const supabase = await readClient();
 
   const { data, error } = await supabase
     .from("itinerary_items")

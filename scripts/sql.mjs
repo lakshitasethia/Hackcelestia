@@ -10,25 +10,9 @@
  */
 import fs from "node:fs";
 import pg from "pg";
-
-function loadEnv(file = ".env.local") {
-  if (!fs.existsSync(file)) throw new Error(`${file} not found`);
-  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const value = trimmed.slice(eq + 1).trim();
-    if (value && !process.env[key]) process.env[key] = value;
-  }
-}
+import { loadEnv, connectionConfig, explain } from "./pg-config.mjs";
 
 loadEnv();
-
-const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
-const password = process.env.SUPABASE_DB_PASSWORD;
-if (!password) throw new Error("SUPABASE_DB_PASSWORD is not set in .env.local");
 
 const args = process.argv.slice(2);
 const inline = args[0] === "-c";
@@ -36,16 +20,16 @@ const sql = inline
   ? args.slice(1).join(" ")
   : fs.readFileSync(args[0], "utf8");
 
-const client = new pg.Client({
-  host: `db.${ref}.supabase.co`,
-  port: 5432,
-  user: "postgres",
-  password,
-  database: "postgres",
-  ssl: { rejectUnauthorized: false },
-});
+const client = new pg.Client(connectionConfig());
 
-await client.connect();
+try {
+  await client.connect();
+} catch (err) {
+  // connect() throws outside the query try/catch below, so without this
+  // the resolver's bare ENOTFOUND is the last thing you see.
+  console.error(`\nSQL could not connect: ${explain(err)}`);
+  process.exit(1);
+}
 try {
   const result = await client.query(sql);
   const results = Array.isArray(result) ? result : [result];
@@ -66,7 +50,7 @@ try {
   }
 } catch (err) {
   // Postgres puts the useful part in position/detail, which the bare message drops.
-  console.error(`\nSQL error: ${err.message}`);
+  console.error(`\nSQL error: ${explain(err)}`);
   if (err.detail) console.error(`detail:   ${err.detail}`);
   if (err.hint) console.error(`hint:     ${err.hint}`);
   if (err.position) console.error(`position: ${err.position}`);

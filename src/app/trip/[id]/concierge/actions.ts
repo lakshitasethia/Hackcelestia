@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { askConcierge } from "@/lib/agent/concierge";
 import { getConciergeThread } from "@/lib/agent/thread";
 import { applyProposal } from "@/lib/db/mutations";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { serviceRoleClient } from "@/lib/db/client";
+import { assertTripAccess } from "@/lib/auth/guard";
 import { notifyTrip } from "@/lib/realtime/notify";
 import type { ThreadMessage } from "@/lib/agent/thread-types";
 
@@ -22,6 +23,8 @@ export async function askConciergeAction(
   tripId: string,
   question: string
 ): Promise<ThreadMessage[]> {
+  await assertTripAccess(tripId);
+
   const asked = question.trim();
   if (!asked) return getConciergeThread(tripId);
   if (asked.length > 500) {
@@ -40,9 +43,11 @@ export async function acceptConciergeProposalAction(
   tripId: string,
   proposalId: string
 ): Promise<ThreadMessage[]> {
-  const supabase = createAdminClient();
+  await assertTripAccess(tripId);
+  const supabase = serviceRoleClient();
 
-  // Applying a proposal from another trip would be a serious hole: the id comes
+  // `assertTripAccess` above has established this viewer may act on this trip.
+  // This is the second half: that the *proposal* belongs to it. Both ids come
   // from the browser, and `applyProposal` trusts whatever it is given.
   const { data } = await supabase
     .from("replan_proposals")
@@ -81,7 +86,8 @@ export async function declineConciergeProposalAction(
   tripId: string,
   proposalId: string
 ): Promise<ThreadMessage[]> {
-  const supabase = createAdminClient();
+  await assertTripAccess(tripId);
+  const supabase = serviceRoleClient();
 
   // Declining is a first-class outcome, not a hidden one: the draft is marked
   // rejected and kept, so the operator can see what was offered and refused.

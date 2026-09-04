@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createTrip } from "@/lib/db/mutations";
+import { getViewer } from "@/lib/auth/session";
 import { extractTripSpec, type TripSpec } from "@/lib/agent/intake";
 import type { TripPrefs } from "@/lib/db/types";
 
@@ -19,6 +20,16 @@ export async function readDescriptionAction(
 }
 
 export async function createTripAction(formData: FormData): Promise<void> {
+  /**
+   * Read the viewer before anything else. A trip created with a null
+   * `traveler_id` is invisible to the person who just filled in the form —
+   * `trips_read` matches on `traveler_id = auth.uid()`, and null matches
+   * nobody. The route is behind the middleware guard, so this is belt and
+   * braces, but the failure it prevents is silent.
+   */
+  const viewer = await getViewer();
+  if (!viewer) throw new Error("Sign in before planning a trip.");
+
   const title = String(formData.get("title") || "").trim();
   const contactName = String(formData.get("contactName") || "").trim();
   const startsOn = String(formData.get("startsOn") || "");
@@ -55,6 +66,7 @@ export async function createTripAction(formData: FormData): Promise<void> {
     endsOn,
     prefs,
     operatorId: String(formData.get("operatorId") || "") || null,
+    travelerId: viewer.id,
   });
 
   revalidatePath("/ops");

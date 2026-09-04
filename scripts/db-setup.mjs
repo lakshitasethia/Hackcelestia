@@ -18,6 +18,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import pg from "pg";
+import { connectionConfig, explain } from "./pg-config.mjs";
 
 for (const line of fs.readFileSync(".env.local", "utf8").split("\n")) {
   const t = line.trim();
@@ -32,27 +33,38 @@ if (!url) throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set in .env.local");
 if (!password) throw new Error("SUPABASE_DB_PASSWORD is not set in .env.local");
 
 const ref = new URL(url).hostname.split(".")[0];
-const client = new pg.Client({
-  host: `db.${ref}.supabase.co`,
-  port: 5432,
-  user: "postgres",
-  password,
-  database: "postgres",
-  ssl: { rejectUnauthorized: false },
-});
+const client = new pg.Client(connectionConfig());
 
 try {
   await client.connect();
 } catch (err) {
-  // The failure mode this script is written for, named explicitly — the error
-  // node hands you for a paused or deleted project is a bare ENOTFOUND.
   console.error(`\nCould not reach db.${ref}.supabase.co — ${err.message}`);
+
   if (err.code === "ENOTFOUND") {
+    /**
+     * ENOTFOUND has two very different causes here and the wrong guess costs
+     * twenty minutes, so ask rather than assume. The direct host publishes
+     * only an AAAA record: if that record exists, the project is alive and
+     * this network simply has no IPv6 route. If it does not, the project
+     * really is gone.
+     */
+    const dns = await import("node:dns/promises");
+    const hasAAAA = await dns
+      .resolve6(`db.${ref}.supabase.co`)
+      .then((rows) => rows.length > 0)
+      .catch(() => false);
+
     console.error(
-      "\nThat hostname does not resolve at all, which means the project is\n" +
-        "paused or gone rather than merely unreachable. Restore or recreate it\n" +
-        "at supabase.com/dashboard, then put the new URL, anon key, service\n" +
-        "role key and database password in .env.local and run this again."
+      hasAAAA
+        ? "\nThe host resolves over IPv6 but this network has no IPv6 route, so\n" +
+            "the project is fine — it just cannot be reached from here. Copy the\n" +
+            "transaction pooler string (Supabase -> Settings -> Database ->\n" +
+            "Connection string -> Transaction pooler) into SUPABASE_DB_URL in\n" +
+            ".env.local and run this again. The pooler is dual-stack."
+        : "\nThat hostname does not resolve at all, which means the project is\n" +
+            "paused or gone rather than merely unreachable. Restore or recreate it\n" +
+            "at supabase.com/dashboard, then put the new URL, anon key, service\n" +
+            "role key and database password in .env.local and run this again."
     );
   }
   process.exit(1);

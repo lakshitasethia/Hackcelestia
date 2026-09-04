@@ -1,5 +1,5 @@
 import "server-only";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { serviceRoleClient } from "./client";
 import { TRIP_TZ, zonedTime } from "@/lib/format";
 import type { FieldState, ItineraryItem, ReplanOp, TripPrefs } from "./types";
 
@@ -11,6 +11,22 @@ import type { FieldState, ItineraryItem, ReplanOp, TripPrefs } from "./types";
  * something has to, or the DAG is a flat list and impact analysis has nothing
  * to traverse. So a new stop is chained to whatever precedes it that day, and
  * the user can rewire it afterwards.
+ *
+ * ---
+ *
+ * Every write here runs as the service role, and that is deliberate rather
+ * than left over. `applyProposal` cancels vendor bookings and moves
+ * `availability.slots_taken` — catalogue rows that no user-facing policy
+ * grants a write on, correctly, because a traveler must not be able to edit
+ * inventory directly. Writing these through RLS would mean opening those
+ * tables to travelers to let one code path move a seat.
+ *
+ * The consequence is that these functions do not check who is calling. They
+ * take a trip id and act on it. **Authorization happens in the server action
+ * above them**, which calls `assertTripAccess(tripId)` — an RLS-scoped read
+ * that returns nothing unless the signed-in user owns, operates or is running
+ * that trip. A new mutating action without that call is a hole; there is no
+ * second line of defence down here.
  */
 
 export async function createTrip(input: {
@@ -23,8 +39,16 @@ export async function createTrip(input: {
   endsOn: string;
   prefs: TripPrefs;
   operatorId?: string | null;
+  /**
+   * Who the trip belongs to. Not optional in practice: `trips_read` is
+   * `traveler_id = auth.uid() or ...`, so a trip created with this null is
+   * invisible to the person who just created it. The planner action passes the
+   * signed-in viewer; the seed leaves it null on purpose and `seed-auth.mjs`
+   * fills it in afterwards.
+   */
+  travelerId?: string | null;
 }): Promise<string> {
-  const supabase = createAdminClient();
+  const supabase = serviceRoleClient();
 
   const { data, error } = await supabase
     .from("trips")
@@ -38,6 +62,7 @@ export async function createTrip(input: {
       ends_on: input.endsOn,
       prefs: input.prefs,
       operator_id: input.operatorId ?? null,
+      traveler_id: input.travelerId ?? null,
       status: "draft",
     })
     .select("id")
@@ -61,7 +86,7 @@ export async function addItem(input: {
   localTime: string; // "HH:MM" in the trip's timezone
   timeZone: string;
 }): Promise<ItineraryItem> {
-  const supabase = createAdminClient();
+  const supabase = serviceRoleClient();
 
   const [{ data: trip }, { data: inventory }] = await Promise.all([
     supabase.from("trips").select("starts_on").eq("id", input.tripId).single(),
@@ -132,7 +157,7 @@ export async function addItem(input: {
  * every future blast radius without anyone noticing.
  */
 export async function removeItem(itemId: string): Promise<void> {
-  const supabase = createAdminClient();
+  const supabase = serviceRoleClient();
 
   const { data: item } = await supabase
     .from("itinerary_items")
@@ -195,7 +220,7 @@ export async function confirmTrip(tripId: string): Promise<{
   confirmed: number;
   held: number;
 }> {
-  const supabase = createAdminClient();
+  const supabase = serviceRoleClient();
 
   const { data: items, error } = await supabase
     .from("itinerary_items")
@@ -257,7 +282,7 @@ export async function confirmTrip(tripId: string): Promise<{
   return { confirmed, held };
 }
 
-type Client = ReturnType<typeof createAdminClient>;
+type Client = ReturnType<typeof serviceRoleClient>;
 
 /** The calendar day a stop falls on where the trip is, which is the unit
  *  availability is published in. "YYYY-MM-DD", matching the SQL side. */
@@ -424,7 +449,7 @@ export async function applyProposal(proposalId: string): Promise<{
   applied: number;
   tripId: string;
 }> {
-  const supabase = createAdminClient();
+  const supabase = serviceRoleClient();
 
   const { data: proposal, error } = await supabase
     .from("replan_proposals")
@@ -804,7 +829,7 @@ export async function reportFieldState(
   state: FieldState,
   note?: string
 ): Promise<{ tripId: string; title: string }> {
-  const supabase = createAdminClient();
+  const supabase = serviceRoleClient();
 
   const { data, error } = await supabase
     .from("itinerary_items")
@@ -827,7 +852,7 @@ export async function reportFieldState(
 export async function findOpenDisruptionFor(
   itemId: string
 ): Promise<string | null> {
-  const supabase = createAdminClient();
+  const supabase = serviceRoleClient();
   const { data } = await supabase
     .from("disruptions")
     .select("id")
