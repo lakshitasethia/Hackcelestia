@@ -73,7 +73,25 @@ export type ChatMessage = Groq.Chat.ChatCompletionMessageParam;
  * run take 19 minutes. Prefer the token-reset header, and cap the wait
  * regardless, because a run that gives up is better than one nobody watches.
  */
-const MAX_BACKOFF_MS = 30_000;
+const MAX_BACKOFF_MS = 75_000;
+
+/**
+ * Read one header off an error, whichever shape the SDK hands back.
+ *
+ * This existed as `headers[name]` and was silently always undefined, because
+ * the SDK returns a `Headers` instance and indexing one gives you nothing. The
+ * symptom was not an error: the code fell through to its 5/10/15s fallback,
+ * gave up after thirty seconds, and printed "remaining tokens: ?" — a run that
+ * failed for want of a wait it had been told the length of.
+ */
+function header(headers: unknown, name: string): string | undefined {
+  if (!headers) return undefined;
+  if (typeof (headers as Headers).get === "function") {
+    return (headers as Headers).get(name) ?? undefined;
+  }
+  const record = headers as Record<string, string | undefined>;
+  return record[name] ?? record[name.toLowerCase()];
+}
 
 /** Groq formats durations as "3.682s", "1m30s", "550ms". */
 export function parseDuration(value: string | undefined): number | null {
@@ -121,14 +139,59 @@ export async function withRateLimitRetry<T>(
         continue;
       }
 
-      const headers = (error as { headers?: Record<string, string> })?.headers ?? {};
-      const tokenReset = parseDuration(headers["x-ratelimit-reset-tokens"]);
+      const headers = (error as { headers?: unknown })?.headers;
+      const tokenReset = parseDuration(header(headers, "x-ratelimit-reset-tokens"));
+      /**
+       * The cap still matters even now the header is readable. A burst that
+       * eats the whole token budget resets in up to a minute, which is worth
+       * waiting out — but `retry-after` on this tier can quote the *request*
+       * window at sixteen minutes, and nobody is watching a demo for that long.
+       */
       const wait = Math.min(tokenReset ?? 5_000 * (attempt + 1), MAX_BACKOFF_MS);
       // Logged because a slow run is otherwise indistinguishable from a slow
       // model, and the answer to those two is not the same.
+      const remaining = header(headers, "x-ratelimit-remaining-tokens") ?? "?";
+      /**
+       * Groq says which limit was hit, and the two cases need opposite
+       * responses. "Rate limit reached" clears on its own. "Request too large"
+       * never does — one request exceeding the per-minute ceiling will be
+       * refused identically forever, and retrying it is time spent losing. So
+       * say so and stop rather than sleeping three times for nothing.
+       */
+      if (/too large/i.test(body)) {
+        throw new Error(
+          `The request itself exceeds Groq's per-minute token ceiling, so no ` +
+            `amount of waiting will get it through. Shorten the brief, or ` +
+            `raise the limit. Groq said: ${body.slice(0, 300)}`
+        );
+      }
+
+      /**
+       * Tokens *per day* is a different animal from tokens per minute, and
+       * conflating them wastes the only thing you have less of than tokens.
+       * The per-minute window refills in seconds; the daily one is 200k on the
+       * free tier and, once spent, is spent — the "try again in 20m" it quotes
+       * is a rolling window creeping open, not a pause worth sitting through
+       * inside a request somebody is waiting on.
+       *
+       * The number in that message is the useful part, so it goes through
+       * intact rather than being flattened into "rate limited".
+       */
+      if (/per day|TPD/i.test(body)) {
+        const detail = body.match(/Limit (\d+), Used (\d+)[^.]*\. Please try again in ([^"]+?)\./);
+        throw new Error(
+          detail
+            ? `Groq's daily token budget for this model is spent: ${detail[2]} of ` +
+                `${detail[1]} used, and it frees up in ${detail[3]}. This is a ` +
+                `budget, not a queue — waiting inside the request will not help. ` +
+                `Either pause, or raise the cap at console.groq.com/settings/billing.`
+            : `Groq's daily token budget for this model is spent. ${body.slice(0, 300)}`
+        );
+      }
+
       console.warn(
         `[agent] rate limited (${status}); waiting ${(wait / 1000).toFixed(1)}s ` +
-          `— remaining tokens: ${headers["x-ratelimit-remaining-tokens"] ?? "?"}`
+          `— remaining tokens: ${remaining}; ${body.slice(0, 420)}`
       );
       // A little headroom past the stated reset, since the window is a moving
       // average rather than a hard tick.

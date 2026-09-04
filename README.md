@@ -126,6 +126,16 @@ Worth saying plainly, because the alternative is being caught:
   Intake returns a spec to a form and touches no table. The concierge writes
   drafts only. One code path — `applyProposal` — changes a live itinerary, and a
   person clicks it.
+- **The re-planner has a daily budget, and it is the likeliest thing to break
+  a demo.** Groq's free tier allows 200,000 tokens a day on `120b`, and an
+  agent loop that resends its transcript each iteration spends a real fraction
+  of that per run. Exhaust it and every subsequent run 429s until the rolling
+  window reopens tens of minutes later — which is not a pause you can wait out
+  mid-demo. `withRateLimitRetry` now tells the three cases apart: a per-minute
+  breach it waits out, a request larger than the ceiling it refuses
+  immediately, and a spent daily budget it reports with the number and the
+  reopening time rather than sleeping pointlessly. Rehearsing repeatedly means
+  paying for the tier.
 - **The chat is fast until it is not.** A single request is 1–2 seconds. Groq's
   free tier allows 8000 tokens a minute and an agent loop resends its history
   every iteration, so a burst of questions inside one minute will hit that

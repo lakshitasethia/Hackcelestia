@@ -30,9 +30,16 @@ try {
   } else if (message.includes("401") || message.toLowerCase().includes("invalid api key")) {
     console.error("BLOCKED — GROQ_API_KEY is not valid.\n");
     console.error("  Check the value in .env.local against console.groq.com.\n");
+  } else if (message.toLowerCase().includes("daily token budget")) {
+    // Distinguished from the minute window on purpose: the advice for one is
+    // "wait" and for the other is "stop running this today".
+    console.error(`BLOCKED — ${message}\n`);
+    console.error("  The free tier allows 200,000 tokens a day on the re-planner's");
+    console.error("  model, and a single run costs a meaningful slice of that. If you");
+    console.error("  need to rehearse repeatedly, raise the cap before demo day\n");
   } else if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
-    console.error("Rate limited by Groq's free tier. Unlike a billing error this");
-    console.error("DOES reset — wait a minute and run it again.\n");
+    console.error("Rate limited by Groq's per-minute window. Unlike a billing error");
+    console.error("this DOES reset — wait a minute and run it again.\n");
   } else {
     console.error(`Agent run failed: ${message}\n`);
   }

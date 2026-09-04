@@ -61,6 +61,20 @@ const PEOPLE = [
     role: "coordinator",
     operatorId: OPERATOR_ID,
   },
+  /**
+   * A demo prop rather than a person: a real, confirmed account that owns
+   * nothing. Signed in as her, the Sharma party's URL is a 404 — which is the
+   * only way to *show* that RLS is doing the work rather than assert it. She
+   * is deliberately never pointed at a trip, so re-seeding cannot accidentally
+   * give her one.
+   */
+  {
+    key: "stranger",
+    email: "stranger@example.com",
+    fullName: "Someone Else",
+    role: "traveler",
+    operatorId: null,
+  },
 ];
 
 async function admin(path, init = {}) {
@@ -167,7 +181,8 @@ try {
   }
 
   console.log(`\ntrip ${TRIP_ID} now belongs to ananya@example.com`);
-  console.log(`all three sign in with: ${DEMO_PASSWORD}`);
+  console.log(`stranger@example.com owns nothing, on purpose — the 404 prop`);
+  console.log(`all four sign in with: ${DEMO_PASSWORD}`);
 } catch (err) {
   console.error(`\nseed-auth failed: ${explain(err)}`);
   process.exitCode = 1;

@@ -9,9 +9,41 @@ number below is one you will be asked to justify.
 
 ```bash
 npm run db:setup      # rebuilds schema + seed; safe to re-run
-npm run db:verify     # every row must say PASS
+npm run db:seed       # re-run this even if setup just did — it resets the dates
+npm run db:verify     # every row must say PASS, all 24 of them
 npm run dev
 ```
+
+> **If any of those says `ENOTFOUND db.<ref>.supabase.co`,** the project is
+> almost certainly fine — that host is IPv6-only and the venue's wifi has no
+> IPv6 route. Put the transaction pooler string (Supabase → Settings →
+> Database → Connection string → Transaction pooler) into `SUPABASE_DB_URL` in
+> `.env.local` and run it again. **Get this into `.env.local` before you
+> travel**, not while a judge waits.
+
+### Sign the three windows in
+
+This is the step that did not exist before there was a login, and it is the one
+that will cost you a minute on stage if you leave it until then. Cookies are
+per browser profile, so three people signed in at once means three *separate*
+browser sessions — not three tabs, and not three windows of the same profile.
+
+| Window | Sign in as | Password | Then go to |
+|---|---|---|---|
+| A — normal Chrome | `ops@costiera-dmc.example` | `voyage-demo-2026` | `/ops` |
+| B — Chrome incognito | `ananya@example.com` | `voyage-demo-2026` | `/trip/<id>` |
+| C — a second browser (Safari, Firefox, or a second Chrome profile) | `marco@costiera-dmc.example` | `voyage-demo-2026` | `/field` |
+| D — *optional, a third browser or profile* | `stranger@example.com` | `voyage-demo-2026` | the **same** `/trip/<id>` URL as B |
+
+All four accounts are recreated by `npm run db:seed`, so a re-seed never
+locks you out. Two incognito windows share one session, which is why C has to
+be a different browser rather than a second incognito window.
+
+Window D is a prop, not a lens. `stranger@example.com` is a real confirmed
+account that owns nothing, so the traveler's own URL renders a **404** for
+her. Leave that 404 on screen before you start; you point at it once and never
+touch it. If you cannot spare a third browser, skip D — the Q&A section below
+has the fallback.
 
 Then **pre-warm both agents once and reset**:
 
@@ -25,19 +57,44 @@ tier meters tokens per minute across an agent loop that resends its history each
 iteration — a run that has just been exercised is a run whose rate-limit window
 you understand.
 
+> ### Count your re-planner runs. This is the real constraint.
+>
+> The free tier caps the re-planner's model at **200,000 tokens per day**, and
+> the agent loop resends its whole transcript every iteration, so one full run
+> is an appreciable slice of that. A morning of rehearsing can spend the day's
+> budget before you present, and when it goes you get a 429 that **no amount of
+> waiting inside the demo will clear** — the daily window reopens over tens of
+> minutes, not seconds.
+>
+> Two things follow. Pre-warm the re-planner **once**, not repeatedly. And if
+> you want to rehearse properly, put a card on the Groq account the day before
+> — the paid tier is inexpensive and it removes the single most likely way for
+> this demo to fail on stage.
+>
+> The chat agents run on a different model with a separate budget, so warming
+> Vela does not spend the re-planner's. `npm run test:agent` names which limit
+> it hit and how long until it reopens.
+
 The two run on different models on purpose, so warming one does not eat the
 other's minute. That is also why you can let a judge type at Vela without
 risking the re-plan you are about to show them.
 
-**Windows, arranged before you start talking:**
+**Windows, arranged before you start talking** — signed in per the table
+above, and left on these pages:
 
-| Window | URL | Note |
-|---|---|---|
-| A | `/ops` | The operator's board. Your main screen. |
-| B | `/trip/<id>` | The traveler. Leave it visible. |
-| C | `/field` | Narrow it to phone width. This is the guide. |
+| Window | URL | Signed in as | Note |
+|---|---|---|---|
+| A | `/ops` | operator | The operator's board. Your main screen. |
+| B | `/trip/<id>` | Ananya | The traveler. Leave it visible. |
+| C | `/field` | Marco | Narrow it to phone width. This is the guide. |
 
 Do not reload B or C at any point. The entire claim is that you never have to.
+
+**If sign-in breaks on the morning:** put `AUTH_ENFORCED=false` in `.env.local`
+and restart. That drops the login wall *and* puts the reads back on the service
+role, so all three windows work anonymously in one browser exactly as they did
+before auth existed. You lose Window D's answer and nothing else. Take that
+trade instantly rather than debugging OAuth in front of judges.
 
 ---
 
@@ -222,6 +279,27 @@ The model does preference-ordering across pre-costed options and explains why.
 It has no write path to a booking. Its only write tool inserts a draft
 proposal. `applyProposal` is ordinary deterministic code behind a human click.
 
+**"What stops one customer seeing another customer's trip?"**
+*Point at Window D.* Same URL as Window B, different person signed in, 404.
+
+Then say where that comes from, because the answer is the interesting part:
+nothing in the page checks. `getTrip` takes an id and applies no ownership
+filter at all — Postgres row-level security answers with no row, and the page
+404s on null. The policy is one line, `traveler_id = auth.uid() or operator_id
+= current_operator_id() or coordinator_id = auth.uid()`, and it is the same
+predicate the write path asks before it will touch anything.
+
+If Window D is not up, run `npm run test:rls` in the terminal instead: it signs
+in as four different people and checks fifteen ways that nobody reads anyone
+else's data. Worth mentioning either way that it caught the case reading the
+policy could not — `items_via_trip` carries no auth condition of its own and is
+safe only because Postgres applies the trip's RLS inside the subquery.
+
+Be straight about the limit if pushed: the writes still run as the service
+role, because applying a re-plan has to move availability seats no traveler may
+touch. Authorization for those is a guard every mutating action calls, which is
+a convention rather than a mechanism, and it is the next thing to harden.
+
 **"Does this work for more than one destination?"**
 The schema does — vendors, inventory and availability are generic, and the trip
 carries its own dates and preferences. The seed is one region because depth on
@@ -235,9 +313,16 @@ function behind a human click. The chat is a second way into one approval path,
 not a second approval path.
 
 **"What's missing?"**
-Sign-in, and one of the five planned agents. RLS policies are written and
-correct, but with no `auth.uid()` the server reads run through the service-role
-client; every one of those is marked in `src/lib/db/queries.ts`. The agent that
-was cut is vendor comms — drafting a message to a supplier and parsing the reply
-back into structured availability. The outbound half exists (`check_vendor`
-writes to `messages`); nothing reads a reply.
+One of the five planned agents, and one boundary that is a convention rather
+than a mechanism.
+
+The agent that was cut is vendor comms — drafting a message to a supplier and
+parsing the reply back into structured availability. The outbound half exists
+(`check_vendor` writes to `messages`); nothing reads a reply.
+
+The boundary is write authorization. Reads go through RLS, proven by
+`test:rls`. Writes run as the service role, because applying a re-plan moves
+availability seats and cancels vendor bookings that no traveler-facing policy
+grants — so every mutating server action calls `assertTripAccess` first, which
+asks RLS the same question. It holds today; it is a rule someone has to
+remember rather than something the database enforces.

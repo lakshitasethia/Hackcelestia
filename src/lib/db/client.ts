@@ -27,6 +27,20 @@ export async function readClient() {
    */
   if (process.env.VOYAGE_SERVICE_ROLE === "1") return createAdminClient();
 
+  /**
+   * The stage escape hatch, and it has to be honoured *here* as well as in the
+   * middleware or it does nothing useful. Turning off the route guard alone
+   * would let an anonymous visitor reach `/ops` and find it empty, because RLS
+   * would answer every read with no rows. One flag, one meaning: AUTH_ENFORCED
+   * false is "no auth at all", boundary included.
+   *
+   * Which is worth saying plainly: this switches off the data boundary, not
+   * just the sign-in wall. It exists so that a broken login fifteen minutes
+   * before a demo costs a talking point rather than the whole run. It is not
+   * something to leave set.
+   */
+  if (process.env.AUTH_ENFORCED === "false") return createAdminClient();
+
   const { createClient: createRlsClient } = await import("@/lib/supabase/server");
 
   try {

@@ -13,11 +13,16 @@ import { signOutAction } from "@/app/login/actions";
  * three lenses on the same data — a disruption is one event seen three ways,
  * and the demo walks all three, so switching has to be one click.
  *
- * Every surface is still shown to everyone. Sign-in now exists, but the data
- * layer underneath still reads through the service-role client, so filtering
- * this list by role would hide a link without actually protecting anything —
- * security theatre, and worse, a lie about what the app enforces. It becomes
- * real in the same change that moves those reads onto the RLS client.
+ * The list is filtered by role now, which it deliberately was not before. While
+ * every read went through the service-role client, hiding `/ops` from a
+ * traveler would have removed a link without removing the access behind it —
+ * theatre, and a lie about what the app enforces. Reads go through RLS today,
+ * so the nav and the database finally agree: a traveler who types `/ops`
+ * reaches a board with nothing on it, and not showing them the link is
+ * honesty rather than a fig leaf.
+ *
+ * Signed out, everything shows. That path only renders when AUTH_ENFORCED is
+ * false — the demo escape hatch, where there are no roles to filter by.
  *
  * The presentational half of AppNav. `AppNav` itself is the server component
  * that reads the session and renders this.
@@ -27,9 +32,34 @@ import { signOutAction } from "@/app/login/actions";
  *  in the middle of a demo is worse than a missing one. All three are built
  *  now; the flag stays because the next one will need it. */
 const SURFACES = [
-  { label: "Traveler", href: "/app/trip", icon: Compass, match: "/trip", ready: true },
-  { label: "Operations", href: "/ops", icon: LayoutGrid, match: "/ops", ready: true },
-  { label: "Field", href: "/field", icon: Radio, match: "/field", ready: true },
+  {
+    label: "Traveler",
+    href: "/app/trip",
+    icon: Compass,
+    match: "/trip",
+    ready: true,
+    // An operator opens a group's itinerary constantly; a coordinator works
+    // from the run sheet and has no use for the booking view.
+    roles: ["traveler", "operator"],
+  },
+  {
+    label: "Operations",
+    href: "/ops",
+    icon: LayoutGrid,
+    match: "/ops",
+    ready: true,
+    roles: ["operator"],
+  },
+  {
+    label: "Field",
+    href: "/field",
+    icon: Radio,
+    match: "/field",
+    ready: true,
+    // The operator keeps this because on a bad morning they are the one
+    // checking what the guide has reported.
+    roles: ["coordinator", "operator"],
+  },
 ];
 
 export default function AppNavClient({
@@ -52,7 +82,9 @@ export default function AppNavClient({
         </Link>
 
         <nav className="flex items-center gap-1 sm:gap-2 min-w-0">
-          {SURFACES.filter((s) => s.ready).map(({ label, href, icon: Icon, match }) => {
+          {SURFACES.filter(
+            (s) => s.ready && (!viewer || s.roles.includes(viewer.role))
+          ).map(({ label, href, icon: Icon, match }) => {
             const active = pathname.startsWith(match);
             return (
               <Link
