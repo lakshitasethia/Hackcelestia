@@ -7,6 +7,18 @@ import { createTripAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Server actions run under the route they were called from, and a hosting
+ * platform's default budget is written for a form post, not for the intake pass that reads a description into the form.
+ * Vercel's Hobby default is ten seconds and its ceiling is sixty; measured
+ * runs here are 16-36s for a chat answer and around 50s for a full re-plan.
+ * Without this the agent is killed mid-run and the user is told nothing useful.
+ *
+ * Sixty is the ceiling, not a comfortable margin. A slow re-plan can still
+ * exceed it on a free model tier.
+ */
+export const maxDuration = 60;
+
 export const metadata: Metadata = { title: "Plan a trip" };
 
 /** Every field the brief asks a traveler to define, in the order they think
