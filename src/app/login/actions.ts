@@ -94,6 +94,20 @@ export async function signUpAction(
 
   if (error) return { error: error.message };
 
+  /**
+   * An email that is already registered does not come back as an error.
+   * Supabase deliberately returns a user-shaped response with no identities,
+   * so that a stranger cannot use this form to discover who has an account.
+   * Without this branch that case falls into the "check your email" message
+   * below and sends someone to wait for a mail that is never sent, when what
+   * they actually needed was the Sign in tab.
+   */
+  if (data.user && (data.user.identities ?? []).length === 0) {
+    return {
+      notice: `${email} already has an account — switch to Sign in.`,
+    };
+  }
+
   // With email confirmation switched on, `signUp` returns a user but no
   // session — there is nothing to redirect *to* yet, so say so rather than
   // bouncing them to a page that will send them straight back here.
