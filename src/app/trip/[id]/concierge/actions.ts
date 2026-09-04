@@ -7,7 +7,7 @@ import { applyProposal } from "@/lib/db/mutations";
 import { serviceRoleClient } from "@/lib/db/client";
 import { assertTripAccess } from "@/lib/auth/guard";
 import { notifyTrip } from "@/lib/realtime/notify";
-import type { ThreadMessage } from "@/lib/agent/thread-types";
+import type { ThreadResult } from "@/lib/agent/thread-types";
 
 /**
  * Everything the chat widget can do.
@@ -22,17 +22,27 @@ import type { ThreadMessage } from "@/lib/agent/thread-types";
 export async function askConciergeAction(
   tripId: string,
   question: string
-): Promise<ThreadMessage[]> {
+): Promise<ThreadResult> {
   await assertTripAccess(tripId);
 
   const asked = question.trim();
-  if (!asked) return getConciergeThread(tripId);
+  if (!asked) return { messages: await getConciergeThread(tripId) };
   if (asked.length > 500) {
-    throw new Error("That is longer than I can read — try it in a sentence or two.");
+    return {
+      messages: await getConciergeThread(tripId),
+      error: "That is longer than I can read — try it in a sentence or two.",
+    };
   }
 
-  await askConcierge(tripId, asked);
-  return getConciergeThread(tripId);
+  try {
+    await askConcierge(tripId, asked);
+  } catch (cause) {
+    return {
+      messages: await getConciergeThread(tripId),
+      error: cause instanceof Error ? cause.message : "That did not go through.",
+    };
+  }
+  return { messages: await getConciergeThread(tripId) };
 }
 
 /**
@@ -42,7 +52,7 @@ export async function askConciergeAction(
 export async function acceptConciergeProposalAction(
   tripId: string,
   proposalId: string
-): Promise<ThreadMessage[]> {
+): Promise<ThreadResult> {
   await assertTripAccess(tripId);
   const supabase = serviceRoleClient();
 
@@ -79,13 +89,13 @@ export async function acceptConciergeProposalAction(
     body: "Done — that's on your itinerary now, and the office can see it.",
   });
 
-  return getConciergeThread(tripId);
+  return { messages: await getConciergeThread(tripId) };
 }
 
 export async function declineConciergeProposalAction(
   tripId: string,
   proposalId: string
-): Promise<ThreadMessage[]> {
+): Promise<ThreadResult> {
   await assertTripAccess(tripId);
   const supabase = serviceRoleClient();
 
@@ -98,5 +108,5 @@ export async function declineConciergeProposalAction(
     .eq("trip_id", tripId)
     .eq("source", "concierge");
 
-  return getConciergeThread(tripId);
+  return { messages: await getConciergeThread(tripId) };
 }

@@ -30,3 +30,17 @@ export interface ThreadMessage {
    *  as a problem rather than an answer. */
   failed?: boolean;
 }
+
+/**
+ * What a chat action hands back.
+ *
+ * The thread is returned whole rather than as a delta, and a failure rides
+ * alongside it instead of being thrown. React strips the message from anything
+ * thrown out of a server action in production, so a thrown error arrives in the
+ * browser as "An error occurred in the Server Components render" — true, and
+ * useless to the person reading it. Returning the failure keeps the sentence.
+ */
+export type ThreadResult = {
+  messages: ThreadMessage[];
+  error?: string;
+};

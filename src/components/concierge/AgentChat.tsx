@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Send, X } from "lucide-react";
 import Vela from "./Vela";
 import { formatMoney } from "@/lib/format";
-import type { ProposalView, ThreadMessage } from "@/lib/agent/thread-types";
+import type { ProposalView, ThreadMessage, ThreadResult } from "@/lib/agent/thread-types";
 
 /**
  * The chat panel, shared by the traveler's concierge and the operator's copilot.
@@ -36,9 +36,9 @@ export interface AgentChatProps {
   openers: string[];
   placeholder: string;
   initialThread: ThreadMessage[];
-  ask: (question: string) => Promise<ThreadMessage[]>;
+  ask: (question: string) => Promise<ThreadResult>;
   /** Omitted for a read-only agent, which never offers anything to accept. */
-  decide?: (proposalId: string, accept: boolean) => Promise<ThreadMessage[]>;
+  decide?: (proposalId: string, accept: boolean) => Promise<ThreadResult>;
   /** Called after a proposal is accepted, to refresh whatever is behind. */
   onApplied?: () => void;
 }
@@ -116,7 +116,12 @@ export default function AgentChat({
     ]);
 
     try {
-      setThread(await ask(asked));
+      const result = await ask(asked);
+      setThread(result.messages);
+      if (result.error) {
+        setError(result.error);
+        setDraft(asked);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "That did not go through.");
       // Drop the echo — leaving it would claim a message was sent that wasn't.
@@ -132,8 +137,10 @@ export default function AgentChat({
     setBusy(true);
     setError(null);
     try {
-      setThread(await decide(proposal.id, accept));
-      if (accept) onApplied?.();
+      const result = await decide(proposal.id, accept);
+      setThread(result.messages);
+      if (result.error) setError(result.error);
+      else if (accept) onApplied?.();
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "That change could not be applied."

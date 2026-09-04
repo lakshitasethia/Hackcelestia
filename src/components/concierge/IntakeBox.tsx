@@ -35,7 +35,12 @@ export default function IntakeBox() {
     setUnclear([]);
 
     try {
-      const spec = await readDescriptionAction(prose);
+      const result = await readDescriptionAction(prose);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      const spec = result.spec;
       const done: string[] = [];
 
       const setValue = (id: string, value: string | number | null, label: string) => {

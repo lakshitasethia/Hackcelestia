@@ -46,10 +46,13 @@ export const CHAT_MODEL =
   process.env.GROQ_CHAT_MODEL?.trim() || "openai/gpt-oss-20b";
 
 export function requireKey(): string {
-  const key = process.env.GROQ_API_KEY;
+  // `.trim()` because a variable that exists and is blank is not a key, and a
+  // hosting dashboard makes those two states look identical.
+  const key = process.env.GROQ_API_KEY?.trim();
   if (!key) {
     throw new Error(
-      "GROQ_API_KEY is not set. Get a free key at console.groq.com and add it to .env.local."
+      "GROQ_API_KEY is not set. Add it to .env.local locally, or to the " +
+        "hosting environment for a deployed build — a free key is at console.groq.com."
     );
   }
   return key;

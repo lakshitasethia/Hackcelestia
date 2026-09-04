@@ -12,11 +12,29 @@ import type { TripPrefs } from "@/lib/db/types";
  *
  * Deliberately returns rather than writes. The trip is still created by the
  * form below it, from values the traveler has seen.
+ *
+ * It returns its failures rather than throwing them, which matters more than
+ * it looks. React replaces the message of anything thrown out of a server
+ * action in a production build — deliberately, so a stack trace cannot leak —
+ * so a thrown error reaches the browser as "An error occurred in the Server
+ * Components render", and the user is told nothing at all. A returned failure
+ * keeps the sentence that explains what to do about it.
  */
+export type IntakeResult =
+  | { ok: true; spec: TripSpec }
+  | { ok: false; error: string };
+
 export async function readDescriptionAction(
   description: string
-): Promise<TripSpec> {
-  return extractTripSpec(description);
+): Promise<IntakeResult> {
+  try {
+    return { ok: true, spec: await extractTripSpec(description) };
+  } catch (cause) {
+    return {
+      ok: false,
+      error: cause instanceof Error ? cause.message : "That did not work.",
+    };
+  }
 }
 
 export async function createTripAction(formData: FormData): Promise<void> {

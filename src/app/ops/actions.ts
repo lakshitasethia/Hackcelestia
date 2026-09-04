@@ -7,7 +7,7 @@ import { notifyTrip } from "@/lib/realtime/notify";
 import { askCopilot, getCopilotThread, COPILOT_THREAD } from "@/lib/agent/copilot";
 import { serviceRoleClient } from "@/lib/db/client";
 import { assertRole, assertTripAccess } from "@/lib/auth/guard";
-import type { ThreadMessage } from "@/lib/agent/thread-types";
+import type { ThreadResult } from "@/lib/agent/thread-types";
 
 /**
  * Demo controls. Server actions rather than API routes because they mutate and
@@ -61,7 +61,7 @@ export async function clearDisruptionsAction(formData: FormData): Promise<void> 
  */
 export async function askCopilotAction(
   question: string
-): Promise<ThreadMessage[]> {
+): Promise<ThreadResult> {
   // The copilot reads across the whole operation — every group, every vendor,
   // every open disruption — so unlike the trip-scoped actions the question is
   // not "which trip" but "are you staff at all".
@@ -70,9 +70,16 @@ export async function askCopilotAction(
   const asked = question.trim();
   if (asked) {
     if (asked.length > 500) {
-      throw new Error("That is longer than I can read — try it in a sentence or two.");
+      return {
+        messages: await getCopilotThread(),
+        error: "That is longer than I can read — try it in a sentence or two.",
+      };
     }
-    await askCopilot(asked);
+    try {
+      await askCopilot(asked);
+    } catch (cause) {
+      return { messages: await getCopilotThread(), error: cause instanceof Error ? cause.message : "That did not go through." };
+    }
   }
-  return getCopilotThread();
+  return { messages: await getCopilotThread() };
 }
