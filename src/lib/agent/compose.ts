@@ -1,7 +1,14 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { addItem } from "@/lib/db/mutations";
-import { SERVED_CITIES, TRANSIT_ONLY, orderAlongSpine, route, type Leg } from "./corridor";
+import {
+  SPINE,
+  TRANSIT_ONLY,
+  loadLegGraph,
+  servedCities,
+  type Leg,
+  type LegGraph,
+} from "./corridor";
 import type { TripSpec } from "./intake";
 
 /**
@@ -23,9 +30,22 @@ import type { TripSpec } from "./intake";
  * stop off the previous one, so the disruption engine, the blast radius and
  * the re-planner all work on a composed trip exactly as they do on the seeded
  * one, with no extra code.
+ *
+ * ## Planning and committing are two functions
+ *
+ * They used to be one, and that is what made the confirmation step impossible:
+ * `composeItinerary` wrote `itinerary_items` as it went, so by the time the
+ * traveler saw the plan it *was* the plan, and "is this itinerary OK?" was a
+ * question about something already in the database. `planItinerary` now
+ * decides everything and writes nothing; `commitItinerary` writes what was
+ * decided. A person presses a button in between.
+ *
+ * Nothing about the solver changed in the split. The plan is the same plan —
+ * it just exists as a value for a while before it exists as rows.
  */
 
-export const INDIA_TZ = "Asia/Kolkata";
+/** Fallback zone for a plan whose catalogue rows carry none. */
+export const DEFAULT_TZ = "UTC";
 
 /** Non-hotel, non-transport stops in a single day. Four is a day nobody enjoys. */
 const MAX_ACTIVITIES_PER_DAY = 3;
@@ -40,6 +60,7 @@ type Item = {
   opens_at: string | null;
   tags: string[];
   city: string | null;
+  time_zone: string | null;
 };
 
 export type ComposedStop = {
@@ -56,10 +77,30 @@ export type ComposedStop = {
 export type ComposeResult = {
   stops: ComposedStop[];
   cities: string[];
+  /**
+   * Where each day actually happens, by day number.
+   *
+   * Not derivable from the stops, which is why it is carried. A travel day's
+   * first stop is the train, and a train's `city` is where it *leaves* from —
+   * so a day that starts in Zurich and spends the afternoon in Lucerne reads
+   * as "Zurich" to anything that looks at the first stop, which is the wrong
+   * answer to "where am I on Tuesday".
+   */
+  cityByDay: Record<number, string>;
+  /** IANA zone the local times above are written in. Carried on the result
+   *  rather than looked up again at commit time, so the instants that get
+   *  stored are the ones the traveler was shown. */
+  timeZone: string;
   dayCount: number;
+  /** Summed from the catalogue rows, so it is in `currency`. */
   total: number;
+  /** What the plan is priced in — the destination's money, not the traveler's. */
   currency: string;
+  /** The traveler's budget, in `budgetCurrency`. */
   budget: number | null;
+  budgetCurrency: string;
+  /** `total` converted into `budgetCurrency`; null when no rate was found. */
+  totalInBudget: number | null;
   /** Places they named that the catalogue cannot serve at all. */
   unservedDestinations: string[];
   /** Must-dos nothing in the catalogue matched. */
@@ -122,6 +163,7 @@ type DayPlan = { day: number; city: string; legs: Leg[]; items: Item[] };
  * cost, and the only honest way to know is to lay the legs down and count.
  */
 function simulate(
+  graph: LegGraph,
   cities: string[],
   nights: Map<string, number>,
   /** Where the trip has to end. A one-way plan that abandons someone in Auli
@@ -151,7 +193,7 @@ function simulate(
     const next = cities[i + 1] ?? (returnTo && returnTo !== city ? returnTo : null);
     if (!next) return;
 
-    for (const leg of route(city, next)) {
+    for (const leg of graph.route(city, next)) {
       if (leg.overnight) {
         at(day, city).legs.push(leg);
         day++;
@@ -167,42 +209,120 @@ function simulate(
   return [...plans.values()].sort((a, b) => a.day - b.day);
 }
 
-export async function composeItinerary(
-  tripId: string,
-  spec: TripSpec
+export type PlanOptions = {
+  /**
+   * Towns to build the trip out of, in travelling order — the research pass's
+   * answer to "where should these thirteen days actually go".
+   *
+   * When it is present the composer trusts it for *which* towns and *what
+   * order*, because a traveler who typed "Switzerland" named a country and the
+   * catalogue holds towns; there is nothing to resolve their words against.
+   * Everything after that — how many days each town earns, what fits in one,
+   * whether the whole thing fits at all — is still the solver's, unchanged.
+   *
+   * Absent, the composer works the way it always did: match what they typed
+   * against the catalogue and order it along the seeded corridor.
+   */
+  cityHint?: readonly string[];
+  /** IANA zone for the local times in the result. */
+  timeZone?: string;
+  /** What the catalogue rows for this trip are priced in. Defaults to the
+   *  traveler's own currency, which is right for a single-country trip and
+   *  wrong for every other one. */
+  currency?: string;
+  /** Multiply a `currency` amount by this to get the traveler's currency. */
+  fxToBudget?: number | null;
+};
+
+/**
+ * Decide the whole itinerary. Writes nothing.
+ *
+ * The counterpart is `commitItinerary`, and the gap between them is where the
+ * traveler says yes.
+ */
+export async function planItinerary(
+  spec: TripSpec,
+  options: PlanOptions = {}
 ): Promise<ComposeResult> {
   const supabase = createAdminClient();
 
-  const { data, error } = await supabase
+  const hint = [...new Set(options.cityHint ?? [])].filter(Boolean);
+
+  /**
+   * Scope the catalogue read to the towns actually in play.
+   *
+   * This filter used to be `SERVED_CITIES` — a constant derived from nine
+   * hard-coded Indian legs, and the single line that made every destination
+   * outside north India impossible. Now it is either the towns research chose,
+   * or, for a plan with no research behind it, everything the catalogue holds.
+   * A catalogue that grows with every trip planned makes the unscoped read
+   * worth avoiding when we can.
+   */
+  const query = supabase
     .from("inventory")
-    .select("id, title, type, description, duration_min, base_cost, opens_at, tags, city")
-    .not("city", "is", null)
-    // Derived from the corridor, not listed again here. A second copy of this
-    // list is a second thing to forget: a town added to the spine but not to
-    // the copy is silently invisible to the composer, with no error anywhere.
-    .in("city", SERVED_CITIES);
-  if (error) throw new Error(`composeItinerary: ${error.message}`);
+    .select("id, title, type, description, duration_min, base_cost, opens_at, tags, city, time_zone")
+    .not("city", "is", null);
+
+  const { data, error } = await (hint.length ? query.in("city", hint) : query);
+  if (error) throw new Error(`planItinerary: ${error.message}`);
 
   const catalogue = (data ?? []) as unknown as Item[];
   const cityNames = [...new Set(catalogue.map((i) => i.city!).filter(Boolean))];
 
-  /* ---- which of the towns they named can this catalogue actually serve? ---- */
+  /* ---- which towns is this trip made of? ---- */
 
   const unservedDestinations: string[] = [];
-  const resolved: string[] = [];
-  for (const requested of spec.destinations) {
-    const city = matchCity(requested, cityNames);
-    if (city && !TRANSIT_ONLY.has(city)) resolved.push(city);
-    else unservedDestinations.push(requested);
-  }
-  if (!resolved.length) {
-    throw new Error(
-      `None of those places are in the catalogue yet. This build covers ` +
-        `${cityNames.filter((c) => !TRANSIT_ONLY.has(c)).sort().join(", ")}.`
-    );
+  let cities: string[];
+
+  if (hint.length) {
+    // Research already decided, and it decided in travelling order. Keep only
+    // the towns something actually came back for: a hint city with an empty
+    // catalogue is a day with nothing in it.
+    cities = hint.filter((c) => cityNames.includes(c) && !TRANSIT_ONLY.has(c));
+    if (!cities.length) {
+      throw new Error(
+        "The research came back with towns but nothing to put in them. " +
+          "Try again, or name the places you want directly."
+      );
+    }
+  } else {
+    const resolved: string[] = [];
+    for (const requested of spec.destinations) {
+      const city = matchCity(requested, cityNames);
+      if (city && !TRANSIT_ONLY.has(city)) resolved.push(city);
+      else unservedDestinations.push(requested);
+    }
+    if (!resolved.length) {
+      const served = await servedCities();
+      throw new Error(
+        `Nothing in the catalogue matches those places yet. Planning from ` +
+          `scratch will research them; the places already stocked are ` +
+          `${served.join(", ")}.`
+      );
+    }
+    cities = [...new Set(resolved)];
   }
 
-  const cities = orderAlongSpine([...new Set(resolved)]);
+  const graph = await loadLegGraph(cities);
+  // The hint is the geographic running order for a researched trip; SPINE is
+  // the one for the seeded corridor. Either way the ordering rule is the same.
+  cities = graph.order(cities, hint.length ? hint : SPINE);
+
+  /**
+   * The zone the itinerary is read in.
+   *
+   * Was the module constant `INDIA_TZ`, stamped on every trip this composer
+   * ever produced — which was true of the only region it could plan and false
+   * the moment it could plan a second. Researched rows carry their own zone,
+   * so take it from the catalogue and fall back rather than assume.
+   */
+  const timeZone =
+    options.timeZone ??
+    catalogue.find((i) => cities.includes(i.city ?? "") && i.time_zone)?.time_zone ??
+    DEFAULT_TZ;
+
+  const currency = options.currency ?? spec.currency;
+  const fx = options.fxToBudget ?? null;
 
   /* ---- how many days do we have, and how do they divide? ---- */
 
@@ -285,7 +405,7 @@ export async function composeItinerary(
   );
 
   for (let guard = 0; guard < 20; guard++) {
-    const used = simulate(cities, nights, returnTo).length;
+    const used = simulate(graph, cities, nights, returnTo).length;
     if (used >= dayBudget) break;
 
     const hungriest = cities
@@ -300,7 +420,7 @@ export async function composeItinerary(
     nights.set(hungriest.city, (nights.get(hungriest.city) ?? 1) + 1);
   }
 
-  const plans = simulate(cities, nights, returnTo);
+  const plans = simulate(graph, cities, nights, returnTo);
 
   /* ---- fill the days ---- */
 
@@ -401,19 +521,12 @@ export async function composeItinerary(
     a.day === b.day ? a.localTime.localeCompare(b.localTime) : a.day - b.day
   );
 
-  /* ---- write, in time order, so the DAG builds itself ---- */
-
-  for (const stop of stops) {
-    await addItem({
-      tripId,
-      day: stop.day,
-      inventoryId: stop.inventoryId,
-      localTime: stop.localTime,
-      timeZone: INDIA_TZ,
-    });
-  }
+  const cityByDay: Record<number, string> = {};
+  for (const plan of plans) cityByDay[plan.day] = plan.city;
 
   const total = stops.reduce((sum, s) => sum + s.cost, 0);
+  const totalInBudget =
+    currency === spec.currency ? total : fx !== null ? total * fx : null;
   const dayCount = plans.length;
   const unmetMustDo = spec.mustDo.filter((m) => !metMustDo.has(m));
 
@@ -443,37 +556,114 @@ export async function composeItinerary(
           : "")
     );
   }
-  if (spec.budget !== null && total > spec.budget) {
+  /**
+   * Compare like with like, or say nothing.
+   *
+   * `total` is summed from catalogue rows and is in the destination's money;
+   * `spec.budget` is what the traveler typed and is in theirs. For a trip
+   * inside one country those are the same and this is arithmetic. For Delhi to
+   * Zurich they are not, and comparing 1,900 to 200,000 without converting
+   * reports a trip that is nearly double the budget as comfortably inside it.
+   */
+  /**
+   * Say so when the trip is shorter than the trip they asked for.
+   *
+   * The composer hands spare days to whichever town still has stops it cannot
+   * fit, and stops when no town does — so a thin catalogue produces a genuinely
+   * good eight-day plan for someone who asked for thirteen, and says nothing
+   * about the five days it did not fill. There was a warning for needing *more*
+   * days than the traveler had and none for needing fewer, which is the half
+   * that looks like success.
+   */
+  if (dayCount < dayBudget) {
+    const short = dayBudget - dayCount;
     warnings.push(
-      `The plan comes to ${Math.round(total)} against a ${Math.round(spec.budget)} budget.`
+      `This fills ${dayCount} of your ${dayBudget} days. I could only find ` +
+        `enough in ${cities.join(", ")} to justify that many — name another town ` +
+        `or two and I will spread it out, otherwise ${short} ` +
+        `${short === 1 ? "day is" : "days are"} yours to spend freely.`
     );
+  }
+  if (spec.budget !== null) {
+    const comparable = totalInBudget ?? (currency === spec.currency ? total : null);
+    if (comparable !== null && comparable > spec.budget) {
+      warnings.push(
+        `The plan comes to ${Math.round(comparable)} ${spec.currency} against a ` +
+          `${Math.round(spec.budget)} ${spec.currency} budget` +
+          (currency === spec.currency
+            ? "."
+            : ` — ${Math.round(total)} ${currency} converted at ${fx}.`)
+      );
+    } else if (comparable === null) {
+      warnings.push(
+        `The plan comes to ${Math.round(total)} ${currency}, and your budget is in ` +
+          `${spec.currency}. I could not find a reliable exchange rate, so check ` +
+          `the conversion yourself before committing to this.`
+      );
+    }
   }
   if (unmetMustDo.length) {
     warnings.push(`Nothing in the catalogue matched: ${unmetMustDo.join("; ")}.`);
   }
 
-  await supabase
-    .from("trips")
-    .update({
-      destinations: cities,
-      currency: spec.currency,
-      time_zone: INDIA_TZ,
-      // The composed length is the real one; the form's guess was a guess.
-      ends_on: spec.startsOn ? addDays(spec.startsOn, dayCount - 1) : null,
-    })
-    .eq("id", tripId);
-
   return {
     stops,
     cities,
+    cityByDay,
+    timeZone,
     dayCount,
     total,
-    currency: spec.currency,
+    currency,
     budget: spec.budget,
+    budgetCurrency: spec.currency,
+    totalInBudget,
     unservedDestinations,
     unmetMustDo,
     warnings,
   };
+}
+
+/**
+ * Turn an accepted plan into rows.
+ *
+ * Stops are written in chronological order because that is what makes the
+ * result a graph rather than a list: `addItem` -> `chainInto` hangs each new
+ * stop off the one before it, so the disruption engine, the blast radius walk
+ * and the re-planner all work on a composed trip exactly as they do on the
+ * seeded one. Writing them out of order would produce the same itinerary with
+ * the dependencies pointing the wrong way, and nothing would complain until a
+ * storm hit day four.
+ *
+ * Separate from `planItinerary` so that everything above this line can run,
+ * be shown to a person, and be thrown away without touching the database.
+ */
+export async function commitItinerary(
+  tripId: string,
+  plan: ComposeResult,
+  spec: TripSpec
+): Promise<void> {
+  const supabase = createAdminClient();
+
+  for (const stop of plan.stops) {
+    await addItem({
+      tripId,
+      day: stop.day,
+      inventoryId: stop.inventoryId,
+      localTime: stop.localTime,
+      timeZone: plan.timeZone,
+    });
+  }
+
+  await supabase
+    .from("trips")
+    .update({
+      destinations: plan.cities,
+      currency: plan.currency,
+      time_zone: plan.timeZone,
+      // The composed length is the real one; the form's guess was a guess.
+      ends_on: spec.startsOn ? addDays(spec.startsOn, plan.dayCount - 1) : null,
+    })
+    .eq("id", tripId);
 }
 
 function toMinutes(hhmm: string): number {

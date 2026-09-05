@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, Wand2 } from "lucide-react";
 import Vela from "./Vela";
-import { readDescriptionAction, planTripAction } from "@/app/plan/actions";
+import { readDescriptionAction, proposeTripAction } from "@/app/plan/actions";
 
 /**
  * Describe the trip in a sentence; the form fills itself in.
@@ -94,12 +94,14 @@ export default function IntakeBox() {
   /**
    * The whole trip, not the form.
    *
-   * Someone who writes "suggest me an 8-day itinerary" is not asking to be
+   * Someone who writes "suggest me a 13-day itinerary" is not asking to be
    * handed a filled-in form and a catalogue; they are asking for the itinerary.
-   * This composes one and takes them to it. It is still a draft — nothing is
-   * booked and no seat is taken until they press Confirm on the trip page.
+   * This researches the destination on the web, composes a plan, and takes
+   * them to it to look at. Nothing exists yet at the other end of that redirect
+   * — the proposal page is where they say yes, and saying yes is what builds
+   * the trip.
    */
-  async function planEverything() {
+  async function proposeEverything() {
     if (!prose.trim() || planning) return;
     setPlanning(true);
     setError(null);
@@ -107,12 +109,12 @@ export default function IntakeBox() {
     setUnclear([]);
 
     try {
-      const result = await planTripAction(prose);
+      const result = await proposeTripAction(prose);
       if (!result.ok) {
         setError(result.error);
         return;
       }
-      router.push(`/trip/${result.tripId}`);
+      router.push(`/plan/proposal/${result.proposalId}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "That did not work.");
     } finally {
@@ -129,9 +131,11 @@ export default function IntakeBox() {
         </h2>
       </div>
       <p className="mt-2 font-sans text-xs text-muted">
-        Describe the trip. I can plan the whole thing — route, days, trains and
-        costs — or just fill the form in and leave the planning to you. Either
-        way nothing is booked until you confirm it.
+        Describe the trip, anywhere in the world. I will search the web for
+        what is actually there — places to stay, things to do, what the trains
+        cost — and plan the whole thing: route, days, times and prices, with the
+        pages I read it all off. You see the itinerary and say yes before
+        anything is created.
       </p>
 
       <textarea
@@ -139,7 +143,7 @@ export default function IntakeBox() {
         onChange={(event) => setProse(event.target.value)}
         rows={3}
         maxLength={2000}
-        placeholder="Manali, Rishikesh, Delhi, Amritsar, Auli and Chopta — I don't know the order. Around ₹35,000, by train, arriving 6 September and leaving by the 15th. Rafting in Rishikesh, the Golden Temple, tents in Chopta, the Chandrashila trek and horse riding, and local food throughout."
+        placeholder="A trip from India to Switzerland for 12-13 days, arriving 2 October 2026 and flying home on the 14th. Two of us, budget around ₹4,00,000. We want the mountains and the trains, and a chocolate factory is compulsory. Keep the stays budget-friendly."
         className="mt-4 w-full bg-transparent border border-line px-4 py-3 text-fg font-sans text-sm
                    focus:outline-none focus:border-fg transition-colors placeholder:text-muted resize-y"
       />
@@ -147,14 +151,14 @@ export default function IntakeBox() {
       <div className="mt-3 flex flex-wrap items-center gap-4">
         <button
           type="button"
-          onClick={planEverything}
+          onClick={proposeEverything}
           disabled={planning || busy || !prose.trim()}
           className="flex items-center gap-2 bg-fg text-bg px-4 py-2.5 font-sans text-xs
                      uppercase tracking-wider font-bold hover:opacity-90 transition-opacity
                      disabled:opacity-40"
         >
           <Wand2 className="w-3.5 h-3.5" />
-          {planning ? "Planning the trip…" : "Plan the whole trip"}
+          {planning ? "Researching and planning…" : "Research and plan the whole trip"}
         </button>
 
         <button

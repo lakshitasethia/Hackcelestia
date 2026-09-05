@@ -1,20 +1,35 @@
 import "server-only";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
- * The rail-and-road spine of the north Indian catalogue.
+ * The route graph.
  *
- * Routing is config, not inference. A model asked to order six Himalayan towns
- * will cheerfully send you Amritsar → Chopta → Manali, which is two days of
- * driving it has no way to feel. The legs below are the ones that actually
- * exist in the catalogue, so a route is a walk over real inventory and every
- * transfer in the finished itinerary is a bookable row rather than a sentence.
+ * This file used to *be* the graph: a hand-written array of nine legs with the
+ * catalogue's UUIDs pasted into it, spanning eight north-Indian towns. That
+ * made routing code, so a new region meant a code change and a deploy — and
+ * `SERVED_CITIES`, derived from it, was the exact reason "plan me a trip to
+ * Switzerland" came back as "None of those places are in the catalogue yet".
  *
- * `spine` is geographic order along the corridor — it decides which end of the
- * country you start at. `legs` is the graph the router actually walks, and
- * includes transit-only towns (Chandigarh, Haridwar) that nobody asked for and
- * everybody has to pass through.
+ * Now a transport row says where it goes (`inventory.to_city`) and whether it
+ * eats the night (`inventory.overnight`), so the graph is a query and adding a
+ * country is an INSERT. What is left here is the walking: breadth-first
+ * shortest path, and the ordering rule.
+ *
+ * Routing is still config, not inference. A model asked to order six Himalayan
+ * towns will cheerfully send you Amritsar → Chopta → Manali, which is two days
+ * of driving it has no way to feel. The difference is that the config now lives
+ * in the same table as the inventory it describes, instead of in a second copy
+ * that drifts.
  */
 
+/**
+ * Geographic order along the north-India corridor.
+ *
+ * Kept as a constant because it is a fact about that region that no row
+ * carries: `to_city` says Haridwar connects to Rishikesh, not which of them is
+ * further up the country. For researched trips the equivalent hint comes from
+ * the research pass, which proposes its towns in travelling order.
+ */
 export const SPINE = [
   "Delhi",
   "Amritsar",
@@ -37,63 +52,139 @@ export type Leg = {
   overnight: boolean;
 };
 
-export const LEGS: Leg[] = [
-  { from: "Delhi",      to: "Amritsar",   inventoryId: "29000000-0000-4000-a000-000000000010", departsAt: "18:30", overnight: true },
-  { from: "Amritsar",   to: "Chandigarh", inventoryId: "29000000-0000-4000-a000-000000000011", departsAt: "09:00", overnight: false },
-  { from: "Chandigarh", to: "Manali",     inventoryId: "29000000-0000-4000-a000-000000000012", departsAt: "20:00", overnight: true },
-  { from: "Manali",     to: "Haridwar",   inventoryId: "29000000-0000-4000-a000-000000000013", departsAt: "16:00", overnight: true },
-  { from: "Haridwar",   to: "Rishikesh",  inventoryId: "29000000-0000-4000-a000-000000000014", departsAt: "08:00", overnight: false },
-  { from: "Rishikesh",  to: "Chopta",     inventoryId: "29000000-0000-4000-a000-000000000015", departsAt: "06:00", overnight: false },
-  { from: "Chopta",     to: "Auli",       inventoryId: "29000000-0000-4000-a000-000000000016", departsAt: "07:00", overnight: false },
-  { from: "Auli",       to: "Haridwar",   inventoryId: "29000000-0000-4000-a000-000000000017", departsAt: "05:00", overnight: false },
-  { from: "Haridwar",   to: "Delhi",      inventoryId: "29000000-0000-4000-a000-000000000018", departsAt: "17:00", overnight: false },
-];
-
-/**
- * Every town the corridor touches — the spine plus anything reachable on a leg.
- *
- * The composer queries the catalogue with this rather than its own list, so a
- * town is served the moment it has a leg, and cannot be half-added.
- */
-export const SERVED_CITIES: string[] = [
-  ...new Set<string>([...SPINE, ...LEGS.flatMap((l) => [l.from, l.to])]),
-];
-
 /** Towns you only ever change trains in. They never get a night or a day. */
 export const TRANSIT_ONLY = new Set(["Chandigarh", "Haridwar"]);
 
 /**
- * Shortest path between two towns over the leg graph.
+ * A loaded graph, and everything the composer asks of one.
  *
- * Breadth-first rather than Dijkstra on purpose: every leg here is a day or a
- * night, so hop count *is* the cost, and the shortest chain of legs is the one
- * that wastes the fewest days.
+ * Passed around as a value rather than reached for as a module global, so a
+ * plan for Switzerland cannot accidentally route over Indian legs and one
+ * database read serves a whole compose.
  */
-export function route(from: string, to: string): Leg[] {
-  if (from === to) return [];
+export class LegGraph {
+  readonly legs: Leg[];
+  /** Every town any leg touches. This is the honest "what can we serve". */
+  readonly cities: string[];
 
-  const queue: { city: string; path: Leg[] }[] = [{ city: from, path: [] }];
-  const seen = new Set([from]);
-
-  while (queue.length) {
-    const { city, path } = queue.shift()!;
-    for (const leg of LEGS) {
-      if (leg.from !== city || seen.has(leg.to)) continue;
-      const next = [...path, leg];
-      if (leg.to === to) return next;
-      seen.add(leg.to);
-      queue.push({ city: leg.to, path: next });
-    }
+  constructor(legs: Leg[]) {
+    this.legs = legs;
+    this.cities = [...new Set(legs.flatMap((l) => [l.from, l.to]))];
   }
-  return [];
+
+  /**
+   * Shortest path between two towns.
+   *
+   * Breadth-first rather than Dijkstra on purpose: every leg here is a day or a
+   * night, so hop count *is* the cost, and the shortest chain of legs is the
+   * one that wastes the fewest days.
+   */
+  route(from: string, to: string): Leg[] {
+    if (from === to) return [];
+
+    const queue: { city: string; path: Leg[] }[] = [{ city: from, path: [] }];
+    const seen = new Set([from]);
+
+    while (queue.length) {
+      const { city, path } = queue.shift()!;
+      for (const leg of this.legs) {
+        if (leg.from !== city || seen.has(leg.to)) continue;
+        const next = [...path, leg];
+        if (leg.to === to) return next;
+        seen.add(leg.to);
+        queue.push({ city: leg.to, path: next });
+      }
+    }
+    return [];
+  }
+
+  /**
+   * Order towns the way you would actually travel them.
+   *
+   * `hint` is the geographic running order — `SPINE` for the seeded corridor,
+   * the research pass's own city list for anywhere else. Anything not in the
+   * hint keeps its relative position at the end rather than being dropped,
+   * because a town nobody sequenced is still a town somebody asked for.
+   */
+  order(cities: string[], hint: readonly string[]): string[] {
+    const index = (city: string) => {
+      const i = hint.indexOf(city);
+      return i === -1 ? hint.length : i;
+    };
+    return [...cities].sort((a, b) => index(a) - index(b));
+  }
 }
 
-/** Order the towns someone named the way the corridor runs, not the way they
- *  typed them. Anything off the spine keeps its relative position at the end. */
-export function orderAlongSpine(cities: string[]): string[] {
-  const index = (city: string) => {
-    const i = SPINE.indexOf(city as (typeof SPINE)[number]);
-    return i === -1 ? SPINE.length : i;
+/**
+ * Load the legs that connect a given set of towns.
+ *
+ * Scoped to the towns in play rather than reading every transport row on the
+ * planet: once the catalogue holds several countries, a Swiss route has no
+ * business walking Indian legs, and the BFS above would happily try.
+ *
+ * Both endpoints must be in scope. A leg to somewhere nobody asked about is an
+ * edge out of the graph, and following it strands the walk.
+ */
+export async function loadLegGraph(cities: string[]): Promise<LegGraph> {
+  if (!cities.length) return new LegGraph([]);
+
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from("inventory")
+    .select("id, city, to_city, opens_at, overnight")
+    .eq("type", "transport")
+    .not("to_city", "is", null)
+    .in("city", cities)
+    .in("to_city", cities);
+
+  if (error) throw new Error(`loadLegGraph: ${error.message}`);
+
+  type Row = {
+    id: string;
+    city: string | null;
+    to_city: string | null;
+    opens_at: string | null;
+    overnight: boolean | null;
   };
-  return [...cities].sort((a, b) => index(a) - index(b));
+
+  const legs = ((data ?? []) as Row[])
+    .filter((r) => r.city && r.to_city)
+    .map(
+      (r): Leg => ({
+        from: r.city!,
+        to: r.to_city!,
+        inventoryId: r.id,
+        // Seeded rows store the departure in `opens_at`; 09:00 is the fallback
+        // for a row that never got one rather than a reason to drop the edge.
+        departsAt: (r.opens_at ?? "09:00").slice(0, 5),
+        overnight: Boolean(r.overnight),
+      })
+    );
+
+  return new LegGraph(legs);
+}
+
+/**
+ * Every town the catalogue can put someone in for a day.
+ *
+ * Was a constant derived from the hard-coded legs, and was the gate that
+ * refused every destination outside north India. It is a query now, and it is
+ * used to *report* what is available when a plan fails — not to decide in
+ * advance what may be asked for, because research can add a town that was not
+ * there a minute ago.
+ */
+export async function servedCities(): Promise<string[]> {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("inventory")
+    .select("city")
+    .not("city", "is", null)
+    .neq("type", "transport");
+
+  const cities = new Set<string>();
+  for (const row of (data ?? []) as { city: string | null }[]) {
+    if (row.city && !TRANSIT_ONLY.has(row.city)) cities.add(row.city);
+  }
+  return [...cities].sort();
 }

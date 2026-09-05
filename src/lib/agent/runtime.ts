@@ -45,6 +45,43 @@ export const MODEL = process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-120b";
 export const CHAT_MODEL =
   process.env.GROQ_CHAT_MODEL?.trim() || "openai/gpt-oss-20b";
 
+/**
+ * The model that is allowed to touch the internet.
+ *
+ * This is the one place `groq/compound*` is the right answer rather than the
+ * wrong one. Everywhere else in this project those models are excluded because
+ * they support only Groq's built-in tools and not our custom function calling —
+ * but the research pass wants exactly one of Groq's built-in tools, `web_search`,
+ * and wants no custom ones at all. Groq runs the search server-side and attaches
+ * the pages it read to the response, so a researched price arrives with its
+ * source and no second vendor or API key is involved.
+ *
+ * `compound-mini` rather than `compound`: it takes one tool call per turn where
+ * the larger one iterates, which is both faster and, on the free tier, the
+ * difference between a request that runs and a 413. Someone is watching this.
+ *
+ * Two things about this model are worth knowing before changing it, because
+ * both were learned by breaking them:
+ *
+ * 1. Its context is small, and Groq injects whole fetched pages into it before
+ *    the model answers. Three searches in one request overflows, and the reply
+ *    is a 413 `request_too_large` *after* the searching has happened. That is
+ *    why `research.ts` asks for one search per pass and degrades instead of
+ *    retrying — see `trySearch`.
+ * 2. It is built on `openai/gpt-oss-120b`, and everything it spends counts
+ *    against that model's daily allowance — 200,000 tokens on the free tier.
+ *    So a 120b call made elsewhere can rate-limit the research agent, and vice
+ *    versa. The structuring calls deliberately run on the 20b for that reason.
+ *
+ * The alternative — `openai/gpt-oss-120b` with Groq's `browser_search` tool —
+ * reads pages far better and has the context to hold them, but bills the
+ * fetched page content to you: one "what is there to do in Lucerne" came to
+ * 153,000 prompt tokens, three quarters of a day's allowance for one question.
+ * It is the right answer on a paid tier and unusable on this one.
+ */
+export const RESEARCH_MODEL =
+  process.env.GROQ_RESEARCH_MODEL?.trim() || "groq/compound-mini";
+
 export function requireKey(): string {
   // `.trim()` because a variable that exists and is blank is not a key, and a
   // hosting dashboard makes those two states look identical.
