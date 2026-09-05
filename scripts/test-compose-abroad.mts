@@ -128,10 +128,36 @@ for (const s of plan.stops.filter((s) => !s.title.startsWith("Train:"))) {
 }
 check(dupes.length === 0, "the same place never appears twice under two spellings",
   dupes.join("; ") || "none");
+/**
+ * The traveler's dates are accounted for, one way or the other.
+ *
+ * Either the plan covers every day they asked for, or it says plainly how many
+ * it could not. What must never happen is the quiet version: a ten-day
+ * itinerary against a thirteen-day trip, three nights with no bed booked, and
+ * nothing on the screen about it.
+ */
+const dayBudget =
+  Math.round(
+    (Date.parse(spec.endsOn!) - Date.parse(spec.startsOn!)) / 86_400_000
+  ) + 1;
+
 check(
-  plan.warnings.some((w) => w.includes("of your 13 days")),
-  "says so when it fills fewer days than were asked for",
-  plan.warnings.find((w) => w.includes("days")) ?? "NO WARNING"
+  plan.dayCount === dayBudget ||
+    plan.warnings.some((w) => w.includes(`of your ${dayBudget} days`)),
+  "the days asked for are either filled or accounted for",
+  plan.dayCount === dayBudget
+    ? `all ${dayBudget} filled`
+    : (plan.warnings.find((w) => w.includes("days")) ?? "NEITHER — silent shortfall")
+);
+
+/** Every night away needs somewhere to sleep — except the last, going home. */
+const nightsWithoutBed = [...new Set(plan.stops.map((s) => s.day))]
+  .filter((d) => d < plan.dayCount)
+  .filter((d) => !plan.stops.some((s) => s.day === d && s.localTime >= "20:00"));
+check(
+  nightsWithoutBed.length === 0,
+  "every night before the last has a room booked",
+  nightsWithoutBed.length ? `days ${nightsWithoutBed.join(", ")}` : "none"
 );
 check(plan.cities.length === 4, "uses all four towns", plan.cities.join(" → "));
 check(plan.cities[0] === "Zurich", "starts where the research said to", plan.cities[0]);

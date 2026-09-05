@@ -432,6 +432,40 @@ export async function planItinerary(
     nights.set(hungriest.city, (nights.get(hungriest.city) ?? 1) + 1);
   }
 
+  /**
+   * Spend the days that are left over.
+   *
+   * The loop above stops once no town has stops it cannot fit, which for five
+   * Swiss towns and three activities a day runs out at ten of a thirteen-day
+   * trip. It then reported "3 days are yours to spend freely", which sounds
+   * generous and is really an itinerary that ends on the tenth night and leaves
+   * the traveler in Zermatt with no bed booked for the eleventh.
+   *
+   * They asked for those dates. So the remaining nights are handed round the
+   * towns — the ones with the most still to see first — and become real days
+   * with a room and a slower morning. A rest day in Lucerne is a normal part of
+   * a fortnight; an unaccounted night is not.
+   *
+   * Still bounded by `dayBudget`, so this never invents time nobody asked for.
+   */
+  for (let guard = 0; guard < 20; guard++) {
+    const used = simulate(graph, cities, nights, returnTo).length;
+    if (used >= dayBudget) break;
+
+    const roomiest = cities
+      .map((city) => ({
+        city,
+        // Prefer somewhere with things left to do, then somewhere short-stayed,
+        // so the spare nights do not all pile into one town.
+        spare: (ranked.get(city) ?? []).filter((r) => r.item.type !== "hotel").length,
+        nights: nights.get(city) ?? 1,
+      }))
+      .sort((a, b) => a.nights - b.nights || b.spare - a.spare)[0];
+
+    if (!roomiest) break;
+    nights.set(roomiest.city, roomiest.nights + 1);
+  }
+
   const plans = simulate(graph, cities, nights, returnTo);
 
   /* ---- fill the days ---- */
