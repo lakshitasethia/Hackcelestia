@@ -568,11 +568,17 @@ sentence each.`,
  * and the retries then failed for want of budget rather than context — which is
  * how a run ended up verifying one price out of sixteen attempts.
  *
- * Five, paced, verifies more than eight in a hurry. They are also the five that
- * matter: the must-do and the expensive stops, where a wrong estimate actually
- * distorts the total.
+ * Now that verification is offline rather than inline, the count is bounded by
+ * patience rather than by anyone's attention: fifteen paced checks is about
+ * twelve minutes of a script nobody is watching. Five of them verified two
+ * prices, so fifteen should land four or five — worth the wall clock, since the
+ * result is cached and every later request for that trip reads it for free.
+ *
+ * They are ranked before they are cut, so the ones that run are the ones that
+ * matter: the must-do first, then by cost, because that is where a wrong
+ * estimate actually distorts the total.
  */
-const MAX_PRICE_CHECKS = 5;
+const MAX_PRICE_CHECKS = 15;
 
 /**
  * One subject per query, and one query at a time.

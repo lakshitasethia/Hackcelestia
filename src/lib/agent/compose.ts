@@ -9,6 +9,7 @@ import {
   type Leg,
   type LegGraph,
 } from "./corridor";
+import { normaliseTitle } from "./catalogue";
 import type { TripSpec } from "./intake";
 
 /**
@@ -101,6 +102,17 @@ export type ComposeResult = {
   budgetCurrency: string;
   /** `total` converted into `budgetCurrency`; null when no rate was found. */
   totalInBudget: number | null;
+  /**
+   * The budget expressed in `currency`, so the trip can be denominated in one
+   * money throughout.
+   *
+   * A composed trip stores its items in the destination's currency, so a trip
+   * carrying a rupee budget and a franc price list renders "under budget by CHF
+   * 398,078 of CHF 400,000" — rupees wearing a franc sign, and an answer off by
+   * a factor of a hundred. Null when there was no rate to convert with, which
+   * the trip then treats as no budget rather than a wrong one.
+   */
+  budgetInPlanCurrency: number | null;
   /** Places they named that the catalogue cannot serve at all. */
   unservedDestinations: string[];
   /** Must-dos nothing in the catalogue matched. */
@@ -426,6 +438,21 @@ export async function planItinerary(
 
   const stops: ComposedStop[] = [];
   const placed = new Set<string>();
+  /**
+   * What has been placed, by name rather than by row.
+   *
+   * `placed` holds inventory ids, which is the right guard against booking one
+   * row twice and no guard at all against two rows for the same thing. A
+   * catalogue built by repeated research accumulates those — "Mount Pilatus
+   * golden round trip" and "Mount Pilatus – Golden Round Trip", eighty-four
+   * francs and seventy-two — and an itinerary that climbs the same mountain
+   * twice on consecutive days is the kind of mistake nobody needs to be an
+   * expert to see.
+   *
+   * Ingestion now merges those on the way in; this catches the ones already
+   * stored, and anything a future source spells differently again.
+   */
+  const placedTitles = new Set<string>();
   const metMustDo = new Set<string>();
 
   const stayFor = (city: string) =>
@@ -481,7 +508,10 @@ export async function planItinerary(
     let cursor = arrivalLeg ? 13 * 60 : 9 * 60;
 
     const pool = (ranked.get(plan.city) ?? []).filter(
-      (r) => r.item.type !== "hotel" && !placed.has(r.item.id)
+      (r) =>
+        r.item.type !== "hotel" &&
+        !placed.has(r.item.id) &&
+        !placedTitles.has(normaliseTitle(r.item.title))
     );
 
     let count = 0;
@@ -511,6 +541,7 @@ export async function planItinerary(
         satisfies,
       });
       placed.add(item.id);
+      placedTitles.add(normaliseTitle(item.title));
       if (satisfies) metMustDo.add(satisfies);
       cursor = start + item.duration_min + 30;
       count++;
@@ -527,6 +558,14 @@ export async function planItinerary(
   const total = stops.reduce((sum, s) => sum + s.cost, 0);
   const totalInBudget =
     currency === spec.currency ? total : fx !== null ? total * fx : null;
+  const budgetInPlanCurrency =
+    spec.budget === null
+      ? null
+      : currency === spec.currency
+        ? spec.budget
+        : fx !== null && fx > 0
+          ? spec.budget / fx
+          : null;
   const dayCount = plans.length;
   const unmetMustDo = spec.mustDo.filter((m) => !metMustDo.has(m));
 
@@ -617,6 +656,7 @@ export async function planItinerary(
     budget: spec.budget,
     budgetCurrency: spec.currency,
     totalInBudget,
+    budgetInPlanCurrency,
     unservedDestinations,
     unmetMustDo,
     warnings,

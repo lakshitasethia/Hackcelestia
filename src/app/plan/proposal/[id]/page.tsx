@@ -136,7 +136,13 @@ export default async function ProposalPage({
           <div className="lg:col-span-8">
             <span className="eyebrow">· A proposal · nothing is booked ·</span>
             <h1 className="font-display text-display-lg font-semibold uppercase text-fg text-balance">
-              {spec.title || plan.cities.join(", ")}
+              {/* Five town names set as a display heading wrap to three lines
+                  and say less than "Switzerland — 12 days". The route is on the
+                  line underneath either way. */}
+              {spec.title ||
+                (research.country
+                  ? `${research.country} — ${plan.dayCount} days`
+                  : plan.cities.join(", "))}
             </h1>
             <p className="mt-6 text-body-lg text-muted">
               {plan.dayCount} days · {plan.cities.join(" → ")} ·{" "}

@@ -216,7 +216,7 @@ export async function acceptProposalAction(proposalId: string): Promise<AcceptRe
   try {
     const { data: row, error } = await supabase
       .from("trip_proposals")
-      .select("id, traveler_id, spec, plan, state, trip_id")
+      .select("id, traveler_id, spec, plan, research, state, trip_id")
       .eq("id", proposalId)
       .single();
 
@@ -226,6 +226,7 @@ export async function acceptProposalAction(proposalId: string): Promise<AcceptRe
       traveler_id: string | null;
       spec: TripSpec;
       plan: ComposeResult;
+      research: { country?: string };
       state: string;
       trip_id: string | null;
     };
@@ -256,11 +257,22 @@ export async function acceptProposalAction(proposalId: string): Promise<AcceptRe
     const house = await houseAssignment();
 
     const tripId = await createTrip({
-      title: spec.title || `${plan.cities.slice(0, 3).join(", ")} and back`,
+      // Matches the heading the traveler just said yes to.
+      title:
+        spec.title ||
+        (proposal.research?.country
+          ? `${proposal.research.country} — ${plan.dayCount} days`
+          : `${plan.cities.slice(0, 3).join(", ")} and back`),
       contactName: viewer.fullName || viewer.email || "Traveler",
       contactEmail: viewer.email ?? undefined,
       partySize: spec.partySize ?? 1,
-      budget: spec.budget,
+      /**
+       * The trip is priced in the destination's currency, so its budget has to
+       * be too. Storing the traveler's rupee figure against a franc price list
+       * made the summary report being 398,078 francs under a 400,000 franc
+       * budget, which is the rupee number wearing the wrong sign.
+       */
+      budget: plan.budgetInPlanCurrency,
       startsOn: spec.startsOn!,
       endsOn: spec.endsOn!,
       prefs: {

@@ -94,11 +94,40 @@ for (const day of [...new Set(plan.stops.map((s) => s.day))].sort((a, b) => a - 
 for (const w of plan.warnings) console.log(`  ! ${w}`);
 
 check(plan.stops.length >= 10, "plans a real itinerary", String(plan.stops.length));
-check(
-  plan.cityByDay[2] === "Lucerne",
-  "a travel day is labelled with where you end up, not where you left",
-  plan.cityByDay[2]
+/**
+ * The invariant, not a particular day. Which day the first train falls on
+ * depends on how much the catalogue can fill Zurich with, so pinning day 2
+ * made this fail the moment a real research pass added more to do there — a
+ * test failing for a reason that is not a bug is worse than no test.
+ */
+const travelDays = [...new Set(plan.stops.map((s) => s.day))].filter((d) =>
+  plan.stops.some((s) => s.day === d && s.title.startsWith("Train:"))
 );
+const mislabelled = travelDays.filter((d) => {
+  const leg = plan.stops.find((s) => s.day === d && s.title.startsWith("Train:"))!;
+  // A leg's own `city` is where it departs; the day belongs to where it lands.
+  return plan.cityByDay[d] === leg.city;
+});
+check(
+  travelDays.length > 0 && mislabelled.length === 0,
+  "every travel day is labelled with where you end up, not where you left",
+  `${travelDays.length} travel days, ${mislabelled.length} mislabelled`
+);
+
+/** No stop should appear twice under two spellings. */
+const norm = (t: string) =>
+  t.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
+   .filter((w) => w && !["the","a","an","and","of","to","in","at"].includes(w))
+   .sort().join(" ");
+const seen = new Map<string, string>();
+const dupes: string[] = [];
+for (const s of plan.stops.filter((s) => !s.title.startsWith("Train:"))) {
+  const k = `${s.city}|${norm(s.title)}`;
+  if (seen.has(k) && seen.get(k) !== s.title) dupes.push(`${seen.get(k)} / ${s.title}`);
+  else if (!seen.has(k)) seen.set(k, s.title);
+}
+check(dupes.length === 0, "the same place never appears twice under two spellings",
+  dupes.join("; ") || "none");
 check(
   plan.warnings.some((w) => w.includes("of your 13 days")),
   "says so when it fills fewer days than were asked for",
@@ -109,6 +138,23 @@ check(plan.cities[0] === "Zurich", "starts where the research said to", plan.cit
 check(plan.timeZone === "Europe/Zurich", "the trip is read in Swiss time", plan.timeZone);
 check(plan.currency === "CHF" && plan.budgetCurrency === "INR",
   "keeps the two currencies apart", `${plan.currency}/${plan.budgetCurrency}`);
+/**
+ * The budget has to be denominated in the same money as the plan, or the trip
+ * page compares a rupee figure to a franc one and reports being 398,078 francs
+ * under a 400,000 franc budget.
+ */
+check(
+  plan.budgetInPlanCurrency !== null &&
+    Math.abs(plan.budgetInPlanCurrency - 400000 / 105) < 1,
+  "the budget is converted into the plan's own currency",
+  `${Math.round(plan.budgetInPlanCurrency ?? 0)} CHF`
+);
+check(
+  plan.budgetInPlanCurrency !== null && plan.total < plan.budgetInPlanCurrency,
+  "and the comparison then makes sense",
+  `${Math.round(plan.total)} vs ${Math.round(plan.budgetInPlanCurrency ?? 0)} CHF`
+);
+
 check(plan.totalInBudget !== null && Math.abs(plan.totalInBudget - plan.total * 105) < 1,
   "converts the total at the researched rate",
   `${Math.round(plan.total)}×105 = ${Math.round(plan.totalInBudget ?? 0)}`);
@@ -121,13 +167,34 @@ check(
   [...new Set(plan.stops.map((s) => s.day))].length >= 6,
   "spreads over the calendar", String([...new Set(plan.stops.map((s) => s.day))].length)
 );
-/** Nothing may be scheduled before it opens. */
+/**
+ * Nothing may be scheduled before it opens.
+ *
+ * Checked against what the catalogue actually holds, not against the fixture.
+ * Ingestion reuses a stored row when one already matches, so on a database that
+ * has seen a real research pass the fixture's opening times are not the ones in
+ * play — and a test asserting them fails for a reason that has nothing to do
+ * with the scheduler it is meant to be testing.
+ */
+const { data: openingRows } = await supabase
+  .from("inventory")
+  .select("title, opens_at")
+  .eq("country", "Switzerland")
+  .not("opens_at", "is", null);
+
+const opensByTitle = new Map(
+  ((openingRows ?? []) as { title: string; opens_at: string }[]).map((r) => [
+    r.title,
+    r.opens_at.slice(0, 5),
+  ])
+);
+
 const tooEarly = plan.stops.filter((s) => {
-  const item = research.places.find((p) => p.title === s.title);
-  return item?.opensAt && s.localTime < item.opensAt;
+  const opens = opensByTitle.get(s.title);
+  return opens && s.localTime < opens;
 });
 check(tooEarly.length === 0, "nothing is scheduled before it opens",
-  tooEarly.map((s) => `${s.title}@${s.localTime}`).join(", "));
+  tooEarly.map((s) => `${s.title}@${s.localTime} opens ${opensByTitle.get(s.title)}`).join(", ") || "none");
 
 console.log("\n--- commit ---");
 const tripId = await createTrip({
