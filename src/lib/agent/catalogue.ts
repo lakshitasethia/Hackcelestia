@@ -204,6 +204,65 @@ async function vendorFor(
   return (data as { id: string }).id;
 }
 
+/**
+ * Give researched rows a bookable slot on every day of the trip.
+ *
+ * `findCandidates` reads `availability`, not `inventory` — a substitute has to
+ * be something with a seat free on the day. Seeded rows come with a grid;
+ * researched rows had none, so a composed trip had no alternatives of its own
+ * and the re-planner offered the only rows that did have a grid: seeded
+ * Himalayan treks, priced in euros, as replacements for a Swiss mountain
+ * railway.
+ *
+ * The slots are honest about what they are. A researched row is a claim off a
+ * web page, so its vendor is `manual` and `confirmTrip` holds rather than
+ * reserves; this grid says "there is plausibly room here", which is exactly what
+ * the re-planner needs to offer it and no more than we know.
+ */
+export async function ensureAvailability(
+  inventoryIds: string[],
+  startsOn: string,
+  endsOn: string
+): Promise<number> {
+  if (!inventoryIds.length) return 0;
+  const supabase = createAdminClient();
+
+  const { data: rows } = await supabase
+    .from("inventory")
+    .select("id, opens_at, base_cost, provisional")
+    .in("id", inventoryIds)
+    .eq("provisional", true);
+
+  const days: string[] = [];
+  for (let d = new Date(`${startsOn}T00:00:00Z`); d <= new Date(`${endsOn}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)) {
+    days.push(d.toISOString().slice(0, 10));
+  }
+
+  const wanted: Record<string, unknown>[] = [];
+  for (const row of (rows ?? []) as { id: string; opens_at: string | null; base_cost: number }[]) {
+    for (const day of days) {
+      const time = (row.opens_at ?? "09:00").slice(0, 5);
+      wanted.push({
+        inventory_id: row.id,
+        date: day,
+        starts_at: new Date(`${day}T${time}:00Z`).toISOString(),
+        slots_total: 12,
+        slots_taken: 0,
+        price: row.base_cost,
+      });
+    }
+  }
+  if (!wanted.length) return 0;
+
+  // `availability` is unique on (inventory_id, starts_at), so re-running this
+  // for an overlapping trip must not fail — it should simply change nothing.
+  const { error } = await supabase
+    .from("availability")
+    .upsert(wanted as never, { onConflict: "inventory_id,starts_at", ignoreDuplicates: true });
+  if (error) throw new Error(`ensureAvailability: ${error.message}`);
+  return wanted.length;
+}
+
 export async function ingestResearch(research: ResearchResult): Promise<IngestResult> {
   const supabase = createAdminClient();
 

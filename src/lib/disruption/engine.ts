@@ -152,6 +152,24 @@ export async function findCandidates(
     .select("penalty")
     .eq("item_id", root.id)
     .maybeSingle();
+
+  /**
+   * Where the broken stop actually is, in words.
+   *
+   * The distance guard below needs coordinates and researched inventory has
+   * none — it is written from web pages, which give a price and an opening time
+   * and not a latitude. So a Swiss trip fell straight through the filter and
+   * was offered Himalayan treks priced in euros. `city` and `country` are on
+   * every researched row, and they answer the same question.
+   */
+  const { data: rootInv } = root.inventory_id
+    ? await supabase
+        .from("inventory")
+        .select("city, country")
+        .eq("id", root.inventory_id)
+        .maybeSingle()
+    : { data: null };
+  const rootPlace = rootInv as { city: string | null; country: string | null } | null;
   const penalty = Number((rootBooking as { penalty: number } | null)?.penalty ?? 0);
 
   const [{ data, error }, { data: booked }] = await Promise.all([
@@ -204,6 +222,27 @@ export async function findCandidates(
       // coordinates are kept: unknown is not the same as far.
       const km = distanceKm(root.lat, root.lng, inv.lat, inv.lng);
       if (km !== null && km > MAX_SUBSTITUTE_KM) return false;
+
+      /**
+       * When there are no coordinates, use the address.
+       *
+       * "Unknown is not the same as far" was true when every row was seeded
+       * with a lat/lng and only the odd one was missing. Researched rows never
+       * have them, so for a composed trip the check above always passed and the
+       * comment above it described a bug it no longer prevented.
+       *
+       * Same town is the honest substitute radius: a group whose morning just
+       * fell through can get somewhere else in Lucerne, not somewhere else in
+       * Uttarakhand. Country is the looser fallback for a stop whose town we do
+       * not know, and a row with neither is still kept — that part was right.
+       */
+      if (km === null && rootPlace) {
+        if (rootPlace.city && inv.city) {
+          if (rootPlace.city !== inv.city) return false;
+        } else if (rootPlace.country && inv.country) {
+          if (rootPlace.country !== inv.country) return false;
+        }
+      }
 
       // Replace like with like: a boat day is an experience, not a hotel bed.
       return inv.type === "activity" || inv.type === "guide";

@@ -9,7 +9,7 @@ import {
   type Leg,
   type LegGraph,
 } from "./corridor";
-import { samePlace } from "./catalogue";
+import { ensureAvailability, samePlace } from "./catalogue";
 import type { TripSpec } from "./intake";
 
 /**
@@ -731,6 +731,22 @@ export async function commitItinerary(
    * writes them once. Same seq, same depends_on, same DAG.
    */
   await addItems({ tripId, timeZone: plan.timeZone, stops: plan.stops });
+
+  /**
+   * Make the trip re-plannable.
+   *
+   * Without a grid on its own inventory, a composed trip has no substitutes and
+   * the re-planner reaches for whatever else in the catalogue happens to have
+   * one. Doing it here rather than at ingest time is what makes the dates
+   * right: only now do we know which days the trip actually covers.
+   */
+  if (spec.startsOn) {
+    await ensureAvailability(
+      [...new Set(plan.stops.map((s) => s.inventoryId))],
+      spec.startsOn,
+      addDays(spec.startsOn, plan.dayCount)
+    );
+  }
 
   await supabase
     .from("trips")
