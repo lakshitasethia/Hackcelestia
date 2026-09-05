@@ -114,9 +114,12 @@ export default async function PrintPage({ params }: { params: { id: string } }) 
                     {item.notes && <span className="doc-note">{item.notes}</span>}
                   </td>
                   <td className="doc-cost">
+                    {/* "Free" rather than a dash. On a printed itinerary a dash
+                        reads as a price nobody found, and half the good things
+                        in a city cost nothing — that is worth stating. */}
                     {Number(item.cost) > 0
                       ? formatMoney(Number(item.cost), trip.currency)
-                      : "—"}
+                      : "Free"}
                   </td>
                 </tr>
               ))}
