@@ -181,13 +181,35 @@ export async function withRateLimitRetry<T>(
 
       const headers = (error as { headers?: unknown })?.headers;
       const tokenReset = parseDuration(header(headers, "x-ratelimit-reset-tokens"));
+
+      /**
+       * What the error itself says to wait, which beats the header.
+       *
+       * The headers describe the model you *called*; the limit that actually
+       * refused you can belong to another one. `groq/compound-mini` runs on
+       * `openai/gpt-oss-120b`, so a compound request returns compound's own
+       * comfortable "reset in 0.9s" while being blocked by the 120b's 8,000
+       * tokens a minute. Honouring the header meant retrying nine hundred
+       * milliseconds into a twelve-second wait, three times, and then reporting
+       * the price as unverifiable — which is how a run checked sixteen prices
+       * and confirmed one.
+       *
+       * The body carries the real number. Take whichever is longer.
+       */
+      const stated = parseDuration(
+        body.match(/try again in ([\d.]+\s*(?:m)?[\d.]*\s*m?s)/i)?.[1]
+      );
+
       /**
        * The cap still matters even now the header is readable. A burst that
        * eats the whole token budget resets in up to a minute, which is worth
        * waiting out — but `retry-after` on this tier can quote the *request*
        * window at sixteen minutes, and nobody is watching a demo for that long.
        */
-      const wait = Math.min(tokenReset ?? 5_000 * (attempt + 1), MAX_BACKOFF_MS);
+      const wait = Math.min(
+        Math.max(stated ?? 0, tokenReset ?? 5_000 * (attempt + 1)),
+        MAX_BACKOFF_MS
+      );
       // Logged because a slow run is otherwise indistinguishable from a slow
       // model, and the answer to those two is not the same.
       const remaining = header(headers, "x-ratelimit-remaining-tokens") ?? "?";

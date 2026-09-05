@@ -433,7 +433,16 @@ async function skeleton(spec: TripSpec, days: number) {
     groq.chat.completions.create({
       model: MODEL,
       temperature: 0.3,
-      max_tokens: 4000,
+      /**
+       * Headroom, deliberately.
+       *
+       * Five towns of seven places each is around 4,000 tokens of JSON, so a
+       * 4,000 ceiling truncated it mid-object roughly one run in three — and a
+       * truncated object is not a degraded answer, it is unparseable, so the
+       * whole trip failed. The per-minute allowance on this model is 8,000 and
+       * the prompt is about 1,300, which leaves room for this and no more.
+       */
+      max_tokens: 5800,
       reasoning_effort: "low",
       response_format: { type: "json_object" },
       messages: [
@@ -473,8 +482,11 @@ minimises backtracking. Plain English names only ("Lucerne", not "Lucerne
 (Luzern), Switzerland").
 
 places per city: 2 budget places to stay (hostel, guesthouse or 2-3 star — not
-luxury), 4 to 6 things to do including what the town is genuinely famous for,
-and 1 affordable place to eat.
+luxury), 4 things to do including what the town is genuinely famous for, and 1
+affordable place to eat. Seven per town, no more.
+
+description is ONE short phrase, under twelve words. It is a caption, not a
+paragraph, and a long one costs the budget this reply has to fit inside.
 
 cost is a number in the country's own currency: a hotel is the nightly rate for
 the room, an activity is adult admission, a restaurant is a typical main. Free
@@ -513,13 +525,37 @@ sentence each.`,
     })
   );
 
+  const raw = completion.choices[0]?.message?.content ?? "";
+  const stopped = completion.choices[0]?.finish_reason;
+
+  /**
+   * Say why, rather than returning a bare null.
+   *
+   * This swallowed every failure identically, so a run that died reported "I
+   * could not work out an itinerary for that" whether the model had been rate
+   * limited, had returned prose, or — the actual cause — had been cut off at
+   * the token ceiling mid-object, leaving JSON that could not close. Five towns
+   * of seven places each is a lot of JSON, and `length` in `finish_reason` is
+   * the difference between "ask again" and "ask for less".
+   */
   try {
-    const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
+    const parsed = JSON.parse(raw);
     const result = SkeletonSchema.safeParse(parsed);
-    return result.success ? result.data : null;
+    if (result.success) return result.data;
+    console.warn(
+      `[research] skeleton did not match the schema: ` +
+        `${result.error.issues.slice(0, 3).map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}`
+    );
   } catch {
-    return null;
+    console.warn(
+      `[research] skeleton was not valid JSON (finish_reason=${stopped}, ` +
+        `${raw.length} chars). ` +
+        (stopped === "length"
+          ? "It ran out of completion budget mid-object — ask for fewer places."
+          : `Starts: ${raw.slice(0, 120)}`)
+    );
   }
+  return null;
 }
 
 /* --------------------------------------------------------------- pass two -- */
@@ -934,7 +970,20 @@ export async function researchTrip(
 
     /* ---- pass one: the trip, without the internet ---- */
 
-    const plan = await skeleton(spec, days);
+    /**
+     * One retry, because the failure it covers is transient.
+     *
+     * The planning call is a single generation with no tools, so when it fails
+     * it is because the model was rate limited into an empty reply or ran out
+     * of room mid-JSON — both of which usually succeed on the next attempt. It
+     * is also the pass everything else depends on: no skeleton, no trip. Worth
+     * one more try before telling somebody their itinerary is impossible.
+     */
+    let plan = await skeleton(spec, days);
+    if (!plan) {
+      console.warn("[research] planning failed; one more attempt");
+      plan = await skeleton(spec, days);
+    }
     if (!plan || !plan.cities.length) {
       throw new Error(
         "I could not work out an itinerary for that. Try naming the country, " +
