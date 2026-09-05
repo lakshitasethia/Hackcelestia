@@ -9,7 +9,7 @@ import {
   type Leg,
   type LegGraph,
 } from "./corridor";
-import { normaliseTitle } from "./catalogue";
+import { samePlace } from "./catalogue";
 import type { TripSpec } from "./intake";
 
 /**
@@ -486,7 +486,7 @@ export async function planItinerary(
    * Ingestion now merges those on the way in; this catches the ones already
    * stored, and anything a future source spells differently again.
    */
-  const placedTitles = new Set<string>();
+  const placedTitles: string[] = [];
   const metMustDo = new Set<string>();
 
   const stayFor = (city: string) =>
@@ -545,7 +545,7 @@ export async function planItinerary(
       (r) =>
         r.item.type !== "hotel" &&
         !placed.has(r.item.id) &&
-        !placedTitles.has(normaliseTitle(r.item.title))
+        !placedTitles.some((t) => samePlace(t, r.item.title, plan.city))
     );
 
     let count = 0;
@@ -575,7 +575,7 @@ export async function planItinerary(
         satisfies,
       });
       placed.add(item.id);
-      placedTitles.add(normaliseTitle(item.title));
+      placedTitles.push(item.title);
       if (satisfies) metMustDo.add(satisfies);
       cursor = start + item.duration_min + 30;
       count++;

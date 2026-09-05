@@ -48,9 +48,33 @@ export type IngestResult = {
  * one stop, while two rows wrongly kept puts the same mountain in the itinerary
  * twice at two prices, which is the one a person notices.
  */
-const FILLER = new Set(["the", "a", "an", "and", "of", "to", "in", "at", "de", "du", "la", "le"]);
+const FILLER = new Set(["the", "a", "an", "an", "and", "of", "to", "in", "at", "de", "du", "la", "le"]);
+
+/**
+ * Words that describe what a place *is*, not which place it is.
+ *
+ * "Mount Pilatus", "Mount Pilatus – Golden Round Trip" and "Pilatus cable car"
+ * are one mountain sold three ways, and every distinguishing word between them
+ * is a noun about transport or scenery. Strip those and what is left is the
+ * name: pilatus. Nationality adjectives are here too — "Swiss" appears in half
+ * the catalogue and identifies nothing.
+ */
+const GENERIC = new Set([
+  "mount", "mountain", "railway", "rail", "train", "cable", "car", "cablecar",
+  "funicular", "lift", "gondola", "trail", "walk", "walking", "tour", "trip",
+  "ride", "cruise", "boat", "ferry", "round", "golden", "panorama", "panoramic",
+  "viewpoint", "view", "summit", "peak", "glacier", "paradise", "top", "europe",
+  "experience", "visit", "entry", "ticket", "pass", "day", "half", "full",
+  "museum", "gallery", "centre", "center", "park", "garden", "old", "town",
+  "city", "village", "bridge", "tower", "water", "lake", "river", "valley",
+  "swiss", "switzerland", "national", "grand", "classic", "scenic", "express",
+]);
 
 export function normaliseTitle(title: string): string {
+  return words(title).sort().join(" ");
+}
+
+function words(title: string): string[] {
   return title
     .toLowerCase()
     .normalize("NFKD")
@@ -58,9 +82,80 @@ export function normaliseTitle(title: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter((w) => w && !FILLER.has(w))
-    .sort()
-    .join(" ");
+    .filter((w) => w && !FILLER.has(w));
+}
+
+/** The words that actually name the place, once the category words are gone. */
+function distinctive(title: string): string[] {
+  const kept = words(title).filter((w) => !GENERIC.has(w) && w.length > 2);
+  // A title made entirely of category words ("Old Town walk") has to fall back
+  // to all of them, or every such stop in a city collapses into one.
+  return kept.length ? kept : words(title);
+}
+
+/**
+ * Are these two titles, in the same town, the same place?
+ *
+ * Exact matching let one attraction in under three spellings — "Jungfrau
+ * Railway – Top of Europe", "Jungfraujoch railway" and "Jungfrau Railway to
+ * Jungfraujoch" all landed in a single itinerary, as did Chapel Bridge three
+ * times and the Matterhorn cable car twice. Nothing downstream can tell them
+ * apart: the composer dedupes by inventory id, and they are three rows.
+ *
+ * The rule is: strip the words that say what kind of thing it is, then two
+ * titles match when *every* naming word of the shorter one is present in the
+ * longer, allowing prefixes so "jungfrau" catches "jungfraujoch".
+ *
+ * Requiring the shorter one to be fully covered is what keeps it safe. "Swiss
+ * National Museum" and "Swiss Museum of Transport" share a word and are not the
+ * same museum — neither is a subset of the other, so they stay apart.
+ */
+export function samePlace(a: string, b: string, city?: string): boolean {
+  /**
+   * The town's own name identifies nothing inside that town.
+   *
+   * Without this, "Lake Zurich Boat Ride" and "Old Town Zurich walk" both
+   * reduce to {zurich} — every category word stripped, the city left standing —
+   * and the whole of Zurich collapses into one attraction. Passed in rather
+   * than guessed, because only the caller knows which town these are in.
+   */
+  const cityWords = new Set(city ? words(city) : []);
+  const strip = (t: string) => distinctive(t).filter((w) => !cityWords.has(w));
+
+  const x = strip(a);
+  const y = strip(b);
+  // Nothing left but the town name: not enough to call them the same place.
+  if (!x.length || !y.length) return false;
+
+  /**
+   * The same place is described with the same number of naming words.
+   *
+   * Without this, one naming word swallowed anything containing it: "Matterhorn
+   * Glacier Paradise" reduces to {matterhorn} and "Matterhorn Museum –
+   * Zermatlantis" to {matterhorn, zermatlantis}, the first is a subset of the
+   * second, and a cable car ate a museum. An extra naming word is a different
+   * place; extra *category* words are not, and those are already gone.
+   */
+  if (x.length !== y.length) return false;
+
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+
+  /**
+   * Prefixes only for words long enough to mean something.
+   *
+   * "jungfrau" matching "jungfraujoch" is the case this exists for. "broc"
+   * matching "brocki" is the case it must not: a five-character floor keeps the
+   * first and rejects the second.
+   */
+  const covers = (word: string) =>
+    long.some(
+      (other) =>
+        other === word ||
+        (word.length >= 5 && other.startsWith(word)) ||
+        (other.length >= 5 && word.startsWith(other))
+    );
+
+  return short.every(covers);
 }
 
 const key = (city: string, title: string) =>
@@ -150,10 +245,22 @@ export async function ingestResearch(research: ResearchResult): Promise<IngestRe
     source_url: string | null;
   };
 
+  const stored = ((existingRows ?? []) as Existing[]).filter((r) => r.city);
+
   const existing = new Map<string, Existing>();
-  for (const row of (existingRows ?? []) as Existing[]) {
-    if (row.city) existing.set(key(row.city, row.title), row);
-  }
+  for (const row of stored) existing.set(key(row.city!, row.title), row);
+
+  /**
+   * Find a stored row for the same place, however it is spelled.
+   *
+   * The exact-key map above still runs first because it is a hash lookup and
+   * catches the common case. This is the fallback that catches "Jungfrau
+   * Railway – Top of Europe" already being in the catalogue as "Jungfraujoch
+   * railway".
+   */
+  const findStored = (city: string, title: string): Existing | undefined =>
+    existing.get(key(city, title)) ??
+    stored.find((r) => r.city === city && samePlace(r.title, title, city));
 
   const sourcedAt = new Date().toISOString();
 
@@ -228,7 +335,7 @@ export async function ingestResearch(research: ResearchResult): Promise<IngestRe
 
   for (const place of research.places) {
     const k = key(place.city, place.title);
-    const hit = existing.get(k);
+    const hit = findStored(place.city, place.title);
     if (hit) {
       ids.set(k, hit.id);
       reused++;
