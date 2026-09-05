@@ -62,6 +62,7 @@ type Item = {
   tags: string[];
   city: string | null;
   time_zone: string | null;
+  tier: string | null;
 };
 
 export type ComposedStop = {
@@ -272,7 +273,7 @@ export async function planItinerary(
    */
   const query = supabase
     .from("inventory")
-    .select("id, title, type, description, duration_min, base_cost, opens_at, tags, city, time_zone")
+    .select("id, title, type, description, duration_min, base_cost, opens_at, tags, city, time_zone, tier")
     .not("city", "is", null);
 
   const { data, error } = await (hint.length ? query.in("city", hint) : query);
@@ -489,8 +490,56 @@ export async function planItinerary(
   const placedTitles: string[] = [];
   const metMustDo = new Set<string>();
 
-  const stayFor = (city: string) =>
-    catalogue.find((i) => i.city === city && i.type === "hotel") ?? null;
+  /**
+   * Where the group sleeps in a town.
+   *
+   * This used to be `find(first hotel in the city)`, which was correct while
+   * every city had exactly one — and silently wrong the moment the catalogue
+   * had three. PS-7 asks for accommodation preferences by name, so the bracket
+   * the traveler asked for wins, and the shortfall is recorded rather than
+   * swallowed: a mountain meadow has no five-star option and the honest answer
+   * is to book the tent and say why, not to pretend the preference was met.
+   *
+   * With no preference stated it takes the cheapest, which is what it did
+   * before by accident of insertion order and is now on purpose.
+   */
+  const wanted = spec.lodging ?? null;
+  const lodgingFallbacks: { city: string; asked: string; got: string }[] = [];
+
+  const stayFor = (city: string) => {
+    const beds = catalogue
+      .filter((i) => i.city === city && i.type === "hotel")
+      .sort((a, b) => Number(a.base_cost) - Number(b.base_cost));
+    if (!beds.length) return null;
+    if (!wanted) return beds[0];
+
+    const exact = beds.find((b) => b.tier === wanted);
+    if (exact) return exact;
+
+    /**
+     * Nearest bracket, not "anything". Someone who asked for luxury and cannot
+     * have it wants the dearest bed in town; someone who asked for budget and
+     * cannot have it wants the cheapest. Walking the ladder outward from where
+     * they asked gets both, and the list is ordered so the distance is real.
+     */
+    const ladder = ["budget", "midrange", "boutique", "luxury"];
+    const target = ladder.indexOf(wanted);
+    const nearest = [...beds]
+      .filter((b) => b.tier)
+      .sort(
+        (a, b) =>
+          Math.abs(ladder.indexOf(a.tier!) - target) -
+          Math.abs(ladder.indexOf(b.tier!) - target)
+      )[0];
+
+    const bed = nearest ?? beds[0];
+    lodgingFallbacks.push({
+      city,
+      asked: wanted,
+      got: bed.tier ?? "unrated",
+    });
+    return bed;
+  };
 
   for (const plan of plans) {
     // Legs first: they set the shape of the day, and an overnight one means
@@ -677,6 +726,28 @@ export async function planItinerary(
   }
   if (unmetMustDo.length) {
     warnings.push(`Nothing in the catalogue matched: ${unmetMustDo.join("; ")}.`);
+  }
+  /**
+   * Only report the towns that were actually booked. `stayFor` is called while
+   * the composer is still deciding, so a town it considered and dropped can
+   * leave a fallback behind for a night nobody is spending there.
+   */
+  const bookedCities = new Set(stops.map((s) => s.city));
+  const missedLodging = new Map<string, string>();
+  for (const f of lodgingFallbacks) {
+    // A four-night town calls `stayFor` four times, so the raw list names it
+    // once per night. Keyed by city, because the traveler is being told about
+    // a place, not about a booking.
+    if (bookedCities.has(f.city)) missedLodging.set(f.city, f.got);
+  }
+  if (missedLodging.size) {
+    warnings.push(
+      `You asked for ${wanted} rooms. ` +
+        [...missedLodging]
+          .map(([city, got]) => `${city} only has ${got}`)
+          .join(", ") +
+        ` — booked the closest thing there.`
+    );
   }
 
   return {

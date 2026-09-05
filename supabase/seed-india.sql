@@ -1,4 +1,4 @@
--- Voyage — North India catalogue.
+-- Waypoint — North India catalogue.
 --
 -- Seeded ALONGSIDE the Amalfi rows, not instead of them. The disruption demo
 -- targets fixed Amalfi UUIDs (19000000-…) and every re-planner test asserts
@@ -220,6 +220,107 @@ values
    'Joshimath bazaar dinner', 'restaurant',
    'Aloo ke gutke and bhang ki chutney in the bazaar below the slope.', 90, 350.00,
    30.5550, 79.5640, '11:00', '22:00', '{food,relaxed}', false, 'Auli', 'Uttarakhand');
+
+-- ------------------------------------------------------- where you sleep --
+--
+-- Every hotel above is a hostel bunk or a government hut, because the corridor
+-- was written for one kind of traveler. That made "accommodation preferences"
+-- — which PS-7 names twice — a field with nothing behind it: the composer took
+-- the first hotel in the city, and there was only ever one.
+--
+-- So each town gets a middle and a top option. Prices are the real spread for
+-- these places, which matters more than it sounds: a preference that does not
+-- move the total is a preference nobody can see the effect of. Delhi budget to
+-- Delhi luxury is 700 to 9,500 a night, and a fortnight of that is the
+-- difference between two entirely different trips.
+--
+-- The `tier` column is what the composer matches on; the tag is what a person
+-- reads on the card.
+
+insert into inventory
+  (id, vendor_id, title, type, description, duration_min, base_cost,
+   lat, lng, opens_at, closes_at, tags, weather_sensitive, city, region, tier)
+values
+  -- ---------------------------------------------------------- DELHI --
+  ('29000000-0000-4000-a000-000000000101', '2e000000-0000-4000-a000-000000000003',
+   'Bloomrooms, New Delhi station', 'hotel',
+   'Small business hotel, air-conditioned, five minutes from the platform.',
+   600, 3200.00, 28.6420, 77.2200, null, null,
+   '{midrange,city}', false, 'Delhi', 'Delhi', 'midrange'),
+
+  ('29000000-0000-4000-a000-000000000102', '2e000000-0000-4000-a000-000000000003',
+   'The Imperial, Janpath', 'hotel',
+   'Colonial-era rooms off Connaught Place, lawns and a long verandah.',
+   600, 9500.00, 28.6250, 77.2190, null, null,
+   '{luxury,city,signature}', false, 'Delhi', 'Delhi', 'luxury'),
+
+  -- ------------------------------------------------------- AMRITSAR --
+  ('29000000-0000-4000-a000-000000000121', '2e000000-0000-4000-a000-000000000003',
+   'Hotel Hong Kong Inn, Amritsar', 'hotel',
+   'Clean mid-range rooms a rickshaw ride from the temple.',
+   600, 2800.00, 31.6300, 74.8700, null, null,
+   '{midrange,city}', false, 'Amritsar', 'Punjab', 'midrange'),
+
+  ('29000000-0000-4000-a000-000000000122', '2e000000-0000-4000-a000-000000000003',
+   'Taj Swarna, Amritsar', 'hotel',
+   'Marble and quiet, ten minutes from the Golden Temple by car.',
+   600, 8200.00, 31.6340, 74.8580, null, null,
+   '{luxury,city}', false, 'Amritsar', 'Punjab', 'luxury'),
+
+  -- --------------------------------------------------------- MANALI --
+  ('29000000-0000-4000-a000-000000000131', '2e000000-0000-4000-a000-000000000003',
+   'Apple orchard guesthouse, Manali', 'hotel',
+   'Family-run rooms in the orchards above Old Manali, wood fire in the hall.',
+   600, 3400.00, 32.2600, 77.1800, null, null,
+   '{midrange,scenic,nature}', false, 'Manali', 'Himachal', 'midrange'),
+
+  ('29000000-0000-4000-a000-000000000132', '2e000000-0000-4000-a000-000000000003',
+   'Span Resort, Manali', 'hotel',
+   'Riverside cottages on the Kullu road, heated in winter.',
+   600, 8800.00, 32.2100, 77.1850, null, null,
+   '{boutique,scenic,nature}', false, 'Manali', 'Himachal', 'boutique'),
+
+  -- ------------------------------------------------------ RISHIKESH --
+  ('29000000-0000-4000-a000-000000000141', '2e000000-0000-4000-a000-000000000003',
+   'Ganga Kinare, Rishikesh', 'hotel',
+   'River-facing rooms with a private ghat, upstream of the bridges.',
+   600, 4200.00, 30.1150, 78.3000, null, null,
+   '{midrange,scenic,wellness}', false, 'Rishikesh', 'Uttarakhand', 'midrange'),
+
+  ('29000000-0000-4000-a000-000000000142', '2e000000-0000-4000-a000-000000000003',
+   'Aloha on the Ganges, Tapovan', 'hotel',
+   'Terraced garden resort above the river, pool and a yoga shala.',
+   600, 9200.00, 30.1230, 78.3170, null, null,
+   '{luxury,scenic,wellness}', false, 'Rishikesh', 'Uttarakhand', 'luxury'),
+
+  -- --------------------------------------------------------- CHOPTA --
+  -- No luxury tier here, and that is the honest answer rather than an
+  -- omission: Chopta is a meadow at 2,700m with tents and two forest huts.
+  -- The composer falls back to the nearest tier it can actually book, and the
+  -- traveler is told which stop could not be matched.
+  ('29000000-0000-4000-a000-000000000151', '2e000000-0000-4000-a000-000000000005',
+   'Forest rest house, Baniya Kund', 'hotel',
+   'Two rooms and a caretaker, twin beds, hot water in a bucket by request.',
+   600, 3600.00, 30.4820, 79.2100, null, null,
+   '{midrange,nature,scenic}', false, 'Chopta', 'Uttarakhand', 'midrange'),
+
+  -- ----------------------------------------------------------- AULI --
+  ('29000000-0000-4000-a000-000000000161', '2e000000-0000-4000-a000-000000000003',
+   'Cliff Top Club, Auli', 'hotel',
+   'Ski-in chalet rooms at the top of the ropeway, Nanda Devi from the window.',
+   600, 6800.00, 30.5300, 79.5700, null, null,
+   '{midrange,scenic,signature}', false, 'Auli', 'Uttarakhand', 'midrange'),
+
+  ('29000000-0000-4000-a000-000000000162', '2e000000-0000-4000-a000-000000000003',
+   'The Tattva, Joshimath', 'hotel',
+   'Glass-fronted suites below the slope, heated through the winter.',
+   600, 11000.00, 30.5560, 79.5620, null, null,
+   '{luxury,scenic}', false, 'Auli', 'Uttarakhand', 'luxury');
+
+-- Everything seeded before this block is the cheap option, so say so once
+-- rather than editing sixteen rows above and missing one.
+update inventory set tier = 'budget'
+ where type = 'hotel' and tier is null and id::text like '29000000%';
 
 -- --------------------------------------------------------- availability --
 -- Generated here rather than in a separate script, because the inventory

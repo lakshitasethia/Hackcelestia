@@ -4,20 +4,20 @@ import ContentPage, { Section, List } from "@/components/layout/ContentPage";
 export const metadata: Metadata = {
   title: "Terms of Service",
   description:
-    "The agreement between you and Voyage: what the platform does, what it does not promise, how pricing and cancellations work, and where liability sits.",
+    "The agreement between you and Waypoint: what the platform does, what it does not promise, how pricing and cancellations work, and where liability sits.",
 };
 
 export default function TermsPage() {
   return (
     <ContentPage
       eyebrow="Terms of Service"
-      title="The deal between you and Voyage."
-      intro="Voyage sits between you and the people who actually run your trip. These terms set out what that means in practice — what we are responsible for, and what stays with the supplier."
+      title="The deal between you and Waypoint."
+      intro="Waypoint sits between you and the people who actually run your trip. These terms set out what that means in practice — what we are responsible for, and what stays with the supplier."
       updated="23 Aug 2026"
     >
-      <Section number="01" heading="What Voyage is">
+      <Section number="01" heading="What Waypoint is">
         <p>
-          Voyage is a planning and booking platform. We let you assemble an
+          Waypoint is a planning and booking platform. We let you assemble an
           itinerary from real inventory, price it live at supplier rates, and
           book it in one checkout. We are not the hotel, airline, guide, or
           transport operator — those are independent businesses, and your stay,
@@ -32,7 +32,7 @@ export default function TermsPage() {
 
       <Section number="02" heading="Pricing">
         <p>
-          Voyage shows direct supplier rates with an itemized breakdown. We do
+          Waypoint shows direct supplier rates with an itemized breakdown. We do
           not add opaque package markups. Prices update live as you change your
           itinerary, and the total shown at checkout is the total you pay.
         </p>
@@ -62,7 +62,7 @@ export default function TermsPage() {
 
       <Section number="04" heading="Adaptive re-routing">
         <p>
-          Voyage monitors your itinerary and reschedules around disruption
+          Waypoint monitors your itinerary and reschedules around disruption
           automatically where it can. This is a best-effort service that depends
           on live supplier availability. It does not guarantee that an
           alternative exists, and it does not replace travel insurance.
@@ -77,7 +77,7 @@ export default function TermsPage() {
         <List
           items={[
             "Give accurate traveler details — names that match travel documents, and reachable contact details.",
-            "Hold the passports, visas, and vaccinations your route requires. Voyage flags common requirements but cannot confirm your eligibility to enter a country.",
+            "Hold the passports, visas, and vaccinations your route requires. Waypoint flags common requirements but cannot confirm your eligibility to enter a country.",
             "Use the platform lawfully, and do not scrape, resell, or attempt to disrupt it.",
           ]}
         />

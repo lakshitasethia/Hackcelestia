@@ -1,4 +1,4 @@
-# Voyage — Phase 2 Build Spec (the actual product)
+# Waypoint — Phase 2 Build Spec (the actual product)
 
 Product: **Personalized Dynamic Tour Planning & Tour Operations Platform** (HackCelestia PS-7)
 `plan.md` covers the Phase 1 landing page and is done. This doc covers everything behind it.

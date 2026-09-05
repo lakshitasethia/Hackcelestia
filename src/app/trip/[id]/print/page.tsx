@@ -67,6 +67,36 @@ export default async function PrintPage({ params }: { params: { id: string } }) 
     .reduce((sum, i) => sum + Number(i.cost), 0);
   const tz = trip.time_zone;
 
+  /**
+   * Every day of the trip, including the ones with nothing on them.
+   *
+   * The document used to iterate the days that *had stops*, which is not the
+   * same list. The composer leaves the last day free — it is the journey home
+   * — so a thirteen-day trip printed a header saying thirteen days and then
+   * ended at Day 12, and the reader is left wondering what happened to the
+   * last one or whether the page was cut off.
+   *
+   * An empty day printed as an empty day answers that. It is also just true:
+   * a free day is part of the itinerary, and a traveler holding this piece of
+   * paper wants to see that Thursday is theirs rather than missing.
+   */
+  const dayCount =
+    trip.starts_on && trip.ends_on
+      ? Math.max(
+          1,
+          Math.round(
+            (Date.parse(trip.ends_on) - Date.parse(trip.starts_on)) / 86_400_000
+          ) + 1
+        )
+      : days.size;
+
+  const dateOfDay = (day: number): string | null => {
+    if (!trip.starts_on) return null;
+    const when = new Date(`${trip.starts_on}T12:00:00Z`);
+    when.setUTCDate(when.getUTCDate() + day - 1);
+    return when.toISOString();
+  };
+
   // A booked stop and a planned one are different things to somebody standing
   // in an airport, so the document says which is which.
   const bookedItems = new Set(
@@ -104,11 +134,33 @@ export default async function PrintPage({ params }: { params: { id: string } }) 
         )}
       </header>
 
-      {[...days.entries()].map(([day, dayItems]) => (
-        // `break-inside: avoid` on the day, not on the page: a day that fits
-        // should not be split across two sheets, and a day that does not fit
-        // has to be allowed to break or it leaves a blank page behind it.
-        <section key={day} className="doc-day">
+      {Array.from({ length: Math.max(dayCount, days.size) }, (_, i) => i + 1).map((day) => {
+        const dayItems = days.get(day) ?? [];
+        const date = dayItems[0]?.starts_at ?? dateOfDay(day);
+
+        if (dayItems.length === 0) {
+          return (
+            <section key={day} className="doc-day">
+              <h2 className="doc-day-head">
+                <span>Day {String(day).padStart(2, "0")}</span>
+                <span className="doc-day-date">
+                  {date && formatDateLong(date, tz)}
+                </span>
+              </h2>
+              <p className="doc-note">
+                {day === dayCount
+                  ? "Travelling home. Nothing booked."
+                  : "Nothing booked — the day is yours."}
+              </p>
+            </section>
+          );
+        }
+
+        return (
+          // `break-inside: avoid` on the day, not on the page: a day that fits
+          // should not be split across two sheets, and a day that does not fit
+          // has to be allowed to break or it leaves a blank page behind it.
+          <section key={day} className="doc-day">
           <h2 className="doc-day-head">
             <span>Day {String(day).padStart(2, "0")}</span>
             <span className="doc-day-date">
@@ -148,7 +200,8 @@ export default async function PrintPage({ params }: { params: { id: string } }) 
             </tbody>
           </table>
         </section>
-      ))}
+        );
+      })}
 
       <footer className="doc-foot">
         <p className="doc-total">

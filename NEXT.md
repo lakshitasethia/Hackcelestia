@@ -1,8 +1,10 @@
 # Where this is, and what to do next
 
-Written at the end of the session that added web research, the propose/confirm
-gate and the PDF export. It exists so the next session does not have to
-rediscover things that cost real time and tokens to learn.
+Written across two sessions: the one that added web research, the propose/confirm
+gate and the PDF export, and the one that closed the remaining PS-7 gaps
+(accommodation preferences, comparing alternatives, payments, Complete and
+Review) and renamed the project to Waypoint. It exists so the next session does
+not have to rediscover things that cost real time and tokens to learn.
 
 ## The shape of the thing
 
@@ -65,28 +67,67 @@ grounding there is no reason to switch.
    about it ("N of M checked, the rest are estimates") which is defensible, but
    Dev Tier or a different search vendor would make it 15+.
 
-3. **`npm run test:apply` has 2 failing checks** — "the refusal names the
-   offending operation" and "the broken stop is NOT marked replaced". Confirmed
-   pre-existing: they fail identically on a stash of all this work. Never
-   investigated.
+   **This is the one red tick in the suite, and it is this, not a bug.**
+   `npm run test:research` asserts "most rows cite the page they came from" —
+   at least half of 35. The free tier delivers 4. The check has never passed
+   and cannot pass without paying for search, so it is a standing measurement
+   of the gap rather than a failure to chase. Deliberately *not* weakened to
+   go green: the number it reports is the honest one, and softening the
+   assertion would only hide the day the search vendor changes.
 
-4. **No test covers the traveller UI flow.** Every bug in the last stretch —
+   Note also that the Switzerland cache holds two entries with different
+   fingerprints, one with 4 sourced rows and one with none, and the test hits
+   the empty one. Clearing `research_cache` and re-warming would improve the
+   number but not enough to pass — `fingerprint()` covers destinations, days,
+   month, must-dos and currency, so the two entries came from differently
+   worded asks.
+
+3. **No test covers the traveller UI flow.** Every bug in the last stretch —
    stale verified prices, duplicate landmarks, the budget in the wrong currency,
    the missing link to the confirm step — was found by clicking, not by a suite.
    A Playwright pass over plan -> proposal -> accept -> confirm would have caught
    all four.
 
-5. **The demo needs two trips.** Switzerland shows planning; Amalfi shows
+4. **The demo needs two trips.** Switzerland shows planning; Amalfi shows
    disruption and re-planning, because it has seeded availability and spare
    alternatives. One trip doing both is downstream of item 1.
 
-6. **Invented places.** The planner prompt now names this as the worst thing it
+5. **Invented places.** The planner prompt now names this as the worst thing it
    can produce and lists real examples, after it emitted a "Schweizer Schokolade
    Factory Tour" in Bern. Hardened, not eliminated. Verification is the only real
    defence and see item 2.
 
-7. **The print view has no day 13** — the journey home has no stops, so the
-   document ends at day 12 while the header says 13 days. Harmless, reads oddly.
+
+## Closed since this was written
+
+- **`npm run test:apply`'s 2 failures were dirty seed state, not code.** After
+  `npm run db:seed` the suite passes in full, every time. The note here said
+  "confirmed pre-existing, never investigated"; investigating took one re-seed.
+  Worth remembering the next time a suite looks broken: check the database
+  before you check the diff.
+
+- **The print view's missing last day.** It iterated the days that *had stops*,
+  which is not the same list as the days of the trip — the composer leaves the
+  last one free for the journey home. It now walks `starts_on` to `ends_on` and
+  prints an empty day as an empty day ("Travelling home. Nothing booked.").
+
+- **The agent loop died on its own last step.** `withRateLimitRetry` recovers
+  from a refused `tool_choice` pin by relaxing it, but matched the error body
+  with `includes("tool_choice")` — and Groq also says *"Tool choice is
+  required, but model did not call a tool"*. Capital T, one space, no match. So
+  a re-planner that had already recorded two good proposals and simply wanted
+  to answer in prose retried the identical pinned request four times and threw.
+  Now matched with `/tool[_ ]choice/i`. This is the class of bug that takes a
+  demo down at the worst possible moment.
+
+- **A prompt addition silently cost three other fields.** Adding nine lines of
+  lodging rules to the intake prompt — in the middle, before the `party_size`
+  paragraph — made it stop extracting pace, mobility and dietary. `test:intake`
+  caught it; a `git stash` of that one file proved it was the cause rather than
+  model flakiness. Fixed by shortening the addition, moving it to the end, and
+  giving pace/mobility/dietary explicit rules of their own, which they had
+  never had. **Re-run `test:intake` after any edit to that prompt** — the
+  fields it extracts by inference are load-bearing and invisible.
 
 ## Things that are right and should not be redesigned
 
@@ -98,17 +139,29 @@ grounding there is no reason to switch.
   `scripts/test-rls.mts` passes in full and should stay that way.
 - Researched inventory is `provisional` against a `manual` vendor, so
   `confirmTrip` holds rather than reserves. Nothing researched auto-books.
+- One write path. `switchStop` (the traveler's compare-and-switch) builds a
+  one-operation plan and sends it through `validateOps` and `applyProposal`
+  rather than updating `itinerary_items` directly. It would be four lines the
+  short way and it would silently skip rewiring the dependency edges,
+  cancelling the old booking, making the new one and moving the seats. Keep new
+  itinerary writes going through that road.
+- `src/lib/trip/stage.ts` is pure and takes rows. It decides what every surface
+  tells the user to do next; keep it free of database calls so it stays
+  testable and cannot answer differently in two places.
 
 ## Running it
 
     npm run dev
     npm run test:abroad      # research -> plan -> commit, no network
     npm run test:cache       # proves a cache hit never reaches the network
+    npm run test:lodging     # accommodation preferences reach the solver
+    npm run test:compare     # compare alternatives, switch, and the ledger agrees
+    npm run test:lifecycle   # the eleven stages, payments, closing out, reviews
     npm run test:assignment  # the trip reaches operator and guide, via real RLS
     npm run test:rls
     npm run research:warm -- "<prompt>"   # offline price verification, minutes
 
-Demo accounts are `voyage-demo-2026`. **Sign in, never Create account** — signing
+Demo accounts are `waypoint-demo-2026`. **Sign in, never Create account** — signing
 up over a seeded operator email demotes it to a traveller and the guide's run
 sheet silently empties. `npm run db:seed:auth` restores it.
 

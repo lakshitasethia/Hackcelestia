@@ -19,7 +19,7 @@ import { serviceRoleClient } from "./client";
  */
 
 /**
- * Set `VOYAGE_DEFAULT_OPERATOR_ID` to choose deliberately. Without it we take
+ * Set `WAYPOINT_DEFAULT_OPERATOR_ID` to choose deliberately. Without it we take
  * the oldest operator, which is the one the deployment was seeded around.
  *
  * The research operator is excluded by name: `ingestResearch` creates it to own
@@ -27,7 +27,7 @@ import { serviceRoleClient } from "./client";
  * and handing it a live trip would put a group in the care of a bookkeeping
  * device.
  */
-const RESEARCH_OPERATOR_NAME = "Voyage Research";
+const RESEARCH_OPERATOR_NAME = "Waypoint Research";
 
 export type Assignment = {
   operatorId: string | null;
@@ -39,7 +39,7 @@ export type Assignment = {
 export async function houseAssignment(): Promise<Assignment> {
   const supabase = serviceRoleClient();
 
-  const configured = process.env.VOYAGE_DEFAULT_OPERATOR_ID?.trim();
+  const configured = process.env.WAYPOINT_DEFAULT_OPERATOR_ID?.trim();
 
   let operatorId: string | null = null;
   if (configured) {

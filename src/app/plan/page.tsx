@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ArrowRight } from "lucide-react";
 import AppNav from "@/components/layout/AppNav";
 import { getInterestTags, getOperators } from "@/lib/db/queries";
+import { LODGING_TIERS } from "@/lib/db/types";
 import IntakeBox from "@/components/concierge/IntakeBox";
 import { createTripAction } from "./actions";
 
@@ -172,6 +173,33 @@ export default async function PlanPage() {
                 placeholder="boutique, luxury, simple…"
                 className={field}
               />
+            </div>
+
+            {/* Where you sleep. Named in the brief and, until now, the one
+                stated preference this form could not collect. The options
+                mirror `inventory.tier`, so every value here can actually be
+                matched against a bed that exists. */}
+            <div className="sm:col-span-2">
+              <label className={label} htmlFor="lodging">
+                Accommodation
+              </label>
+              <select
+                id="lodging"
+                name="lodging"
+                defaultValue=""
+                className={field}
+              >
+                <option value="">No preference — cheapest that fits</option>
+                {LODGING_TIERS.map((tier) => (
+                  <option key={tier.value} value={tier.value}>
+                    {tier.label} — {tier.hint}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-2 font-sans text-xs text-muted">
+                We book the closest match in each town, and tell you where a
+                town had nothing in that bracket.
+              </p>
             </div>
 
             {operators.length > 0 && (

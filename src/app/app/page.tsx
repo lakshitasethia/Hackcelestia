@@ -6,7 +6,7 @@ import { getOperatorTrips, getSchedule } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "Voyage app" };
+export const metadata: Metadata = { title: "Waypoint app" };
 
 /**
  * Entry point into the product.

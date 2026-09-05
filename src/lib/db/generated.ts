@@ -108,9 +108,10 @@ export interface InventoryRow {
   provisional: boolean;
   country: string | null;
   time_zone: string | null;
+  tier: "budget" | "midrange" | "boutique" | "luxury" | null;
 }
 
-export type InventoryInsert = Omit<InventoryRow, "id" | "description" | "duration_min" | "base_cost" | "lat" | "lng" | "opens_at" | "closes_at" | "tags" | "weather_sensitive" | "created_at" | "city" | "region" | "to_city" | "overnight" | "source_url" | "sourced_at" | "provisional" | "country" | "time_zone"> & Partial<InventoryRow>;
+export type InventoryInsert = Omit<InventoryRow, "id" | "description" | "duration_min" | "base_cost" | "lat" | "lng" | "opens_at" | "closes_at" | "tags" | "weather_sensitive" | "created_at" | "city" | "region" | "to_city" | "overnight" | "source_url" | "sourced_at" | "provisional" | "country" | "time_zone" | "tier"> & Partial<InventoryRow>;
 
 export interface ItineraryItemsRow {
   id: string;
@@ -162,6 +163,22 @@ export interface OperatorsRow {
 
 export type OperatorsInsert = Omit<OperatorsRow, "id" | "contact" | "created_at"> & Partial<OperatorsRow>;
 
+export interface PaymentsRow {
+  id: string;
+  trip_id: string;
+  booking_id: string | null;
+  kind: "deposit" | "balance" | "refund" | "adjustment";
+  amount: number;
+  currency: string;
+  method: "bank_transfer" | "card" | "cash" | "upi" | "other";
+  reference: string | null;
+  note: string | null;
+  recorded_by: string | null;
+  created_at: string;
+}
+
+export type PaymentsInsert = Omit<PaymentsRow, "id" | "booking_id" | "currency" | "method" | "reference" | "note" | "recorded_by" | "created_at"> & Partial<PaymentsRow>;
+
 export interface ProfilesRow {
   id: string;
   role: "traveler" | "operator" | "coordinator";
@@ -204,6 +221,19 @@ export interface ResearchCacheRow {
 
 export type ResearchCacheInsert = Omit<ResearchCacheRow, "destinations" | "day_count" | "hits" | "created_at" | "used_at"> & Partial<ResearchCacheRow>;
 
+export interface ReviewsRow {
+  id: string;
+  trip_id: string;
+  item_id: string | null;
+  author_id: string | null;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ReviewsInsert = Omit<ReviewsRow, "id" | "item_id" | "author_id" | "comment" | "created_at" | "updated_at"> & Partial<ReviewsRow>;
+
 export interface TripProposalsRow {
   id: string;
   traveler_id: string | null;
@@ -241,9 +271,10 @@ export interface TripsRow {
   coordinator_phone: string | null;
   destinations: string[];
   time_zone: string;
+  completed_at: string | null;
 }
 
-export type TripsInsert = Omit<TripsRow, "id" | "traveler_id" | "operator_id" | "title" | "contact_name" | "contact_email" | "contact_phone" | "status" | "party_size" | "budget" | "currency" | "starts_on" | "ends_on" | "prefs" | "created_at" | "updated_at" | "coordinator_id" | "coordinator_name" | "coordinator_phone" | "destinations" | "time_zone"> & Partial<TripsRow>;
+export type TripsInsert = Omit<TripsRow, "id" | "traveler_id" | "operator_id" | "title" | "contact_name" | "contact_email" | "contact_phone" | "status" | "party_size" | "budget" | "currency" | "starts_on" | "ends_on" | "prefs" | "created_at" | "updated_at" | "coordinator_id" | "coordinator_name" | "coordinator_phone" | "destinations" | "time_zone" | "completed_at"> & Partial<TripsRow>;
 
 export interface VendorsRow {
   id: string;

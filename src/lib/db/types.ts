@@ -1,5 +1,5 @@
 /**
- * Domain types for the Voyage schema.
+ * Domain types for the Waypoint schema.
  *
  * Row shapes and the status/type unions are derived from `generated.ts`, which
  * is read straight off the live database — so they cannot drift from Postgres.
@@ -20,7 +20,9 @@ import type {
   MessagesRow,
   OperatorsRow,
   ProfilesRow,
+  PaymentsRow,
   ReplanProposalsRow,
+  ReviewsRow,
   TripsRow,
   VendorsRow,
 } from "./generated";
@@ -35,6 +37,8 @@ export type Message = MessagesRow;
 export type AgentRun = AgentRunsRow;
 export type AgentStep = AgentStepsRow;
 export type ItineraryItem = ItineraryItemsRow;
+export type Payment = PaymentsRow;
+export type Review = ReviewsRow;
 
 /** jsonb columns come back as `Json`; these override them with real shapes. */
 export type Trip = Omit<TripsRow, "prefs"> & { prefs: TripPrefs };
@@ -71,7 +75,29 @@ export interface TripPrefs {
   dietary?: string[];
   mobility?: string;
   style?: string;
+  /**
+   * Where they want to sleep. PS-7 names "accommodation preferences" twice and
+   * this is the field behind it: the composer matches it against
+   * `inventory.tier` when it picks a bed, and says so on the plan when the town
+   * had nothing in that bracket.
+   */
+  lodging?: LodgingTier;
 }
+
+/** The brackets a traveler actually expresses a preference in. Mirrors
+ *  `inventory.tier`, which is where the matching happens. */
+export type LodgingTier = NonNullable<InventoryRow["tier"]>;
+
+export const LODGING_TIERS: {
+  value: LodgingTier;
+  label: string;
+  hint: string;
+}[] = [
+  { value: "budget", label: "Budget", hint: "hostels, huts, dorms" },
+  { value: "midrange", label: "Mid-range", hint: "clean, private, en-suite" },
+  { value: "boutique", label: "Boutique", hint: "small and characterful" },
+  { value: "luxury", label: "Luxury", hint: "the best bed in town" },
+];
 
 /** What the disruption injector records about the cause. */
 export interface DisruptionPayload {

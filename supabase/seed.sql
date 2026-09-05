@@ -1,4 +1,4 @@
--- Voyage — seed data (Phase 2, Day 1)
+-- Waypoint — seed data (Phase 2, Day 1)
 --
 -- One operator, one Amalfi Coast group of two, five days. Dates are computed
 -- from current_date so the trip is always "starting today" whenever this runs —
@@ -156,7 +156,29 @@ values
   ('19000000-0000-4000-a000-000000000012', '0e000000-0000-4000-a000-000000000005',
    'Wine tasting, Tramonti hills', 'activity',
    'Cellar tasting, indoor.', 180, 130.00, 40.7020, 14.6320,
-   '11:00', '18:00', '{food,indoor,relaxed}', false);
+   '11:00', '18:00', '{food,indoor,relaxed}', false),
+
+  -- Two more beds in Positano, so the demo group has somewhere to move to.
+  -- Le Sirene is locked and non-refundable, which is the whole point of it —
+  -- but "compare alternatives" is a stated requirement and it needs a row on
+  -- the other side of the comparison to be worth anything.
+  ('19000000-0000-4000-a000-000000000013', '0e000000-0000-4000-a000-000000000001',
+   'Garden room, Villa Rosa', 'hotel',
+   'Lemon terrace above the Mulini road, no sea view and half the price.',
+   1440, 165.00, 40.6295, 14.4880, null, null,
+   '{coastal,midrange}', false),
+
+  ('19000000-0000-4000-a000-000000000014', '0e000000-0000-4000-a000-000000000001',
+   'Suite, Il San Pietro', 'hotel',
+   'Cliff terrace suite with a lift down to a private jetty.',
+   1440, 940.00, 40.6220, 14.4990, null, null,
+   '{coastal,luxury,signature}', false);
+
+-- Tiers for the Amalfi catalogue. Le Sirene was already tagged boutique; the
+-- other two are what a traveler is actually choosing between.
+update inventory set tier = 'boutique' where id = '19000000-0000-4000-a000-000000000001';
+update inventory set tier = 'midrange' where id = '19000000-0000-4000-a000-000000000013';
+update inventory set tier = 'luxury'   where id = '19000000-0000-4000-a000-000000000014';
 
 -- --------------------------------------------------------- availability --
 -- Five days of slots for every substitute, so search_availability has real
@@ -187,7 +209,9 @@ from (
     ('19000000-0000-4000-a000-00000000000f'::uuid, time '11:00', 20, 95.00),
     ('19000000-0000-4000-a000-000000000010'::uuid, time '19:30', 10, 260.00),
     ('19000000-0000-4000-a000-000000000011'::uuid, time '08:00', 4,  380.00),
-    ('19000000-0000-4000-a000-000000000012'::uuid, time '11:00', 10, 130.00)
+    ('19000000-0000-4000-a000-000000000012'::uuid, time '11:00', 10, 130.00),
+    ('19000000-0000-4000-a000-000000000013'::uuid, time '15:00', 6,  165.00),
+    ('19000000-0000-4000-a000-000000000014'::uuid, time '15:00', 2,  940.00)
 ) as inv(id, default_start, slots, price)
 cross join generate_series(0, 4) as d;
 

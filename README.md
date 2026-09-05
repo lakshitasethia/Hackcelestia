@@ -1,10 +1,10 @@
-# Voyage
+# Waypoint
 
 **Personalized dynamic tour planning and tour operations.** HackCelestia PS-7.
 
 A tour operator's week does not fall apart at the planning stage. It falls apart
 at 07:40 on the second morning, when the skipper calls to say the swell is too
-high, and four other bookings quietly depend on that boat. Voyage is built
+high, and four other bookings quietly depend on that boat. Waypoint is built
 around that moment: an itinerary modelled as a dependency graph, a deterministic
 engine that computes exactly what a break costs, and an agent that proposes ways
 out for a human to accept.
@@ -46,15 +46,47 @@ in Postgres so the UI and the agent cannot disagree about it.
 |---|---|---|
 | Landing site | `/` | The pitch |
 | Sign in | `/login` | Everyone — email and password, or Google |
+| Explore | `/explore` | Traveler — the catalogue by town, filtered by kind, interest and place, before any trip exists |
 | Planner | `/plan`, `/trip/[id]/build` | Traveler — describe the trip and get a composed itinerary, or fill the form and build from real inventory |
-| Itinerary | `/trip/[id]` | Traveler — the plan, live costs, what is at risk |
-| Operations | `/ops` | Operator — groups, vendors, 72-hour schedule, open disruptions |
+| Itinerary | `/trip/[id]` | Traveler — the plan, where it is in its life, live costs, payments, what is at risk |
+| Compare | `/trip/[id]/compare/[itemId]` | Traveler — one stop against every alternative in town, with the price difference and a switch |
+| Close out & review | `/trip/[id]/review` | Traveler — mark the trip finished, then rate it stop by stop |
+| Operations | `/ops` | Operator — groups, vendors, 72-hour schedule, money outstanding, open disruptions |
+| Customers | `/ops/customers` | Operator — everyone travelling, grouped across trips, with lifetime value |
+| Reviews | `/ops/reviews` | Operator — what came back, worst first, against the vendor who ran it |
 | Impact assessment | `/ops/disruption/[id]` | Operator — blast radius, candidates, the agent, the accept flow |
 | Field run sheet | `/field/[id]` | Coordinator — today and tomorrow, report or escalate, on a phone |
 
 Two of those surfaces carry a chat agent: **Vela**, the traveler's concierge, on
 `/trip/[id]`, and a read-only **copilot** on `/ops`. `/plan` has a third, smaller
 one — describe the trip in a sentence and the form fills itself in.
+
+### The lifecycle, on the screen
+
+PS-7 prints the journey it wants represented:
+
+```
+Discover → Personalize → Plan → Price → Book → Prepare
+         → Operate → Assist → Adapt → Complete → Review
+```
+
+`src/lib/trip/stage.ts` is that sequence as one pure function. It takes the
+trip, its stops, its bookings and its open disruptions, and returns which stage
+the trip is in and the single next thing to do about it. `/trip/[id]` renders it
+as a rail across the top with that action attached.
+
+It is there for the brief, but it was built for a worse reason. The actions in
+this product were spread over five surfaces with no shared account of which one
+mattered *now* — confirming lived on the build page, closing out did not exist
+at all, and the only way to know a draft needed confirming was to already know.
+Anyone using it, including the person who wrote it, had to keep the workflow in
+their head. One function that names the current stage and one obvious button is
+how that stops being true, and `npm run test:lifecycle` pins every transition so
+the button cannot drift from the state.
+
+Adapt outranks everything below it: an open disruption is the thing to deal
+with whatever else is true of the trip, which is the whole premise of the
+product.
 
 ### The disruption path, end to end
 
@@ -167,9 +199,33 @@ Worth saying plainly, because the alternative is being caught:
   structured availability is the one that did not get built. `check_vendor`
   writes the outbound approach to `messages`, so the trail exists — nothing
   reads a reply.
-- **Payments are a state machine, not a payment processor.** `bookings.state`
-  moves through held → confirmed → cancelled and the penalties are real numbers
-  the re-planner prices against; no money moves.
+- **Payments are a ledger and a state machine, not a payment processor.**
+  `bookings.state` moves through held → confirmed → cancelled and the penalties
+  are real numbers the re-planner prices against. On top of that, `payments`
+  records what an operator says was actually received — deposits, balances,
+  refunds — so the trip page and the board can both show what is owed and by
+  whom. **No card is charged anywhere in this codebase.** The claim is that an
+  operator can see and record the money, which is what "manage payments" in the
+  brief asks for; a fake checkout would have been the worse version of this.
+  The sign lives in `kind` rather than in the number, so a stray minus in a
+  form cannot turn a payment into a refund.
+
+- **Accommodation preferences reach the solver, and the catalogue had to grow
+  to make that true.** PS-7 names them twice and there was no such field. There
+  is now — `prefs.lodging`, matched against `inventory.tier` when the composer
+  picks a bed. That was only worth doing because the catalogue went from one
+  hotel per town to three: a preference with nothing to choose between is a
+  form control, not a feature. Where a town genuinely has no room in the
+  bracket asked for — Chopta is a meadow at 2,700m with tents and a forest hut
+  — it books the nearest bracket and *says which town it could not match*
+  rather than quietly downgrading the trip. `npm run test:lodging` proves the
+  bed, the bill and the warning.
+
+- **Reviews are ratings, not a reputation system.** A traveler rates the trip
+  and any stop on it; the operator reads each rating against the vendor who ran
+  that stop, worst first. Nothing aggregates into a public score, nothing is
+  shown to other travelers, and a vendor cannot reply. One rating per person
+  per stop, and re-rating replaces rather than stacks.
 - **RLS runs on the reads; the writes are still service-role, on purpose.**
   Every read in `src/lib/db/queries.ts` goes through the cookie-scoped client,
   so the policies are what decide which rows come back — `getTrip` takes an id
@@ -293,7 +349,7 @@ doing the filtering.
 | Operator | `ops@costiera-dmc.example` | The board, every group and vendor |
 | Coordinator | `marco@costiera-dmc.example` | The run sheet for her group |
 
-All three use `voyage-demo-2026` (override with `DEMO_PASSWORD`). They are
+All three use `waypoint-demo-2026` (override with `DEMO_PASSWORD`). They are
 recreated on every re-seed, so a password changed in the dashboard is undone
 rather than remembered.
 
@@ -340,6 +396,9 @@ npm run test:rls         # four people sign in; nobody sees anyone else's trip
 npm run test:disruption  # the deterministic engine, against the live database
 npm run test:field       # the coordinator run sheet, reporting and escalation
 npm run test:apply       # the write path — a plan that cannot fully apply must not half-apply
+npm run test:lodging     # accommodation preferences: the bed, the bill, and the town it could not match
+npm run test:compare     # comparing alternatives and switching to one, ledger and graph included
+npm run test:lifecycle   # the eleven stages, payments arithmetic, closing out and reviewing
 npm run test:flow        # the whole product end to end on a trip built from scratch
 npm run test:realtime    # a browser-key subscriber receives what the server broadcasts
 npm run test:replan-tools # the re-planner's five tools, without the model — costs no tokens

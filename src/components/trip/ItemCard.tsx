@@ -1,9 +1,11 @@
+import Link from "next/link";
 import {
   Bed,
   Car,
   Compass,
   Lock,
   Plane,
+  Repeat2,
   UtensilsCrossed,
   UserRound,
   AlertTriangle,
@@ -39,6 +41,12 @@ export default function ItemCard({
   dependsOn,
   currency,
   timeZone,
+  /**
+   * Show the way to the comparison screen. Off by default because this card is
+   * also rendered on the operator's and the guide's surfaces, where "swap your
+   * hotel" is not an action either of them should be offered from a read view.
+   */
+  comparable = false,
 }: {
   item: ItineraryItem;
   /** Titles of the items this one cannot happen without. */
@@ -46,6 +54,7 @@ export default function ItemCard({
   currency: string;
   /** The trip's zone, so a 04:00 start in Garhwal reads as 04:00. */
   timeZone: string;
+  comparable?: boolean;
 }) {
   const Icon = ICONS[item.type] ?? Compass;
   const statusLabel = STATUS_LABEL[item.status];
@@ -96,6 +105,21 @@ export default function ItemCard({
                 <Lock className="w-3 h-3 shrink-0" />
                 {item.lock_reason}
               </p>
+            )}
+
+            {/* "Compare alternatives" is a stated requirement, and it belongs
+                on the stop rather than behind a menu — the moment a traveler
+                wants it is the moment they are looking at the thing they are
+                unsure about. Hidden on a stop that is already gone, where
+                there is nothing to compare against. */}
+            {comparable && !dimmed && (
+              <Link
+                href={`/trip/${item.trip_id}/compare/${item.id}`}
+                className="mt-3 inline-flex items-center gap-1.5 font-sans text-xs uppercase tracking-wider font-bold text-muted hover:text-accent transition-colors"
+              >
+                <Repeat2 className="w-3.5 h-3.5" />
+                Compare alternatives
+              </Link>
             )}
           </div>
         </div>

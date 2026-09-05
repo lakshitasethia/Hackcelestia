@@ -147,7 +147,7 @@ export default function JourneyStrip() {
               From first spark to mid-trip adaptation.
             </h2>
             <p className="mt-6 text-body-lg text-muted max-w-2xl">
-              Unlike fixed agency packages that lock you into rigid templates, Voyage
+              Unlike fixed agency packages that lock you into rigid templates, Waypoint
               treats your trip as an interconnected, living itinerary constellation
               that responds in real time.
             </p>

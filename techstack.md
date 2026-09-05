@@ -1,6 +1,6 @@
-# Voyage — Tech Stack
+# Waypoint — Tech Stack
 
-Project: **Voyage** — Personalized Dynamic Tour Planning & Tour Operations Platform (HackCelestia PS-7)
+Project: **Waypoint** — Personalized Dynamic Tour Planning & Tour Operations Platform (HackCelestia PS-7)
 This doc defines the full stack. Read alongside `plan.md` (landing page build spec) before writing any code.
 
 ---

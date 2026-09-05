@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getInterestTags } from "@/lib/db/queries";
 import { CHAT_MODEL, groqClient, withRateLimitRetry } from "./runtime";
 import { TRIP_TZ } from "@/lib/format";
+import type { LodgingTier } from "@/lib/db/types";
 
 /**
  * Intake — prose in, a structured trip spec out.
@@ -43,6 +44,9 @@ const SpecSchema = z.object({
   dietary: z.array(z.string()).nullish(),
   mobility: z.string().nullish(),
   style: z.string().nullish(),
+  /** Where they want to sleep, in the four brackets the catalogue is graded
+   *  in. A free-text answer would not match anything, so this is an enum. */
+  lodging: z.enum(["budget", "midrange", "boutique", "luxury"]).nullish(),
   /** What it could not work out, so the form can say so rather than guessing. */
   unclear: z.array(z.string()).nullish(),
 });
@@ -63,6 +67,7 @@ export type TripSpec = {
   dietary: string[];
   mobility: string | null;
   style: string | null;
+  lodging: LodgingTier | null;
   unclear: string[];
 };
 
@@ -120,6 +125,7 @@ a wrong budget is worse than a blank one.
  "transport":string|null,
  "interests":string[],"pace":"relaxed"|"moderate"|"packed"|null,
  "dietary":string[],"mobility":string|null,"style":string|null,
+ "lodging":"budget"|"midrange"|"boutique"|"luxury"|null,
  "unclear":string[]}
 
 interests MUST be chosen from exactly this list, and may be empty:
@@ -157,7 +163,18 @@ party_size counts people, so "me and my wife" is 2; if they say nothing, leave
 it null rather than assuming 1. Only fill dates they actually gave; "next
 spring" is not a date, it is an entry in unclear. Dates without a year mean the
 next such date in the future.
-Put anything you genuinely could not pin down in unclear, in their own words.`,
+Put anything you genuinely could not pin down in unclear, in their own words.
+
+pace, mobility and dietary are stated in passing, never as labels, and all
+three are easy to read straight past. "Nothing rushed" or "take it slow" is
+pace relaxed; "we want to see everything" is packed. "She can't manage steep
+steps" is mobility, in their own words. "No meat for two of us" is a dietary
+entry. Fill each one whenever they said something about it.
+
+lodging is where they want to sleep, and only when they said: "hostel" or
+"cheap" is budget, "a decent hotel" is midrange, "somewhere with character" is
+boutique, "five star" or "splurge" is luxury. A budget figure is not a lodging
+preference, and null is the right answer when they did not mention a room.`,
           },
           { role: "user", content: prose },
         ],
@@ -209,6 +226,7 @@ Put anything you genuinely could not pin down in unclear, in their own words.`,
       dietary: (value.dietary ?? []).map((d) => d.trim()).filter(Boolean),
       mobility: value.mobility?.trim() || null,
       style: value.style?.trim() || null,
+      lodging: value.lodging ?? null,
       unclear: (value.unclear ?? []).map((u) => u.trim()).filter(Boolean),
     };
 

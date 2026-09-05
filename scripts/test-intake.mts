@@ -45,5 +45,39 @@ check(vague.partySize === null, "invents no party size", String(vague.partySize)
 check(vague.startsOn === null, "'next spring' is not a date", String(vague.startsOn));
 check(vague.unclear.length > 0, "says what it could not pin down", vague.unclear.join("; "));
 
+/**
+ * Accommodation preferences, which PS-7 names twice.
+ *
+ * Both directions matter and the second one more. Reading "somewhere really
+ * nice" as luxury is the easy half; *not* reading a small budget as a
+ * preference for a hostel is the half that would quietly downgrade the trip of
+ * someone who wanted to spend their money on one good hotel.
+ */
+const posh = await extractTripSpec(
+  "Two of us in Rishikesh for four nights in October 2026. Splurge on the hotel — " +
+  "we want somewhere really nice with a pool."
+);
+check(posh.lodging === "luxury", "reads 'splurge on the hotel' as luxury", String(posh.lodging));
+
+const thrifty = await extractTripSpec(
+  "Backpacking around Manali for a week in October 2026, hostels are fine, total budget 8000 rupees."
+);
+check(thrifty.lodging === "budget", "reads 'hostels are fine' as budget", String(thrifty.lodging));
+
+check(
+  vague.lodging === null,
+  "a trip that never mentions a room has no lodging preference",
+  String(vague.lodging)
+);
+
+const tight = await extractTripSpec(
+  "Delhi for three days in October 2026, two of us, budget 9000 rupees."
+);
+check(
+  tight.lodging === null,
+  "a small budget is not, on its own, a preference for a hostel",
+  String(tight.lodging)
+);
+
 console.log(`\n${failures === 0 ? "All checks passed." : `${failures} check(s) failed.`}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -1,4 +1,4 @@
--- Voyage — the coordinator surface (Phase 2, Day 6)
+-- Waypoint — the coordinator surface (Phase 2, Day 6)
 --
 -- Two additions, both driven by the same gap: the plan gives the guide on the
 -- ground a lens on the trip, and nothing in the Day 1 schema said which guide,

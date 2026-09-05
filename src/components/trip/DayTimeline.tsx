@@ -8,6 +8,7 @@ export default function DayTimeline({
   titleById,
   currency,
   timeZone,
+  comparable = false,
 }: {
   day: number;
   items: ItineraryItem[];
@@ -16,6 +17,8 @@ export default function DayTimeline({
   currency: string;
   /** The trip's own zone. Item times are absolute; this is how they read. */
   timeZone: string;
+  /** Passed through to each card; only the traveler's own view sets it. */
+  comparable?: boolean;
 }) {
   const dayTotal = items
     .filter((i) => i.status !== "cancelled" && i.status !== "replaced")
@@ -43,6 +46,7 @@ export default function DayTimeline({
             timeZone={timeZone}
             item={item}
             currency={currency}
+            comparable={comparable}
             dependsOn={item.depends_on
               .map((id) => titleById.get(id))
               .filter((t): t is string => Boolean(t))}

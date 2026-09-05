@@ -29,6 +29,7 @@ export const spec: TripSpec = {
   dietary: [],
   mobility: null,
   style: null,
+  lodging: null,
   unclear: [],
 };
 

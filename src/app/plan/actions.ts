@@ -82,6 +82,12 @@ export async function createTripAction(formData: FormData): Promise<void> {
       .filter(Boolean),
     mobility: String(formData.get("mobility") || "").trim() || undefined,
     style: String(formData.get("style") || "").trim() || undefined,
+    // "" is the "no preference" option on the form; undefined keeps it out of
+    // the jsonb entirely rather than storing an empty string the composer
+    // would then have to special-case.
+    lodging: (String(formData.get("lodging") || "") || undefined) as
+      | TripPrefs["lodging"]
+      | undefined,
   };
 
   const tripId = await createTrip({
@@ -289,6 +295,7 @@ export async function acceptProposalAction(proposalId: string): Promise<AcceptRe
         dietary: spec.dietary,
         mobility: spec.mobility ?? undefined,
         style: spec.style ?? undefined,
+        lodging: spec.lodging ?? undefined,
       },
       travelerId: viewer.id,
       operatorId: house.operatorId,

@@ -81,6 +81,18 @@ export function startOfLocalDay(offsetDays = 0, tz = TRIP_TZ): Date {
   return new Date(midnight.getTime() - zoneOffsetMs(midnight, tz));
 }
 
+/**
+ * The calendar date, in a named zone, as YYYY-MM-DD.
+ *
+ * "Has this trip finished?" is a question about the date where the trip is,
+ * not where the server is. A group whose last day is today in Positano has not
+ * finished at 23:00 UTC, and comparing `ends_on` against a UTC date says they
+ * have. `en-CA` is the shortest route to an ISO-shaped date from `Intl`.
+ */
+export function localDay(when: Date | string = new Date(), tz = TRIP_TZ): string {
+  return new Date(when).toLocaleDateString("en-CA", { timeZone: tz });
+}
+
 /** "Today" / "Tomorrow" / a weekday, for a run sheet that spans a day boundary. */
 export function relativeDayLabel(iso: string, tz = TRIP_TZ): string {
   const key = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: tz });

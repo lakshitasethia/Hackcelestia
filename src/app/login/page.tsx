@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Sign in",
   description:
-    "Sign in to Voyage — the itinerary, the operations board and the field run sheet, on one trip.",
+    "Sign in to Waypoint — the itinerary, the operations board and the field run sheet, on one trip.",
   robots: { index: false, follow: false },
 };
 
@@ -48,7 +48,7 @@ export default async function LoginPage({
               V
             </div>
             <span className="font-display font-extrabold text-lg tracking-tight text-fg">
-              VOYAGE
+              WAYPOINT
             </span>
           </Link>
           <Link
@@ -112,7 +112,7 @@ export default async function LoginPage({
 
       <footer className="border-t border-line">
         <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 py-6 flex flex-wrap gap-x-8 gap-y-2 font-sans text-xs uppercase tracking-wider text-muted">
-          <span>Voyage — HackCelestia PS-7</span>
+          <span>Waypoint — HackCelestia PS-7</span>
           <Link href="/privacy" className="hover:text-accent transition-colors">
             Privacy
           </Link>

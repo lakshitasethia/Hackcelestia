@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertTriangle, ArrowUpRight } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Star, Users } from "lucide-react";
 import AppNav from "@/components/layout/AppNav";
 import LiveRefresh from "@/components/realtime/LiveRefresh";
 import ScheduleBoard from "@/components/ops/ScheduleBoard";
@@ -12,6 +12,7 @@ import {
   getOperatorTrips,
   getSchedule,
   getOperators,
+  getOperatorMoney,
   getVendors,
   operatorTotals,
 } from "@/lib/db/queries";
@@ -49,6 +50,8 @@ export default async function OpsPage() {
     trips,
     schedule
   );
+  // Needs the trip list, so it cannot join the batch above.
+  const money = await getOperatorMoney(trips);
 
   return (
     <main
@@ -73,9 +76,29 @@ export default async function OpsPage() {
             </h1>
           </div>
 
-          <Link href="/plan" className="btn-solid px-6 py-3 text-xs tracking-wider">
-            New trip
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* The rest of the operator's job, which lived at URLs nobody had
+                been told about. "Manage customers, bookings, vendors,
+                payments" is a list from the brief, and a list you cannot
+                navigate to is not managed. */}
+            <Link
+              href="/ops/customers"
+              className="inline-flex items-center gap-2 border border-line px-5 py-3 font-sans text-xs uppercase tracking-wider font-bold text-muted hover:text-fg hover:border-fg transition-colors"
+            >
+              <Users className="w-3.5 h-3.5" />
+              Customers
+            </Link>
+            <Link
+              href="/ops/reviews"
+              className="inline-flex items-center gap-2 border border-line px-5 py-3 font-sans text-xs uppercase tracking-wider font-bold text-muted hover:text-fg hover:border-fg transition-colors"
+            >
+              <Star className="w-3.5 h-3.5" />
+              Reviews
+            </Link>
+            <Link href="/plan" className="btn-solid px-6 py-3 text-xs tracking-wider">
+              New trip
+            </Link>
+          </div>
         </header>
 
         {/* Disruptions come first and nothing else moves above them. An operator
@@ -117,10 +140,19 @@ export default async function OpsPage() {
         )}
 
         <section className="mt-10 border-y border-line py-8">
-          <dl className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-8">
+          <dl className="grid grid-cols-2 lg:grid-cols-5 gap-x-8 gap-y-8">
             {[
               { label: "Live trips", value: String(liveTrips), note: `${travellers} travelers on the ground` },
               { label: "Booked value", value: formatMoney(booked), note: "across all groups" },
+              {
+                label: "Outstanding",
+                value: formatMoney(Math.abs(money.outstanding)),
+                note:
+                  money.outstanding > 0
+                    ? `${formatMoney(money.paid)} collected so far`
+                    : "everything collected",
+                flag: money.outstanding > 0,
+              },
               { label: "Next 72 hours", value: String(schedule.length), note: "scheduled movements" },
               {
                 label: "Flagged",

@@ -1,4 +1,4 @@
-# Voyage — the three-minute demo
+# Waypoint — the three-minute demo
 
 Rehearse this. A rehearsed three minutes beats two more features, and every
 number below is one you will be asked to justify.
@@ -31,10 +31,10 @@ browser sessions — not three tabs, and not three windows of the same profile.
 
 | Window | Sign in as | Password | Then go to |
 |---|---|---|---|
-| A — normal Chrome | `ops@costiera-dmc.example` | `voyage-demo-2026` | `/ops` |
-| B — Chrome incognito | `ananya@example.com` | `voyage-demo-2026` | `/trip/<id>` |
-| C — a second browser (Safari, Firefox, or a second Chrome profile) | `marco@costiera-dmc.example` | `voyage-demo-2026` | `/field` |
-| D — *optional, a third browser or profile* | `stranger@example.com` | `voyage-demo-2026` | the **same** `/trip/<id>` URL as B |
+| A — normal Chrome | `ops@costiera-dmc.example` | `waypoint-demo-2026` | `/ops` |
+| B — Chrome incognito | `ananya@example.com` | `waypoint-demo-2026` | `/trip/<id>` |
+| C — a second browser (Safari, Firefox, or a second Chrome profile) | `marco@costiera-dmc.example` | `waypoint-demo-2026` | `/field` |
+| D — *optional, a third browser or profile* | `stranger@example.com` | `waypoint-demo-2026` | the **same** `/trip/<id>` URL as B |
 
 All four accounts are recreated by `npm run db:seed`, so a re-seed never
 locks you out. Two incognito windows share one session, which is why C has to

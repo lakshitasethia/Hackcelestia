@@ -26,7 +26,7 @@ const { createClient } = await import("@supabase/supabase-js");
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const service = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const password = process.env.DEMO_PASSWORD?.trim() || "voyage-demo-2026";
+const password = process.env.DEMO_PASSWORD?.trim() || "waypoint-demo-2026";
 
 const TRIP = "7a000000-0000-4000-a000-000000000001";
 
@@ -106,10 +106,64 @@ try {
   check("...without hiding them from the traveler",
     (travelerItems ?? []).length > 0, `${(travelerItems ?? []).length} stops`);
 
-  for (const table of ["bookings", "disruptions", "agent_runs", "replan_proposals"]) {
+  /**
+   * `payments` and `reviews` are here for the reason the whole file exists.
+   *
+   * Both inherit visibility through `exists (select 1 from trips ...)`, a
+   * subquery that carries no auth check of its own and is safe only because
+   * Postgres applies `trips`' own RLS inside it. If that assumption were ever
+   * wrong, every group's money and every rating would be readable by anyone
+   * with an account — and reading the policy would not tell you, because the
+   * policy looks identical either way.
+   */
+  for (const table of [
+    "bookings",
+    "disruptions",
+    "agent_runs",
+    "replan_proposals",
+    "payments",
+    "reviews",
+  ]) {
     const { data } = await stranger.from(table).select("id").limit(5);
     check(`a stranger reads no ${table}`, (data ?? []).length === 0);
   }
+
+  // A negative that only means something if the positive is also true: an
+  // empty table would pass the loop above for the wrong reason.
+  await admin.from("payments").insert({
+    trip_id: TRIP,
+    kind: "deposit",
+    amount: 250,
+    currency: "EUR",
+  });
+  await admin.from("reviews").insert({
+    trip_id: TRIP,
+    rating: 4,
+    comment: "RLS probe",
+  });
+
+  const { data: strangerMoney } = await stranger
+    .from("payments").select("id").eq("trip_id", TRIP);
+  check("a stranger still reads no payments once there are some to read",
+    (strangerMoney ?? []).length === 0);
+
+  const { data: travelerMoney } = await traveler
+    .from("payments").select("id").eq("trip_id", TRIP);
+  check("...but the traveler reads their own",
+    (travelerMoney ?? []).length > 0, `${(travelerMoney ?? []).length} row(s)`);
+
+  const { data: strangerReviews } = await stranger
+    .from("reviews").select("id").eq("trip_id", TRIP);
+  check("a stranger reads no reviews once there are some to read",
+    (strangerReviews ?? []).length === 0);
+
+  const { data: operatorReviews } = await operator
+    .from("reviews").select("id").eq("trip_id", TRIP);
+  check("...but the operator running the trip reads them",
+    (operatorReviews ?? []).length > 0, `${(operatorReviews ?? []).length} row(s)`);
+
+  await admin.from("payments").delete().eq("trip_id", TRIP).eq("amount", 250);
+  await admin.from("reviews").delete().eq("trip_id", TRIP).eq("comment", "RLS probe");
 
   // -- writes ---------------------------------------------------------------
 

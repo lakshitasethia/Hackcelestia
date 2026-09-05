@@ -7,9 +7,22 @@ import LiveRefresh from "@/components/realtime/LiveRefresh";
 import Concierge from "@/components/concierge/Concierge";
 import TripSummary from "@/components/trip/TripSummary";
 import DayTimeline from "@/components/trip/DayTimeline";
-import { getBookings, getItems, getTrip, groupByDay } from "@/lib/db/queries";
+import JourneyRail from "@/components/trip/JourneyRail";
+import PaymentPanel from "@/components/trip/PaymentPanel";
+import {
+  getBookings,
+  getItems,
+  getOpenDisruptions,
+  getPayments,
+  getReviews,
+  getTrip,
+  groupByDay,
+  summarizePayments,
+} from "@/lib/db/queries";
 import { getConciergeThread } from "@/lib/agent/thread";
-import { formatDate } from "@/lib/format";
+import { getViewer } from "@/lib/auth/session";
+import { tripStage } from "@/lib/trip/stage";
+import { formatDate, localDay } from "@/lib/format";
 
 /** Always hit the database — an itinerary that re-plans mid-trip must never be
  *  served from a build-time snapshot. */
@@ -39,14 +52,36 @@ export default async function TripPage({
   const trip = await getTrip(params.id);
   if (!trip) notFound();
 
-  const [items, bookings, thread] = await Promise.all([
-    getItems(trip.id),
-    getBookings(trip.id),
-    getConciergeThread(trip.id),
-  ]);
+  const [items, bookings, thread, payments, reviews, disruptions, viewer] =
+    await Promise.all([
+      getItems(trip.id),
+      getBookings(trip.id),
+      getConciergeThread(trip.id),
+      getPayments(trip.id),
+      getReviews(trip.id),
+      getOpenDisruptions(trip.id),
+      getViewer(),
+    ]);
 
   const days = groupByDay(items);
   const titleById = new Map(items.map((i) => [i.id, i.title]));
+
+  /**
+   * Where this trip is in the lifecycle the brief prints, and the one thing to
+   * do about it. Computed here and rendered at the top, because the complaint
+   * this answers — "I built this and I still cannot tell which button is the
+   * next one" — is not solved by adding another link somewhere.
+   */
+  const stage = tripStage({
+    trip,
+    items,
+    bookings,
+    reviews,
+    openDisruptions: disruptions.length,
+    today: localDay(new Date(), trip.time_zone),
+  });
+
+  const money = summarizePayments(items, bookings, payments);
 
   return (
     <main
@@ -111,7 +146,9 @@ export default async function TripPage({
           {/* Preferences are the intake agent's structured output; showing them
               back is how a traveler knows the plan was built from what they
               actually said. */}
-          {(trip.prefs.interests?.length || trip.prefs.pace) && (
+          {(trip.prefs.interests?.length ||
+            trip.prefs.pace ||
+            trip.prefs.lodging) && (
             <div className="lg:col-span-4 lg:pl-10 lg:border-l border-line">
               <span className="font-display uppercase text-label tracking-label text-accent">
                 Planned around
@@ -120,6 +157,10 @@ export default async function TripPage({
                 {[
                   trip.prefs.pace,
                   trip.prefs.style,
+                  // Prefixed, because "luxury" on its own next to "food" and
+                  // "relaxed" reads as another interest rather than as the
+                  // answer to where they sleep.
+                  trip.prefs.lodging && `${trip.prefs.lodging} rooms`,
                   ...(trip.prefs.interests ?? []),
                   ...(trip.prefs.dietary ?? []),
                   trip.prefs.mobility,
@@ -139,7 +180,21 @@ export default async function TripPage({
         </header>
 
         <div className="mt-12">
+          <JourneyRail stage={stage} />
+        </div>
+
+        <div className="mt-8">
           <TripSummary trip={trip} items={items} bookings={bookings} />
+        </div>
+
+        <div className="mt-8">
+          <PaymentPanel
+            tripId={trip.id}
+            summary={money}
+            currency={trip.currency}
+            timeZone={trip.time_zone}
+            canRecord={viewer?.role === "operator"}
+          />
         </div>
 
         {days.size === 0 ? (
@@ -151,6 +206,7 @@ export default async function TripPage({
             {[...days].map(([day, dayItems]) => (
               <DayTimeline
                 timeZone={trip.time_zone}
+                comparable
                 key={day}
                 day={day}
                 items={dayItems}

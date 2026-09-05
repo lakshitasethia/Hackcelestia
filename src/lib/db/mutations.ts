@@ -969,3 +969,274 @@ export async function findOpenDisruptionFor(
 
   return (data as { id: string } | null)?.id ?? null;
 }
+
+/**
+ * Swap one stop for a catalogue option the traveler has compared it against.
+ *
+ * The whole body of this is deliberately a detour. It would be four lines to
+ * update `itinerary_items.inventory_id` and be done; instead it builds a
+ * one-operation plan, sends it through `validateOps`, records it as a
+ * `replan_proposals` row and hands it to `applyProposal`.
+ *
+ * That is the same road an operator's storm re-plan travels, and it is the
+ * only road that does the things a swap actually needs: rewiring the
+ * dependency edges so whatever came after the old stop now follows the new
+ * one, cancelling the old booking, making the new one, and moving the
+ * availability seats atomically. Every one of those is a way for a shortcut to
+ * leave the itinerary and the bookings disagreeing, and none of them is
+ * visible in the UI until a group turns up somewhere with no reservation.
+ *
+ * Authorization is the caller's job — see the note at the top of this file.
+ * `switchStopAction` calls `assertTripAccess` before it gets here.
+ */
+export async function switchStop(input: {
+  tripId: string;
+  itemId: string;
+  inventoryId: string;
+  startsAt: string;
+}): Promise<{ proposalId: string; costDelta: number; applied: number }> {
+  const { validateOps } = await import("@/lib/agent/plan");
+  const supabase = serviceRoleClient();
+
+  const { data: itemRow } = await supabase
+    .from("itinerary_items")
+    .select("id, trip_id, title")
+    .eq("id", input.itemId)
+    .maybeSingle();
+
+  const item = itemRow as { id: string; trip_id: string; title: string } | null;
+  // Both ids arrive from a form. The guard above proved the *trip* is the
+  // caller's; this proves the stop belongs to that trip, which is the half a
+  // trip-scoped check cannot see.
+  if (!item || item.trip_id !== input.tripId) {
+    throw new Error("That stop is not on this trip.");
+  }
+
+  const { data: invRow } = await supabase
+    .from("inventory")
+    .select("duration_min, title")
+    .eq("id", input.inventoryId)
+    .maybeSingle();
+
+  const inventory = invRow as { duration_min: number; title: string } | null;
+  if (!inventory) throw new Error("That option is no longer in the catalogue.");
+
+  const endsAt = new Date(
+    Date.parse(input.startsAt) + inventory.duration_min * 60_000
+  ).toISOString();
+
+  const { errors, normalised, costDelta } = await validateOps(
+    input.tripId,
+    [
+      {
+        op: "replace",
+        item_id: input.itemId,
+        with_inventory_id: input.inventoryId,
+        starts_at: input.startsAt,
+        ends_at: endsAt,
+        reason: "traveler compared and switched",
+      },
+    ],
+    /**
+     * A traveler may not switch a stop an operator is mid-way through
+     * re-planning. Applying it would set the stop back to `confirmed` and
+     * quietly un-flag a live problem — the same trap the concierge is held
+     * away from, and the reason `refuseAtRisk` exists at all.
+     */
+    { refuseAtRisk: true }
+  );
+
+  if (errors.length) throw new Error(errors[0]);
+
+  const { data: proposalRow, error } = await supabase
+    .from("replan_proposals")
+    .insert({
+      trip_id: input.tripId,
+      source: "traveler",
+      plan: normalised,
+      cost_delta: costDelta,
+      rationale: `Traveler switched "${item.title}" to "${inventory.title}" after comparing alternatives.`,
+      state: "draft",
+    })
+    .select("id")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  const proposalId = (proposalRow as { id: string }).id;
+  const { applied } = await applyProposal(proposalId);
+
+  return { proposalId, costDelta, applied };
+}
+
+// --------------------------------------------------------------- payments --
+
+/**
+ * Write down money that moved.
+ *
+ * A ledger entry, not a charge. Nothing here talks to a payment processor and
+ * the product does not claim it does — what an operator gets is the ability to
+ * see and record what a group owes and has paid, which is the "payments" in
+ * PS-7's list of things they must manage centrally.
+ *
+ * Sign lives in `kind`, so a refund is a positive amount. See
+ * `summarizePayments` for the arithmetic and the migration for why.
+ */
+export async function recordPayment(input: {
+  tripId: string;
+  kind: "deposit" | "balance" | "refund" | "adjustment";
+  amount: number;
+  method?: "bank_transfer" | "card" | "cash" | "upi" | "other";
+  reference?: string | null;
+  note?: string | null;
+  recordedBy?: string | null;
+}): Promise<string> {
+  if (!(input.amount > 0)) {
+    throw new Error("A payment has to be more than zero.");
+  }
+
+  const supabase = serviceRoleClient();
+
+  // Denominated in the trip's own currency. Storing it on the row rather than
+  // joining for it means a historic payment still reads correctly if the trip
+  // is ever re-priced.
+  const { data: tripRow } = await supabase
+    .from("trips")
+    .select("currency")
+    .eq("id", input.tripId)
+    .single();
+
+  const { data, error } = await supabase
+    .from("payments")
+    .insert({
+      trip_id: input.tripId,
+      kind: input.kind,
+      amount: input.amount,
+      currency: (tripRow as { currency: string } | null)?.currency ?? "INR",
+      method: input.method ?? "bank_transfer",
+      reference: input.reference ?? null,
+      note: input.note ?? null,
+      recorded_by: input.recordedBy ?? null,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw new Error(`recordPayment: ${error.message}`);
+  return (data as { id: string }).id;
+}
+
+// ------------------------------------------------------ complete & review --
+
+/**
+ * Close a trip out.
+ *
+ * `trips.status` has carried a 'completed' value since the first migration and
+ * nothing ever set it, which meant the last two stages of the lifecycle in the
+ * brief — Complete, then Review — had no way to begin. This is that door.
+ *
+ * It refuses to close a trip that is still running, because a completed trip
+ * is what unlocks reviewing and a group cannot rate a dinner they have not
+ * eaten. It does not refuse on an unpaid balance: chasing money is a separate
+ * job from admitting the trip is over, and conflating them means an operator
+ * cannot close their books on a group that still owes them.
+ */
+export async function completeTrip(tripId: string): Promise<void> {
+  const supabase = serviceRoleClient();
+
+  const { data: tripRow } = await supabase
+    .from("trips")
+    .select("status, ends_on")
+    .eq("id", tripId)
+    .single();
+
+  const trip = tripRow as { status: string; ends_on: string | null } | null;
+  if (!trip) throw new Error("completeTrip: no such trip");
+  if (trip.status === "completed") return;
+  if (trip.status === "draft" || trip.status === "quoted") {
+    throw new Error("A trip that was never confirmed cannot be completed.");
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (trip.ends_on && trip.ends_on > today) {
+    throw new Error(
+      `This trip runs until ${trip.ends_on}. You can close it out once it has finished.`
+    );
+  }
+
+  await supabase
+    .from("trips")
+    .update({ status: "completed", completed_at: new Date().toISOString() })
+    .eq("id", tripId);
+}
+
+/**
+ * Rate the trip, or one stop on it.
+ *
+ * `itemId: null` is the trip-level review — the Review stage in the brief.
+ * Per-stop rows are what make it useful to an operator, because "the group
+ * rated the Chopta camp 2" is a conversation with a vendor and "the group
+ * enjoyed themselves" is not.
+ *
+ * Re-rating replaces rather than stacks, so a traveler changing their mind
+ * does not count twice against a vendor.
+ */
+export async function saveReview(input: {
+  tripId: string;
+  itemId?: string | null;
+  authorId: string | null;
+  rating: number;
+  comment?: string | null;
+}): Promise<void> {
+  const rating = Math.round(input.rating);
+  if (rating < 1 || rating > 5) throw new Error("Ratings run from 1 to 5.");
+
+  const supabase = serviceRoleClient();
+
+  /**
+   * Matched by hand rather than with `upsert`.
+   *
+   * The unique index is on `coalesce(item_id, <zero uuid>)`, because SQL treats
+   * two nulls as distinct and a plain unique index would have let one person
+   * leave any number of trip-level reviews. PostgREST cannot name an expression
+   * index as a conflict target, so a read-then-write is what makes the
+   * constraint reachable from here.
+   */
+  const base = supabase.from("reviews").select("id").eq("trip_id", input.tripId);
+
+  // Both of these are nullable, and `.eq(col, null)` does not match a null —
+  // it compares against the string "null" and quietly finds nothing, which is
+  // how re-rating started inserting a second row instead of updating the
+  // first. Each has to branch to `.is()` when absent.
+  const byAuthor = input.authorId
+    ? base.eq("author_id", input.authorId)
+    : base.is("author_id", null);
+
+  const existing = await (input.itemId
+    ? byAuthor.eq("item_id", input.itemId)
+    : byAuthor.is("item_id", null)
+  ).maybeSingle();
+
+  const row = existing.data as { id: string } | null;
+
+  if (row) {
+    const { error } = await supabase
+      .from("reviews")
+      .update({
+        rating,
+        comment: input.comment ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", row.id);
+    if (error) throw new Error(`saveReview: ${error.message}`);
+    return;
+  }
+
+  const { error } = await supabase.from("reviews").insert({
+    trip_id: input.tripId,
+    item_id: input.itemId ?? null,
+    author_id: input.authorId,
+    rating,
+    comment: input.comment ?? null,
+  });
+  if (error) throw new Error(`saveReview: ${error.message}`);
+}

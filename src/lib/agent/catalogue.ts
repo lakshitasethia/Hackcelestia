@@ -271,7 +271,7 @@ export async function ingestResearch(research: ResearchResult): Promise<IngestRe
   await supabase
     .from("operators")
     .upsert(
-      { id: RESEARCH_OPERATOR, name: "Voyage Research", contact: "research@voyage.example" } as never,
+      { id: RESEARCH_OPERATOR, name: "Waypoint Research", contact: "research@waypoint.example" } as never,
       { onConflict: "id" }
     );
 

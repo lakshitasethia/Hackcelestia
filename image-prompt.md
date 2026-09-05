@@ -1,10 +1,10 @@
-# Image Generation Brief — VOYAGE Landing Page
+# Image Generation Brief — WAYPOINT Landing Page
 
 Copy everything below the line into Gemini.
 
 ---
 
-You are generating photography for an existing, finished landing page called **VOYAGE** (a luxury dynamic tour-planning platform). The site's design, CSS, and layout are **already complete and approved**. Your job is **only** to produce image files.
+You are generating photography for an existing, finished landing page called **WAYPOINT** (a luxury dynamic tour-planning platform). The site's design, CSS, and layout are **already complete and approved**. Your job is **only** to produce image files.
 
 ## HARD CONSTRAINTS — READ FIRST
 

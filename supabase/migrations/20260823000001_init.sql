@@ -1,4 +1,4 @@
--- Voyage — initial schema (Phase 2, Day 1)
+-- Waypoint — initial schema (Phase 2, Day 1)
 --
 -- Status/type columns are text + CHECK rather than Postgres enums on purpose:
 -- adding a value to an enum mid-build is an ALTER TYPE that cannot always run

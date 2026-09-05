@@ -25,7 +25,7 @@ export default function FeatureShowcase() {
               Designed for granular control, engineered for effortless flow.
             </h2>
             <p className="mt-6 text-body-lg text-muted max-w-2xl">
-              Four architectural decisions separate a Voyage itinerary from a fixed
+              Four architectural decisions separate a Waypoint itinerary from a fixed
               agency package — modular components, visible trade-offs, supplier-rate
               pricing, and a plan that repairs itself.
             </p>
@@ -242,7 +242,7 @@ export default function FeatureShowcase() {
                   <span className="font-bold text-fg">$580.00</span>
                 </div>
                 <div className="flex justify-between items-center py-1.5 text-muted font-bold bg-surface px-2">
-                  <span>Voyage Dynamic Engine Fee & Real-time Support</span>
+                  <span>Waypoint Dynamic Engine Fee & Real-time Support</span>
                   <span className="text-accent">INCLUDED ($0)</span>
                 </div>
               </div>
@@ -257,7 +257,7 @@ export default function FeatureShowcase() {
               Live, transparent pricing as you build.
             </h3>
             <p className="text-base text-muted leading-relaxed mb-6 font-medium">
-              Traditional tour agencies lump everything into an opaque bundled number with 25–40% hidden margins. On Voyage, every hotel night, private guide, and helicopter transfer is priced directly at wholesale live cost.
+              Traditional tour agencies lump everything into an opaque bundled number with 25–40% hidden margins. On Waypoint, every hotel night, private guide, and helicopter transfer is priced directly at wholesale live cost.
             </p>
             <div className="flex items-center gap-3 text-xs font-sans text-muted">
               <ShieldCheck className="w-4 h-4 text-accent" />
@@ -284,7 +284,7 @@ export default function FeatureShowcase() {
                 Adapt on the fly when reality happens.
               </h3>
               <p className="text-base text-muted leading-relaxed mb-6 font-medium">
-                Flights get delayed, typhoons roll in, mountain passes close. Rather than ruining your trip or leaving you stranded on phone trees, Voyage’s dependency engine automatically calculates downstream impacts and reschedules affected bookings in seconds.
+                Flights get delayed, typhoons roll in, mountain passes close. Rather than ruining your trip or leaving you stranded on phone trees, Waypoint’s dependency engine automatically calculates downstream impacts and reschedules affected bookings in seconds.
               </p>
 
               {/* Interactive Simulator Trigger */}

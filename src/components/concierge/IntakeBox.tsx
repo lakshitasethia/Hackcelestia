@@ -64,6 +64,7 @@ export default function IntakeBox() {
       setValue("endsOn", spec.endsOn, "end date");
       setValue("pace", spec.pace, "pace");
       setValue("style", spec.style, "style");
+      setValue("lodging", spec.lodging, "accommodation");
       setValue("mobility", spec.mobility, "access needs");
       if (spec.dietary.length) setValue("dietary", spec.dietary.join(", "), "dietary");
 

@@ -28,7 +28,7 @@ const check = (ok: boolean, label: string, detail = "") => {
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const password = process.env.DEMO_PASSWORD || "voyage-demo-2026";
+const password = process.env.DEMO_PASSWORD || "waypoint-demo-2026";
 
 const house = await houseAssignment();
 console.log(`house operator=${house.operatorId} coordinator=${house.coordinatorName}`);
@@ -37,7 +37,7 @@ check(Boolean(house.coordinatorName), "that operator's coordinator comes with it
 
 const admin = createAdminClient();
 const { data: op } = await admin.from("operators").select("name").eq("id", house.operatorId!).single();
-check((op as { name: string }).name !== "Voyage Research",
+check((op as { name: string }).name !== "Waypoint Research",
   "the bookkeeping operator is never handed a live trip", (op as { name: string }).name);
 
 const tripId = await createTrip({

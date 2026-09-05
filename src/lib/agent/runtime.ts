@@ -172,10 +172,24 @@ export async function withRateLimitRetry<T>(
       if ((!isRateLimit && !isBadGeneration) || attempt >= attempts - 1) throw error;
 
       if (isBadGeneration) {
-        // Distinguish "the model emitted broken JSON" — worth retrying as-is —
-        // from "the model wanted a tool we forbade", where the request itself
-        // is what needs to change.
-        if (body.includes("tool_choice")) relaxed = true;
+        /**
+         * Distinguish "the model emitted broken JSON" — worth retrying as-is —
+         * from "the pin is the problem", where the request itself has to
+         * change or every retry fails identically.
+         *
+         * Matched with a regex rather than `includes("tool_choice")`, which
+         * was too literal by exactly one space and one capital letter. Groq
+         * returns at least two phrasings for the same situation:
+         *
+         *   "...tool_choice..."                                    (pin refused)
+         *   "Tool choice is required, but model did not call a tool"
+         *
+         * Only the first matched, so the second retried the identical pinned
+         * request four times and threw — after the agent had already done its
+         * work and simply wanted to answer in prose. That is a re-plan lost on
+         * the last step, which is the worst possible moment to lose one.
+         */
+        if (/tool[_ ]choice/i.test(body)) relaxed = true;
         continue;
       }
 

@@ -25,7 +25,7 @@ export default function ConstellationLoader() {
     }
 
     // Check if user already saw the intro loader in this session
-    const hasSeen = sessionStorage.getItem("voyage_loader_shown");
+    const hasSeen = sessionStorage.getItem("waypoint_loader_shown");
     if (hasSeen) {
       setVisible(false);
       return;
@@ -35,7 +35,7 @@ export default function ConstellationLoader() {
     const dismiss = (immediate = false) => {
       if (dismissed) return;
       dismissed = true;
-      sessionStorage.setItem("voyage_loader_shown", "true");
+      sessionStorage.setItem("waypoint_loader_shown", "true");
       if (immediate || !containerRef.current) {
         setVisible(false);
         return;
@@ -290,7 +290,7 @@ export default function ConstellationLoader() {
           <div className="mt-2 flex items-center justify-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-tan-500 animate-ping" />
             <span className="text-xs font-sans tracking-widest text-tan-500/70 uppercase">
-              VOYAGE
+              WAYPOINT
             </span>
           </div>
         </div>

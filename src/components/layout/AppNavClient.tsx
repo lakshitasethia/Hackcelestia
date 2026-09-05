@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowUpRight, Compass, Radio, LayoutGrid, LogOut } from "lucide-react";
+import { ArrowUpRight, Compass, Radio, LayoutGrid, LogOut, Search } from "lucide-react";
 import { signOutAction } from "@/app/login/actions";
 
 /**
@@ -32,6 +32,16 @@ import { signOutAction } from "@/app/login/actions";
  *  in the middle of a demo is worse than a missing one. All three are built
  *  now; the flag stays because the next one will need it. */
 const SURFACES = [
+  {
+    // Discover, the first stage in the brief. Ahead of the itinerary in the
+    // nav because it is ahead of it in the journey: you look before you book.
+    label: "Explore",
+    href: "/explore",
+    icon: Search,
+    match: "/explore",
+    ready: true,
+    roles: ["traveler", "operator", "coordinator"],
+  },
   {
     label: "Traveler",
     href: "/app/trip",
@@ -74,10 +84,10 @@ export default function AppNavClient({
       <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 h-16 flex items-center justify-between gap-6">
         <Link href="/app" className="flex items-center gap-3 group shrink-0">
           <div className="w-8 h-8 border border-line bg-fg text-bg flex items-center justify-center font-display font-black">
-            V
+            W
           </div>
           <span className="font-display font-extrabold text-lg tracking-tight text-fg hidden sm:block">
-            VOYAGE
+            WAYPOINT
           </span>
         </Link>
 

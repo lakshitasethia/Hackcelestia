@@ -9,7 +9,9 @@ import type {
   Inventory,
   ItineraryItem,
   Operator,
+  Payment,
   ReplanProposal,
+  Review,
   Trip,
   Vendor,
 } from "./types";
@@ -234,6 +236,52 @@ export function operatorTotals(trips: Trip[], schedule: ScheduleEntry[]) {
   return { liveTrips: live.length, travellers, booked, atRisk };
 }
 
+/**
+ * What every group on the board has paid, and what is still owed.
+ *
+ * The per-trip ledger answers "does this group owe us anything"; an operator
+ * managing payments centrally — which is the phrasing in the brief — needs the
+ * other question, "how much is outstanding across everything". One query
+ * rather than one per trip, because the board renders it in a header.
+ *
+ * Deliberately reads `trips.budget` as the amount owed rather than summing
+ * itinerary rows: the board holds the trip list already, and a second pass
+ * over every stop of every trip to render one number is a real cost for an
+ * answer that is the same to within rounding.
+ */
+export async function getOperatorMoney(
+  trips: Trip[]
+): Promise<{ paid: number; owed: number; outstanding: number }> {
+  const ids = trips
+    .filter((t) => t.status !== "cancelled")
+    .map((t) => t.id);
+
+  if (ids.length === 0) return { paid: 0, owed: 0, outstanding: 0 };
+
+  const supabase = await readClient();
+  const { data, error } = await supabase
+    .from("payments")
+    .select("trip_id, kind, amount")
+    .in("trip_id", ids);
+
+  if (error) throw new Error(`getOperatorMoney: ${error.message}`);
+
+  let paid = 0;
+  for (const row of (data ?? []) as { kind: string; amount: number }[]) {
+    paid += row.kind === "refund" ? -Number(row.amount) : Number(row.amount);
+  }
+
+  const owed = trips
+    .filter((t) => t.status !== "cancelled" && t.status !== "draft")
+    .reduce((sum, t) => sum + Number(t.budget ?? 0), 0);
+
+  return {
+    paid,
+    owed,
+    outstanding: Math.round((owed - paid) * 100) / 100,
+  };
+}
+
 // -------------------------------------------------------------- catalogue --
 
 export type InventoryOption = Inventory & {
@@ -375,4 +423,293 @@ export function groupByLocalDay(
     days.get(key)!.push(item);
   }
   return [...days].map(([label, list]) => ({ label, items: list }));
+}
+
+// ----------------------------------------------------------- alternatives --
+
+export interface Alternative {
+  inventory: Inventory;
+  vendorName: string;
+  /** The bookable slot on the day this stop already sits on. */
+  startsAt: string;
+  price: number;
+  slotsFree: number;
+  /** `price` minus what the current stop costs. Negative is cheaper. */
+  delta: number;
+  /** Why it cannot be switched to, or null when it can. */
+  blocked: string | null;
+}
+
+/**
+ * What else this stop could have been.
+ *
+ * PS-7 asks that travelers "compare alternatives", and until now the only
+ * comparison in the product happened after something broke — the disruption
+ * engine's candidate list. That is the same question asked in an emergency,
+ * and it answers a different one: `findCandidates` filters by the *cause* of a
+ * disruption and deliberately returns only activities and guides, because you
+ * do not replace a rained-off boat with a hotel.
+ *
+ * This is the calm version. Like for like on `type`, so a hotel is compared
+ * with hotels and a dinner with dinners; same town, because a comparison you
+ * cannot act on is noise; and priced against the stop that is actually booked,
+ * so the number on the card is the number the trip total moves by.
+ *
+ * Reasons a row is *shown but blocked* are deliberate. Hiding a sold-out
+ * alternative means a traveler asks why their friend's suggestion is missing;
+ * showing it greyed out with "no seats on 14 March" answers that without
+ * anyone having to ask.
+ */
+export async function getAlternatives(
+  item: ItineraryItem
+): Promise<Alternative[]> {
+  const supabase = await readClient();
+  const date = item.starts_at.slice(0, 10);
+
+  // Where the current stop is, so the comparison stays in town. Researched
+  // rows carry a city and no coordinates, which is why this is by name.
+  const { data: currentInv } = item.inventory_id
+    ? await supabase
+        .from("inventory")
+        .select("city, tier")
+        .eq("id", item.inventory_id)
+        .maybeSingle()
+    : { data: null };
+  const here = currentInv as { city: string | null; tier: string | null } | null;
+
+  const [{ data, error }, { data: onTrip }] = await Promise.all([
+    supabase
+      .from("availability")
+      .select("*, inventory(*, vendors(name, channel))")
+      .eq("date", date),
+    supabase
+      .from("itinerary_items")
+      .select("inventory_id")
+      .eq("trip_id", item.trip_id)
+      .not("inventory_id", "is", null),
+  ]);
+
+  if (error) throw new Error(`getAlternatives: ${error.message}`);
+
+  const alreadyOnTrip = new Set(
+    ((onTrip ?? []) as { inventory_id: string | null }[])
+      .map((row) => row.inventory_id)
+      .filter((id): id is string => Boolean(id))
+  );
+
+  type Row = {
+    starts_at: string;
+    price: number | null;
+    slots_total: number;
+    slots_taken: number;
+    inventory:
+      | (Inventory & { vendors: { name: string; channel: string } | null })
+      | null;
+  };
+
+  const cost = Number(item.cost);
+
+  return ((data ?? []) as unknown as Row[])
+    .filter((row) => {
+      const inv = row.inventory;
+      if (!inv) return false;
+      if (inv.id === item.inventory_id) return false; // the one already booked
+      if (inv.type !== item.type) return false; // like for like
+      // Same town. A row with no city recorded is kept rather than guessed at.
+      if (here?.city && inv.city && inv.city !== here.city) return false;
+      return true;
+    })
+    .map((row) => {
+      const inv = row.inventory!;
+      const price = Number(row.price ?? inv.base_cost);
+      const slotsFree = row.slots_total - row.slots_taken;
+
+      return {
+        inventory: inv,
+        vendorName: inv.vendors?.name ?? "Unknown vendor",
+        startsAt: row.starts_at,
+        price,
+        slotsFree,
+        delta: Math.round((price - cost) * 100) / 100,
+        blocked: alreadyOnTrip.has(inv.id)
+          ? "Already on this trip"
+          : slotsFree <= 0
+            ? "No seats left that day"
+            : null,
+      };
+    })
+    // Cheapest first. A traveler comparing options is usually asking what it
+    // would cost to trade up or down, and an ordering by price is the one that
+    // makes that legible at a glance.
+    .sort((a, b) => a.price - b.price);
+}
+
+// --------------------------------------------------------------- payments --
+
+export interface PaymentSummary {
+  /** What the live itinerary comes to. The thing being paid for. */
+  due: number;
+  /** Deposits and balances received, less refunds given back. */
+  paid: number;
+  /** `due - paid`. Negative means the traveler is owed money. */
+  outstanding: number;
+  refunded: number;
+  /** What cancelling everything today would cost, from the booking penalties. */
+  penaltyIfCancelled: number;
+  payments: Payment[];
+}
+
+export async function getPayments(tripId: string): Promise<Payment[]> {
+  const supabase = await readClient();
+  const { data, error } = await supabase
+    .from("payments")
+    .select("*")
+    .eq("trip_id", tripId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(`getPayments: ${error.message}`);
+  return (data ?? []) as Payment[];
+}
+
+/**
+ * The money position on one trip.
+ *
+ * `kind` carries the sign, not the number — see the migration. A refund is a
+ * positive `amount` with kind 'refund', so a stray minus sign in a form cannot
+ * turn a payment into its opposite, and this is the one place that knows which
+ * way each kind points.
+ *
+ * 'adjustment' is deliberately additive: it exists for the small corrections
+ * that are not a fresh payment (a rounding fix, a goodwill credit applied to
+ * the balance), and an operator entering one wants it to move the balance the
+ * way the arithmetic reads.
+ */
+export function summarizePayments(
+  items: ItineraryItem[],
+  bookings: Booking[],
+  payments: Payment[]
+): PaymentSummary {
+  const { total, penaltyIfCancelled } = summarize(items, bookings);
+
+  let received = 0;
+  let refunded = 0;
+  for (const payment of payments) {
+    const amount = Number(payment.amount);
+    if (payment.kind === "refund") refunded += amount;
+    else received += amount;
+  }
+
+  const paid = received - refunded;
+
+  return {
+    due: total,
+    paid,
+    outstanding: Math.round((total - paid) * 100) / 100,
+    refunded,
+    penaltyIfCancelled,
+    payments,
+  };
+}
+
+// ---------------------------------------------------------------- reviews --
+
+export async function getReviews(tripId: string): Promise<Review[]> {
+  const supabase = await readClient();
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("*")
+    .eq("trip_id", tripId);
+
+  if (error) throw new Error(`getReviews: ${error.message}`);
+  return (data ?? []) as Review[];
+}
+
+/**
+ * Every review this operator's trips have collected, newest first, with enough
+ * context to act on one.
+ *
+ * The point of per-stop ratings is the conversation they start with a vendor,
+ * so the stop's title and the group it came from travel with the number.
+ */
+export interface ReviewWithContext extends Review {
+  trips: { title: string; contact_name: string | null } | null;
+  itinerary_items: { title: string; type: string } | null;
+}
+
+export async function getOperatorReviews(
+  limit = 50
+): Promise<ReviewWithContext[]> {
+  const supabase = await readClient();
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("*, trips(title, contact_name), itinerary_items(title, type)")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw new Error(`getOperatorReviews: ${error.message}`);
+  return (data ?? []) as unknown as ReviewWithContext[];
+}
+
+// -------------------------------------------------------------- customers --
+
+/**
+ * One row per person who has travelled with this operator.
+ *
+ * PS-7 lists "customers" first among the things an operator manages centrally,
+ * and the board had no such view — a customer existed only as a name attached
+ * to a trip, so the same person booking twice was two unrelated rows and
+ * nobody could see it.
+ *
+ * Identity is the contact email where there is one, falling back to the name.
+ * That is imperfect and deliberately so: without an accounts system a tour
+ * operator's customer identity really is "the email they gave us", and
+ * inventing a stronger key would be inventing a fact.
+ */
+export interface Customer {
+  key: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  trips: Trip[];
+  /** Value of every trip they have booked, live ones included. */
+  lifetimeValue: number;
+  travellers: number;
+  /** Their most recent trip's start date, for sorting. */
+  lastSeen: string | null;
+}
+
+export async function getCustomers(): Promise<Customer[]> {
+  const trips = await getOperatorTrips();
+
+  const byKey = new Map<string, Customer>();
+  for (const trip of trips) {
+    const key = (trip.contact_email || trip.contact_name || trip.id).toLowerCase();
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        key,
+        name: trip.contact_name ?? "Unnamed traveler",
+        email: trip.contact_email,
+        phone: trip.contact_phone,
+        trips: [],
+        lifetimeValue: 0,
+        travellers: 0,
+        lastSeen: null,
+      });
+    }
+
+    const customer = byKey.get(key)!;
+    customer.trips.push(trip);
+    // A cancelled trip is history, not revenue.
+    if (trip.status !== "cancelled") {
+      customer.lifetimeValue += Number(trip.budget ?? 0);
+    }
+    customer.travellers = Math.max(customer.travellers, trip.party_size);
+    if (trip.starts_on && (!customer.lastSeen || trip.starts_on > customer.lastSeen)) {
+      customer.lastSeen = trip.starts_on;
+    }
+  }
+
+  return [...byKey.values()].sort((a, b) =>
+    (b.lastSeen ?? "").localeCompare(a.lastSeen ?? "")
+  );
 }

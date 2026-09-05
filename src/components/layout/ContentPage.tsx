@@ -49,7 +49,7 @@ export default async function ContentPage({
               {updated}
             </span>
             <p className="mt-4 text-sm text-muted leading-relaxed">
-              Voyage is pre-launch. This document describes how the platform is
+              Waypoint is pre-launch. This document describes how the platform is
               built to operate and will be revised before it handles live
               traveler bookings.
             </p>
@@ -65,7 +65,7 @@ export default async function ContentPage({
         <div className="mt-20 pt-8 border-t border-line">
           <Link href="/" className="link-underline">
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to Voyage</span>
+            <span>Back to Waypoint</span>
           </Link>
         </div>
       </article>
