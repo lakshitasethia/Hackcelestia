@@ -143,7 +143,15 @@ export default function IntakeBox() {
         onChange={(event) => setProse(event.target.value)}
         rows={3}
         maxLength={2000}
-        placeholder="A trip from India to Switzerland for 12-13 days, arriving 2 October 2026 and flying home on the 14th. Two of us, budget around ₹4,00,000. We want the mountains and the trains, and a chocolate factory is compulsory. Keep the stays budget-friendly."
+        /**
+         * Deliberately not an example trip.
+         *
+         * It used to be a complete, ready-to-use Switzerland prompt — which
+         * meant anyone typing their own request was overwriting a suggestion
+         * that looked suspiciously like the one in the demo. A placeholder
+         * should say what shape of answer helps, not hand over the answer.
+         */
+        placeholder="Where do you want to go, when, and what matters to you? Dates, budget and anything compulsory all help."
         className="mt-4 w-full bg-transparent border border-line px-4 py-3 text-fg font-sans text-sm
                    focus:outline-none focus:border-fg transition-colors placeholder:text-muted resize-y"
       />
