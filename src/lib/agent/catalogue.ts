@@ -232,11 +232,29 @@ export async function ingestResearch(research: ResearchResult): Promise<IngestRe
     if (hit) {
       ids.set(k, hit.id);
       reused++;
+
       if (
         place.verified &&
         (Number(hit.base_cost) !== place.cost || hit.source_url !== place.sourceUrl)
       ) {
         refresh.push({ id: hit.id, cost: place.cost, sourceUrl: place.sourceUrl });
+      } else if (!place.verified && hit.source_url) {
+        /**
+         * The stored row already knows something this pass does not.
+         *
+         * A plan is priced from `inventory`, but the proposal page reads its
+         * "verified" badge from the research blob — so a run that hit a fresh
+         * skeleton (unverified by construction) and reused a row somebody had
+         * already confirmed showed the *right* price with no badge and the
+         * words "estimated price" underneath it. The catalogue was the honest
+         * one and the screen was calling it a guess.
+         *
+         * Copying the stored fact back onto the in-memory place keeps the plan,
+         * the page and the database saying the same thing.
+         */
+        place.cost = Number(hit.base_cost);
+        place.sourceUrl = hit.source_url;
+        place.verified = true;
       }
       continue;
     }

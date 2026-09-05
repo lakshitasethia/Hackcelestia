@@ -147,7 +147,15 @@ export async function proposeTripAction(description: string): Promise<ProposeRes
     // The web pass. Everything after this is the same solver that has always
     // been here, working from a catalogue that now contains the destination.
     const research = await researchTrip(spec, viewer.id);
+
+    /**
+     * Ingestion can *raise* the verified count: a place this pass only
+     * estimated may already be sitting in the catalogue with a price somebody
+     * confirmed earlier, and `ingestResearch` copies that fact back onto it. So
+     * the headline is recounted afterwards rather than trusted from before.
+     */
     await ingestResearch(research);
+    research.verifiedCount = research.places.filter((p) => p.verified).length;
 
     const plan = await planItinerary(spec, {
       cityHint: research.cities,
