@@ -192,6 +192,18 @@ export interface ReplanProposalsRow {
 
 export type ReplanProposalsInsert = Omit<ReplanProposalsRow, "id" | "disruption_id" | "run_id" | "plan" | "cost_delta" | "rationale" | "state" | "created_at" | "decided_at" | "decided_by" | "trip_id" | "source"> & Partial<ReplanProposalsRow>;
 
+export interface ResearchCacheRow {
+  fingerprint: string;
+  destinations: string[];
+  day_count: number | null;
+  result: Json;
+  hits: number;
+  created_at: string;
+  used_at: string;
+}
+
+export type ResearchCacheInsert = Omit<ResearchCacheRow, "destinations" | "day_count" | "hits" | "created_at" | "used_at"> & Partial<ResearchCacheRow>;
+
 export interface TripProposalsRow {
   id: string;
   traveler_id: string | null;

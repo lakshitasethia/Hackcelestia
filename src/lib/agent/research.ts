@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CHAT_MODEL, RESEARCH_MODEL, groqClient, withRateLimitRetry } from "./runtime";
@@ -338,6 +339,172 @@ async function structure<T>(
   }
 }
 
+/* ------------------------------------------------------------------ cache -- */
+
+/**
+ * How long a researched price is worth reusing.
+ *
+ * A fortnight is a compromise between two real costs. Museums and railways do
+ * not change their opening hours weekly, so re-searching them daily is pure
+ * waste — a research pass is ~40,000 Groq tokens and the free tier allows
+ * 200,000 a day *per organization*, which is five trips. But hotel rates do
+ * move, and a quote built on a month-old number is a quote that will embarrass
+ * somebody at a reception desk. Fourteen days, and every row carries
+ * `sourced_at` so a traveler can see how old the claim is.
+ */
+const CACHE_DAYS = 14;
+
+/**
+ * What makes two requests "the same research".
+ *
+ * Deliberately not the prose. Two people describing the same fortnight in
+ * Switzerland in different words should share an answer, and a fingerprint over
+ * the raw description would miss every time on a comma. So it hashes only the
+ * things that actually change what gets searched — where, how long, what they
+ * are into, what is compulsory, and the currency the prices get converted to.
+ *
+ * Dates are reduced to a length rather than kept: the same twelve days in
+ * October research identically whether they start on the 2nd or the 3rd. The
+ * month is kept because "closed for the season" is a real answer.
+ */
+export function fingerprint(spec: TripSpec): string {
+  const days =
+    spec.startsOn && spec.endsOn
+      ? Math.round((Date.parse(spec.endsOn) - Date.parse(spec.startsOn)) / 86_400_000) + 1
+      : 0;
+
+  const parts = [
+    spec.destinations.map((d) => d.toLowerCase().trim()).sort().join("|"),
+    String(days),
+    spec.startsOn?.slice(0, 7) ?? "",
+    [...spec.interests].sort().join("|"),
+    spec.mustDo.map((m) => m.toLowerCase().trim()).sort().join("|"),
+    spec.currency,
+  ];
+
+  return createHash("sha256").update(parts.join("::")).digest("hex");
+}
+
+async function readCache(key: string): Promise<ResearchResult | null> {
+  const supabase = createAdminClient();
+
+  const { data } = await supabase
+    .from("research_cache")
+    .select("result, created_at, hits")
+    .eq("fingerprint", key)
+    .maybeSingle();
+
+  const row = data as { result: unknown; created_at: string; hits: number } | null;
+  if (!row) return null;
+
+  const ageDays = (Date.now() - Date.parse(row.created_at)) / 86_400_000;
+  if (ageDays > CACHE_DAYS) return null;
+
+  /**
+   * Awaited, despite being bookkeeping nobody waits on.
+   *
+   * This was `void supabase.from(...).update(...)`, which does nothing at all:
+   * the query builder is a lazy thenable, so it only issues a request when
+   * something awaits it, and `void` is precisely the operator that guarantees
+   * nothing will. The counter sat at zero and the only symptom was a statistic
+   * that stayed wrong — no error, no failed request, nothing to notice.
+   *
+   * It is one indexed update on a primary key, so awaiting it costs nothing
+   * worth measuring. The error is logged rather than thrown, which keeps the
+   * original intent: a failed counter is not a reason to refuse a hit and go
+   * spend forty thousand tokens.
+   */
+  const { error } = await supabase
+    .from("research_cache")
+    .update({ hits: row.hits + 1, used_at: new Date().toISOString() })
+    .eq("fingerprint", key);
+  if (error) console.warn(`[research] cache hit counter: ${error.message}`);
+
+  return row.result as ResearchResult;
+}
+
+export async function writeCache(key: string, spec: TripSpec, result: ResearchResult) {
+  const supabase = createAdminClient();
+  const days =
+    spec.startsOn && spec.endsOn
+      ? Math.round((Date.parse(spec.endsOn) - Date.parse(spec.startsOn)) / 86_400_000) + 1
+      : null;
+
+  await supabase.from("research_cache").upsert(
+    {
+      fingerprint: key,
+      destinations: spec.destinations,
+      day_count: days,
+      result: result as never,
+      created_at: new Date().toISOString(),
+      used_at: new Date().toISOString(),
+      hits: 0,
+    } as never,
+    { onConflict: "fingerprint" }
+  );
+}
+
+/**
+ * Towns already researched recently enough to skip.
+ *
+ * The second layer, and the one that helps when the prompt is *not* identical.
+ * A different Swiss trip still wants Lucerne, and Lucerne is already sitting in
+ * the catalogue with its sources and its prices. Reading it back costs a query;
+ * researching it again costs a seventh of a day's tokens.
+ */
+async function catalogued(
+  cities: string[]
+): Promise<Map<string, ResearchedPlace[]>> {
+  const supabase = createAdminClient();
+  const since = new Date(Date.now() - CACHE_DAYS * 86_400_000).toISOString();
+
+  const { data } = await supabase
+    .from("inventory")
+    .select(
+      "title, type, description, duration_min, base_cost, opens_at, closes_at, tags, city, source_url, weather_sensitive"
+    )
+    .in("city", cities.length ? cities : [" none"])
+    .neq("type", "transport")
+    .eq("provisional", true)
+    .gte("sourced_at", since);
+
+  type Row = {
+    title: string; type: string; description: string | null;
+    duration_min: number; base_cost: number; opens_at: string | null;
+    closes_at: string | null; tags: string[] | null; city: string | null;
+    source_url: string | null; weather_sensitive: boolean | null;
+  };
+
+  const byCity = new Map<string, ResearchedPlace[]>();
+  for (const row of ((data ?? []) as Row[])) {
+    if (!row.city) continue;
+    const list = byCity.get(row.city) ?? [];
+    list.push({
+      title: row.title,
+      type: row.type as ResearchedPlace["type"],
+      description: row.description ?? "",
+      city: row.city,
+      durationMin: row.duration_min,
+      cost: Number(row.base_cost),
+      opensAt: row.opens_at ? row.opens_at.slice(0, 5) : null,
+      closesAt: row.closes_at ? row.closes_at.slice(0, 5) : null,
+      tags: row.tags ?? [],
+      sourceUrl: row.source_url,
+      weatherSensitive: Boolean(row.weather_sensitive),
+    });
+    byCity.set(row.city, list);
+  }
+
+  // A town with two rows is not a researched town; it is a town whose research
+  // failed halfway. Re-search it rather than planning three days around a
+  // museum and a bus stop.
+  for (const [city, rows] of byCity) {
+    if (rows.length < 4) byCity.delete(city);
+  }
+
+  return byCity;
+}
+
 /* -------------------------------------------------------------- the agent -- */
 
 /** Chosen so a 13-day trip is 5 concurrent city passes and not 5 minutes of them. */
@@ -348,9 +515,34 @@ export async function researchTrip(
   /** Who asked. A research run happens before any trip exists, so this is the
    *  only thing that keeps it out of a stranger's reach — see the
    *  `runs_via_trip` policy. */
-  travelerId?: string | null
+  travelerId?: string | null,
+  /** Skip both caches. For "the prices look stale, go and look again". */
+  options: { fresh?: boolean } = {}
 ): Promise<ResearchResult> {
   const supabase = createAdminClient();
+
+  /**
+   * The cheapest research is the research you already did.
+   *
+   * Checked before the run row is even opened, so a hit costs one indexed
+   * lookup and no tokens at all. This is what makes rehearsing a demo, or two
+   * people trying the same prompt, not cost a day's allowance each time.
+   */
+  const key = fingerprint(spec);
+  if (!options.fresh) {
+    const hit = await readCache(key);
+    if (hit) {
+      await supabase.from("agent_runs").insert({
+        kind: "research",
+        status: "succeeded",
+        traveler_id: travelerId ?? null,
+        input: { destinations: spec.destinations, cached: true },
+        output: { cities: hit.cities, places: hit.places.length, cached: true } as never,
+        ended_at: new Date().toISOString(),
+      });
+      return hit;
+    }
+  }
 
   const { data: run } = await supabase
     .from("agent_runs")
@@ -471,10 +663,26 @@ the brief actually says.`,
       ? `Dietary needs: ${spec.dietary.join(", ")}.`
       : "";
 
+    /**
+     * Towns the catalogue can already answer for.
+     *
+     * Only the rest get a web pass. A second Swiss trip that asks for something
+     * different still reuses Lucerne, which is both the right answer and the
+     * difference between one town's worth of tokens and five.
+     */
+    const known = options.fresh ? new Map() : await catalogued(cities);
+    const toSearch = cities.filter((c) => !known.has(c));
+    if (known.size) {
+      console.log(
+        `[research] reusing ${known.size} town(s) from the catalogue: ` +
+          `${[...known.keys()].join(", ")}`
+      );
+    }
+
     // Concurrent, but only two at a time: five sequential passes is a minute
     // the traveler spends watching a spinner, and five at once exhausts the
     // per-minute token budget partway through and researches half a trip.
-    const cityBriefs = await mapLimit(cities, SEARCH_CONCURRENCY, async (city) => {
+    const cityBriefs = await mapLimit(toSearch, SEARCH_CONCURRENCY, async (city) => {
       const brief = await trySearch(
         `${city}, ${shape.country}, for a visitor ${window}. ${budget} ${interests} ` +
           `${mustDo} ${dietary}\n\n` +
@@ -552,7 +760,7 @@ cancels outright.`,
       }
     );
 
-    const places = structured.flat();
+    const places = [...structured.flat(), ...[...known.values()].flat()];
     if (!places.length) {
       throw new Error(
         "The research found the towns but nothing to do in them. This is " +
@@ -591,6 +799,8 @@ cancels outright.`,
       sources,
       notes: (shape.notes ?? []).map((n) => n.trim()).filter(Boolean),
     };
+
+    await writeCache(key, spec, result);
 
     if (runId) {
       await supabase
