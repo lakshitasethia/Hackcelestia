@@ -15,7 +15,7 @@ export type Json =
 export interface AgentRunsRow {
   id: string;
   trip_id: string | null;
-  kind: "intake" | "compose" | "replan" | "comms" | "copilot" | "concierge";
+  kind: "intake" | "compose" | "replan" | "comms" | "copilot" | "concierge" | "research" | "propose";
   status: "running" | "succeeded" | "failed";
   input: Json;
   output: Json | null;
@@ -24,9 +24,10 @@ export interface AgentRunsRow {
   output_tokens: number | null;
   started_at: string;
   ended_at: string | null;
+  traveler_id: string | null;
 }
 
-export type AgentRunsInsert = Omit<AgentRunsRow, "id" | "trip_id" | "status" | "input" | "output" | "error" | "input_tokens" | "output_tokens" | "started_at" | "ended_at"> & Partial<AgentRunsRow>;
+export type AgentRunsInsert = Omit<AgentRunsRow, "id" | "trip_id" | "status" | "input" | "output" | "error" | "input_tokens" | "output_tokens" | "started_at" | "ended_at" | "traveler_id"> & Partial<AgentRunsRow>;
 
 export interface AgentStepsRow {
   id: string;
@@ -100,9 +101,16 @@ export interface InventoryRow {
   created_at: string;
   city: string | null;
   region: string | null;
+  to_city: string | null;
+  overnight: boolean;
+  source_url: string | null;
+  sourced_at: string | null;
+  provisional: boolean;
+  country: string | null;
+  time_zone: string | null;
 }
 
-export type InventoryInsert = Omit<InventoryRow, "id" | "description" | "duration_min" | "base_cost" | "lat" | "lng" | "opens_at" | "closes_at" | "tags" | "weather_sensitive" | "created_at" | "city" | "region"> & Partial<InventoryRow>;
+export type InventoryInsert = Omit<InventoryRow, "id" | "description" | "duration_min" | "base_cost" | "lat" | "lng" | "opens_at" | "closes_at" | "tags" | "weather_sensitive" | "created_at" | "city" | "region" | "to_city" | "overnight" | "source_url" | "sourced_at" | "provisional" | "country" | "time_zone"> & Partial<InventoryRow>;
 
 export interface ItineraryItemsRow {
   id: string;
@@ -183,6 +191,21 @@ export interface ReplanProposalsRow {
 }
 
 export type ReplanProposalsInsert = Omit<ReplanProposalsRow, "id" | "disruption_id" | "run_id" | "plan" | "cost_delta" | "rationale" | "state" | "created_at" | "decided_at" | "decided_by" | "trip_id" | "source"> & Partial<ReplanProposalsRow>;
+
+export interface TripProposalsRow {
+  id: string;
+  traveler_id: string | null;
+  description: string;
+  spec: Json;
+  research: Json;
+  plan: Json;
+  state: "proposed" | "accepted" | "discarded";
+  trip_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TripProposalsInsert = Omit<TripProposalsRow, "id" | "traveler_id" | "spec" | "research" | "plan" | "state" | "trip_id" | "created_at" | "updated_at"> & Partial<TripProposalsRow>;
 
 export interface TripsRow {
   id: string;
