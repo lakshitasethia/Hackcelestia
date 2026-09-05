@@ -48,6 +48,15 @@ check(fingerprint({ ...spec, currency: "USD" }) !== key,
 check(fingerprint({ ...spec, mustDo: ["skiing"] }) !== key,
   "a different must-do is different research");
 
+/**
+ * The one that bit us. Interests come from the catalogue's tag list, and that
+ * list grows every time research adds rows — so if they were in the key, the
+ * same unchanged prompt would start missing next week because the catalogue
+ * learned a new word.
+ */
+check(fingerprint({ ...spec, interests: ["chocolate", "rail", "nightlife"] }) === key,
+  "a growing catalogue tag list does not invalidate the cache");
+
 await writeCache(key, spec, research);
 
 /**

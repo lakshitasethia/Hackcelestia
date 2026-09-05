@@ -360,12 +360,21 @@ const CACHE_DAYS = 14;
  * Deliberately not the prose. Two people describing the same fortnight in
  * Switzerland in different words should share an answer, and a fingerprint over
  * the raw description would miss every time on a comma. So it hashes only the
- * things that actually change what gets searched — where, how long, what they
- * are into, what is compulsory, and the currency the prices get converted to.
+ * things that change what gets searched — where, how long, which month, what is
+ * compulsory, and the currency the prices get converted to.
  *
  * Dates are reduced to a length rather than kept: the same twelve days in
  * October research identically whether they start on the 2nd or the 3rd. The
  * month is kept because "closed for the season" is a real answer.
+ *
+ * `interests` are deliberately NOT in here, and that is the one entry worth
+ * explaining. They do steer the search a little, but they are drawn from the
+ * catalogue's own tag list — which grows every time research adds rows. So the
+ * same prompt, unchanged, fingerprints differently next week purely because the
+ * catalogue learned the word "chocolate", and the cache misses for a reason
+ * that has nothing to do with the trip. Interests matter far more when the
+ * composer ranks stops than when the researcher looks for them, and a cache key
+ * that drifts on its own is worse than one that is slightly too coarse.
  */
 export function fingerprint(spec: TripSpec): string {
   const days =
@@ -377,7 +386,6 @@ export function fingerprint(spec: TripSpec): string {
     spec.destinations.map((d) => d.toLowerCase().trim()).sort().join("|"),
     String(days),
     spec.startsOn?.slice(0, 7) ?? "",
-    [...spec.interests].sort().join("|"),
     spec.mustDo.map((m) => m.toLowerCase().trim()).sort().join("|"),
     spec.currency,
   ];
