@@ -470,3 +470,8 @@
     word-break: break-all;
   }
 }
+
+/* A stop that was cancelled after the plan was made. Kept in the document so a
+   traveler can see it is off, rather than finding it quietly absent. */
+.doc-off .doc-what-title { text-decoration: line-through; }
+.doc-off { color: #999; }

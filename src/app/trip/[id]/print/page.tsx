@@ -47,8 +47,24 @@ export default async function PrintPage({ params }: { params: { id: string } }) 
     getBookings(trip.id),
   ]);
 
-  const days = groupByDay(items);
-  const total = items.reduce((sum, i) => sum + Number(i.cost), 0);
+  /**
+   * What the document is for: the plan as it stands *now*.
+   *
+   * A re-planned trip keeps the stop it replaced, so an unfiltered read prints
+   * the cancelled boat and the substitute that took its place, one under the
+   * other, and adds both to the total. Somebody carrying that page has two
+   * things at 09:00 and a number that is wrong.
+   *
+   * `replaced` rows are dropped: the substitute is already in the list and says
+   * the same thing better. `cancelled` rows stay, marked — a traveler who
+   * remembers booking Capri should see that it is off rather than find it
+   * quietly missing — but they do not count towards the total.
+   */
+  const live = items.filter((i) => i.status !== "replaced");
+  const days = groupByDay(live);
+  const total = live
+    .filter((i) => i.status !== "cancelled")
+    .reduce((sum, i) => sum + Number(i.cost), 0);
   const tz = trip.time_zone;
 
   // A booked stop and a planned one are different things to somebody standing
@@ -103,13 +119,17 @@ export default async function PrintPage({ params }: { params: { id: string } }) 
           <table className="doc-table">
             <tbody>
               {dayItems.map((item) => (
-                <tr key={item.id}>
+                <tr key={item.id} className={item.status === "cancelled" ? "doc-off" : undefined}>
                   <td className="doc-time">{formatTime(item.starts_at, tz)}</td>
                   <td className="doc-what">
                     <span className="doc-what-title">{item.title}</span>
                     <span className="doc-what-meta">
                       {item.type} · {formatDuration(item.starts_at, item.ends_at)}
-                      {bookedItems.has(item.id) ? " · booked" : " · not booked"}
+                      {item.status === "cancelled"
+                        ? " · cancelled"
+                        : bookedItems.has(item.id)
+                          ? " · booked"
+                          : " · not booked"}
                     </span>
                     {item.notes && <span className="doc-note">{item.notes}</span>}
                   </td>
@@ -117,9 +137,11 @@ export default async function PrintPage({ params }: { params: { id: string } }) 
                     {/* "Free" rather than a dash. On a printed itinerary a dash
                         reads as a price nobody found, and half the good things
                         in a city cost nothing — that is worth stating. */}
-                    {Number(item.cost) > 0
-                      ? formatMoney(Number(item.cost), trip.currency)
-                      : "Free"}
+                    {item.status === "cancelled"
+                      ? "—"
+                      : Number(item.cost) > 0
+                        ? formatMoney(Number(item.cost), trip.currency)
+                        : "Free"}
                   </td>
                 </tr>
               ))}
