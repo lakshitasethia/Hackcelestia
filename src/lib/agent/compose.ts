@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { addItem } from "@/lib/db/mutations";
+import { addItems } from "@/lib/db/mutations";
 import {
   SPINE,
   TRANSIT_ONLY,
@@ -718,15 +718,19 @@ export async function commitItinerary(
 ): Promise<void> {
   const supabase = createAdminClient();
 
-  for (const stop of plan.stops) {
-    await addItem({
-      tripId,
-      day: stop.day,
-      inventoryId: stop.inventoryId,
-      localTime: stop.localTime,
-      timeZone: plan.timeZone,
-    });
-  }
+  /**
+   * One insert, not one per stop.
+   *
+   * This was `for (const stop of plan.stops) await addItem(...)`, and `addItem`
+   * makes four round trips — read the trip, read the inventory row, ask what to
+   * chain onto, write. For a 52-stop itinerary against a hosted Postgres that
+   * is over two hundred sequential requests and the better part of a minute,
+   * spent with the traveler watching a button that says "Building the trip…".
+   *
+   * `addItems` builds the same rows and the same dependency chain in memory and
+   * writes them once. Same seq, same depends_on, same DAG.
+   */
+  await addItems({ tripId, timeZone: plan.timeZone, stops: plan.stops });
 
   await supabase
     .from("trips")

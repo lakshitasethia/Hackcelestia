@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, Check, Download } from "lucide-react";
 import AppNav from "@/components/layout/AppNav";
 import LiveRefresh from "@/components/realtime/LiveRefresh";
 import Concierge from "@/components/concierge/Concierge";
@@ -74,6 +74,25 @@ export default async function TripPage({
                 <Download className="w-3.5 h-3.5" />
                 Export PDF
               </Link>
+
+              {/**
+               * The way to the confirm step.
+               *
+               * Confirming lives on `/trip/[id]/build` and nothing on this page
+               * linked to it, so the only route to the one action that turns a
+               * draft into a live trip — and puts it on the operator's board and
+               * the guide's run sheet — was typing the URL. Shown only while
+               * there is something to confirm.
+               */}
+              {trip.status === "draft" && (
+                <Link
+                  href={`/trip/${trip.id}/build`}
+                  className="inline-flex items-center gap-1.5 font-sans text-xs uppercase tracking-wider text-accent hover:text-fg transition-colors"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  Review &amp; confirm
+                </Link>
+              )}
             </div>
             <h1 className="font-display text-display-lg font-semibold uppercase text-fg text-balance">
               {trip.title}

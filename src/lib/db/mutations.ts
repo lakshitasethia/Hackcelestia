@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { serviceRoleClient } from "./client";
 import { TRIP_TZ, zonedTime } from "@/lib/format";
 import type { FieldState, ItineraryItem, ReplanOp, TripPrefs } from "./types";
@@ -147,6 +148,111 @@ export async function addItem(input: {
 
   if (error) throw new Error(`addItem: ${error.message}`);
   return data as ItineraryItem;
+}
+
+/**
+ * Write a whole composed itinerary in one round trip.
+ *
+ * `addItem` is the right shape for adding one stop to a trip somebody is
+ * editing: it re-reads the trip, re-reads the inventory row, and asks the
+ * database what the new stop should hang off. For a composed itinerary that is
+ * the wrong shape entirely — a 52-stop plan ran it 52 times, four queries each,
+ * against a hosted Postgres, and took the better part of a minute while the
+ * traveler watched a button say "Building the trip…".
+ *
+ * Nothing about that work needs the database round trip. The stops arrive in
+ * chronological order, so `chainInto`'s two cases — hang off the earlier stop
+ * today, else off the last stop of a previous day — both resolve to *the
+ * preceding stop in the list*. And ids do not have to be discovered: Postgres
+ * defaults them, but we can generate them, which means the whole dependency
+ * graph can be built in memory before a single row is written.
+ *
+ * So: one read for the trip, one for the inventory, one insert. The resulting
+ * rows are byte-for-byte what the loop produced — same seq, same depends_on,
+ * same DAG for the blast radius to walk.
+ */
+export async function addItems(input: {
+  tripId: string;
+  timeZone: string;
+  stops: { day: number; inventoryId: string; localTime: string }[];
+}): Promise<number> {
+  if (!input.stops.length) return 0;
+
+  const supabase = serviceRoleClient();
+
+  const [{ data: trip }, { data: inventory }] = await Promise.all([
+    supabase.from("trips").select("starts_on").eq("id", input.tripId).single(),
+    supabase
+      .from("inventory")
+      .select("id, title, type, duration_min, base_cost, lat, lng, vendors(id)")
+      .in("id", [...new Set(input.stops.map((s) => s.inventoryId))]),
+  ]);
+
+  if (!trip) throw new Error("addItems: trip missing");
+
+  type Inv = {
+    id: string;
+    title: string;
+    type: ItineraryItem["type"];
+    duration_min: number;
+    base_cost: number;
+    lat: number | null;
+    lng: number | null;
+    vendors: { id: string } | null;
+  };
+  const byId = new Map(((inventory ?? []) as unknown as Inv[]).map((i) => [i.id, i]));
+
+  const startsOn = (trip as { starts_on: string }).starts_on;
+
+  // Chronological, because the chain below assumes it. The composer already
+  // sorts, but a caller that did not would otherwise build a graph that points
+  // backwards in time — silently, and only visible when a disruption walks it.
+  const stops = [...input.stops].sort((a, b) =>
+    a.day === b.day ? a.localTime.localeCompare(b.localTime) : a.day - b.day
+  );
+
+  const perDay = new Map<number, number>();
+  const rows: Record<string, unknown>[] = [];
+  let previousId: string | null = null;
+
+  for (const stop of stops) {
+    const inv = byId.get(stop.inventoryId);
+    if (!inv) continue;
+
+    const startsAt = zonedTime(startsOn, stop.day, stop.localTime, input.timeZone);
+    const endsAt = new Date(startsAt.getTime() + inv.duration_min * 60_000);
+
+    const seq = (perDay.get(stop.day) ?? 0) + 1;
+    perDay.set(stop.day, seq);
+
+    const id = randomUUID();
+    rows.push({
+      id,
+      trip_id: input.tripId,
+      day: stop.day,
+      seq,
+      inventory_id: inv.id,
+      vendor_id: inv.vendors?.id ?? null,
+      title: inv.title,
+      type: inv.type,
+      starts_at: startsAt.toISOString(),
+      ends_at: endsAt.toISOString(),
+      lat: inv.lat,
+      lng: inv.lng,
+      cost: inv.base_cost,
+      status: "planned",
+      // The whole chain: every stop hangs off the one before it, and the first
+      // hangs off nothing. Identical to what `chainInto` computes one query at
+      // a time, because the list is in time order.
+      depends_on: previousId ? [previousId] : [],
+    });
+    previousId = id;
+  }
+
+  const { error } = await supabase.from("itinerary_items").insert(rows as never);
+  if (error) throw new Error(`addItems: ${error.message}`);
+
+  return rows.length;
 }
 
 /**
