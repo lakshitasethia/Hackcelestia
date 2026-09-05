@@ -2,44 +2,66 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { CHAT_MODEL, RESEARCH_MODEL, groqClient, withRateLimitRetry } from "./runtime";
+import { MODEL, CHAT_MODEL, RESEARCH_MODEL, groqClient, withRateLimitRetry } from "./runtime";
 import type { TripSpec } from "./intake";
 
 /**
- * The research agent — the web pass the catalogue never had.
+ * The research agent — where a trip to somewhere nobody seeded comes from.
  *
- * Everything before this could only plan a trip that was already seeded. Ask
- * for Switzerland and the composer answered "None of those places are in the
- * catalogue yet", which was true and useless. There was no code path anywhere
- * in the project that fetched anything from the internet.
+ * Before this, the planner could only plan what was already in the database:
+ * ask for Switzerland and the composer answered "None of those places are in
+ * the catalogue yet", which was true and useless. Nothing in the project
+ * fetched anything from the internet.
  *
- * This is that path. It runs on `groq/compound-mini`, whose built-in
- * `web_search` tool is executed server-side by Groq and comes back with the
- * pages it read attached to the message. That matters for two reasons: it
- * needs no second vendor and no second API key beyond the GROQ_API_KEY this
- * project already requires, and every price it reports arrives with the URL it
- * was read off, so a researched row is auditable rather than a plausible
- * number with a UUID.
+ * ## Why this is two passes rather than one
  *
- * ## Two models, on purpose
+ * The obvious design — ask a web-searching model what there is to do in
+ * Lucerne — does not work on Groq's free tier, and it took a while to see why.
+ * `groq/compound-mini` runs Groq's `web_search` server-side and injects the
+ * fetched pages into its own context before writing a word. That context is
+ * small and travel content is enormous, so the request comes back 413
+ * `request_too_large` *after* the searching has happened. Measured, on a fresh
+ * organization with a full budget:
  *
- * Search and structure are separate calls. The compound models run Groq's own
- * tools and are not reliable at strict JSON while they do it, and asking one
- * model to both browse and emit a schema produced exactly the failure you would
- * expect — well-researched prose wrapped in JSON that half-parsed. So the
- * searcher writes a brief in prose with its citations, and a second, cheaper
- * call turns that brief into rows. The structurer never browses, so it cannot
- * invent a source: it only has the text the searcher brought back.
+ *   "Lucerne: 4 things to do with prices"            -> 413
+ *   "Best 5 towns for 13 days in Switzerland"        -> 413
+ *   "Switzerland 13 day itinerary which towns"       -> 413
+ *   "price of the Swiss Travel Pass and of Lindt"    -> OK, 7,190 tokens
  *
- * ## What research is allowed to decide
+ * The pattern is not query length, it is query *kind*. Asking to discover
+ * things returns listicles and blog posts and blows the context. Asking the
+ * price of two named entities returns structured pages and fits. Even then it
+ * is roughly a coin flip, because which pages come back is not ours to choose.
+ * `groq/compound` behaves identically, and `openai/gpt-oss-120b` with
+ * `browser_search` reads pages beautifully but bills you the page content —
+ * one city query measured 153,000 prompt tokens against a 200,000 daily
+ * allowance.
  *
- * Facts, and nothing else. What exists, what it costs, how long it takes, when
- * it opens, how you get from one town to the next and whether that journey eats
- * a night. It does not decide the order of the days, which stop goes on which
- * morning, or whether the trip fits — that is `compose.ts`, which is a solver,
- * and the rule this project already states is that feasibility is a solver and
- * not a model. Research widens what the solver can choose from. It does not
- * replace it.
+ * So the work is split by what each tool is actually good for:
+ *
+ *   1. **The skeleton, with no web access at all.** Which towns, in what order,
+ *      what is in them, what the trains are, the currency and the timezone.
+ *      This is stable general knowledge — Zermatt has been under the Matterhorn
+ *      for some time — and a model answers it reliably and cheaply. Nothing
+ *      here needs a citation because nothing here is a live fact.
+ *
+ *   2. **Price verification, on the web, best-effort.** Narrow queries naming
+ *      two specific things, which is the shape that works. Prices *are* live
+ *      facts and are the thing worth checking.
+ *
+ * Pass two is allowed to fail, in whole or in part, and the trip survives it.
+ * What changes is honesty, not availability: a place whose price came back from
+ * a real page carries `verified` and the URL it was read off; one that did not
+ * carries the model's estimate and says so. A plan full of estimates clearly
+ * labelled is worth more than no plan, and much more than estimates presented
+ * as quotes.
+ *
+ * ## What research is still not allowed to decide
+ *
+ * The order of the days, what goes on which morning, whether it all fits. That
+ * is `compose.ts`, which is a solver, and the rule this project keeps is that
+ * feasibility is a solver and not a model. Research widens what the solver can
+ * choose from.
  */
 
 /* ------------------------------------------------------------------ types -- */
@@ -51,13 +73,21 @@ export type ResearchedPlace = {
   city: string;
   /** Minutes the visit actually takes, door to door. */
   durationMin: number;
-  /** Per person, in the trip's currency. */
+  /** Per person, in the destination's currency. */
   cost: number;
   opensAt: string | null;
   closesAt: string | null;
   tags: string[];
   sourceUrl: string | null;
   weatherSensitive: boolean;
+  /**
+   * True when the price above came off a page we actually fetched.
+   *
+   * The distinction the whole second pass exists to create. False means the
+   * figure is a model's estimate — usable for planning and for a rough total,
+   * and not something to put in front of a supplier.
+   */
+  verified: boolean;
 };
 
 export type ResearchedLeg = {
@@ -69,6 +99,7 @@ export type ResearchedLeg = {
   departsAt: string;
   overnight: boolean;
   sourceUrl: string | null;
+  verified: boolean;
 };
 
 export type ResearchResult = {
@@ -81,30 +112,55 @@ export type ResearchResult = {
   /**
    * What one unit of `currency` is worth in the traveler's budget currency.
    *
-   * Somebody in Delhi planning Switzerland thinks in rupees and pays in
-   * francs, and without this the plan sums 1,900 CHF of catalogue rows and
-   * compares it to a 200,000 budget as though both were the same money — which
-   * reads as comfortably under budget and is roughly double it. Null when the
-   * two currencies are the same, or when the research could not find a rate.
+   * Somebody in Delhi planning Switzerland thinks in rupees and pays in francs,
+   * and without this the plan sums 1,900 CHF of catalogue rows and compares it
+   * to a 200,000 budget as though both were the same money — which reads as
+   * comfortably under budget and is roughly double it.
    */
   fxToBudget: number | null;
+  /** True when that rate came off a page rather than out of a model. */
+  fxVerified: boolean;
   places: ResearchedPlace[];
   legs: ResearchedLeg[];
   /** Every page any pass actually read, deduped. Shown with the proposal. */
   sources: { title: string; url: string }[];
-  /** Things the traveler should know that are not a row: seasonal closures,
-   *  a pass that is cheaper than the sum of its tickets, a visa. */
+  /** Things the traveler should know that are not a row: seasonal closures, a
+   *  pass that is cheaper than the sum of its tickets, a visa. */
   notes: string[];
+  /** How much of this was checked against a live page, for the UI to be honest
+   *  about without counting rows itself. */
+  verifiedCount: number;
 };
 
 /* ---------------------------------------------------------------- schemas -- */
 
-const ShapeSchema = z.object({
+const SkeletonSchema = z.object({
   country: z.string(),
   currency: z.string(),
-  fx_to_budget: z.number().nullish(),
   time_zone: z.string(),
-  cities: z.array(z.string()).max(8),
+  fx_to_budget: z.number().nullish(),
+  cities: z
+    .array(
+      z.object({
+        name: z.string(),
+        places: z
+          .array(
+            z.object({
+              title: z.string(),
+              type: z.enum(["hotel", "activity", "restaurant", "guide"]),
+              description: z.string(),
+              duration_min: z.number(),
+              cost: z.number(),
+              opens_at: z.string().nullish(),
+              closes_at: z.string().nullish(),
+              tags: z.array(z.string()).nullish(),
+              weather_sensitive: z.boolean().nullish(),
+            })
+          )
+          .max(10),
+      })
+    )
+    .max(6),
   legs: z
     .array(
       z.object({
@@ -115,30 +171,22 @@ const ShapeSchema = z.object({
         cost: z.number(),
         departs_at: z.string(),
         overnight: z.boolean(),
-        source_url: z.string().nullish(),
       })
     )
-    .max(24),
-  notes: z.array(z.string()).max(8).nullish(),
+    .max(12),
+  notes: z.array(z.string()).max(6).nullish(),
 });
 
-const PlacesSchema = z.object({
-  places: z
+const PriceSchema = z.object({
+  prices: z
     .array(
       z.object({
         title: z.string(),
-        type: z.enum(["hotel", "activity", "restaurant", "guide"]),
-        description: z.string(),
-        duration_min: z.number(),
-        cost: z.number(),
-        opens_at: z.string().nullish(),
-        closes_at: z.string().nullish(),
-        tags: z.array(z.string()).nullish(),
+        cost: z.number().nullish(),
         source_url: z.string().nullish(),
-        weather_sensitive: z.boolean().nullish(),
       })
     )
-    .max(20),
+    .max(8),
 });
 
 /* ------------------------------------------------------------------ search -- */
@@ -261,36 +309,48 @@ async function search(question: string, maxTokens = SEARCH_TOKENS): Promise<Sear
 /**
  * A search pass that is allowed to come back empty.
  *
- * Groq answers a request whose fetched pages overflow the context with a 413,
- * and that is a property of the *question*: a broad one ("things to do in
- * Bern") pulls far more page text than a narrow one ("adult admission price of
- * X"). Retrying it unchanged is guaranteed to fail identically, which is why
- * `withRateLimitRetry` refuses to — so the retry here has to be a smaller
- * question, not the same one again.
+ * Groq answers a request whose fetched pages overflow its context with a 413,
+ * *after* doing the searching. The first version of this assumed that was a
+ * deterministic property of the question and only ever retried with a narrower
+ * one — which was wrong, and measurably so: the identical query for the
+ * Gornergrat fare failed inside a run and succeeded thirty seconds later on its
+ * own. Which pages a search returns varies, and so does whether they fit.
  *
- * And if the second attempt fails too, one town's research is worth less than
- * the whole trip: the pass returns nothing and the composer plans around the
- * cities that did come back. A thirteen-day itinerary missing one town's
- * restaurants is a usable answer; an exception is not.
+ * So the ladder is: the same question again after a pause, then a narrower one,
+ * then nothing. The pause matters as much as the retry — two concurrent
+ * searches at ~7,000 prompt tokens each will also brush the per-minute ceiling,
+ * and backing off is what lets the next one through.
+ *
+ * Returning empty is a normal outcome, not a failure. A price we could not
+ * confirm keeps the planner's estimate and is labelled as one; losing the whole
+ * trip because a museum's page was long would be absurd.
  */
 async function trySearch(
   question: string,
   fallback: string
 ): Promise<SearchOutput> {
+  const overflow = (e: unknown) =>
+    /too large|entity too large|413/i.test(e instanceof Error ? e.message : String(e));
+
   try {
     return await search(question);
   } catch (first) {
-    const tooLarge = /too large|entity too large|413/i.test(
-      first instanceof Error ? first.message : String(first)
-    );
-    if (!tooLarge) throw first;
+    if (!overflow(first)) throw first;
+  }
 
-    try {
-      return await search(fallback, 500);
-    } catch {
-      console.warn(`[research] gave up on a pass: ${fallback.slice(0, 80)}`);
-      return { brief: "", sources: [] };
-    }
+  await new Promise((r) => setTimeout(r, 2500));
+
+  try {
+    return await search(question);
+  } catch (second) {
+    if (!overflow(second)) throw second;
+  }
+
+  try {
+    return await search(fallback, 500);
+  } catch {
+    console.warn(`[research] unverified: ${fallback.slice(0, 70)}`);
+    return { brief: "", sources: [] };
   }
 }
 
@@ -324,7 +384,15 @@ async function structure<T>(
       reasoning_effort: "low",
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: system },
+        /**
+         * The suffix is not decoration. Groq rejects `response_format:
+         * json_object` outright — 400, not a degraded answer — unless the word
+         * "json" appears somewhere in the messages, and a prompt that shows the
+         * shape it wants as `{"prices":[...]}` does not contain it. Appending it
+         * here rather than in each prompt means a new caller cannot forget, and
+         * cannot discover the rule from a stack trace two passes deep.
+         */
+        { role: "system", content: `${system}\n\nRespond with JSON only.` },
         { role: "user", content: brief },
       ],
     })
@@ -337,6 +405,262 @@ async function structure<T>(
   } catch {
     return null;
   }
+}
+
+
+
+/* --------------------------------------------------------------- pass one -- */
+
+/**
+ * The whole trip, from what the model already knows. No web access.
+ *
+ * Reliable precisely because nothing here is a live fact: which towns are worth
+ * nights, roughly what a museum costs, how long the train to Zermatt takes.
+ * A model is good at this and a web search is bad at it — the search returns
+ * listicles that overflow the context, which is the failure documented at the
+ * top of this file.
+ *
+ * Prices from here are estimates and are labelled as such all the way to the
+ * screen. Pass two upgrades whichever ones it can.
+ */
+async function skeleton(spec: TripSpec, days: number) {
+  const groq = groqClient();
+  const asked = spec.destinations.join(", ");
+  const party = spec.partySize ?? 2;
+  const cityCount = Math.min(5, Math.max(2, Math.ceil(days / 3)));
+
+  const completion = await withRateLimitRetry(() =>
+    groq.chat.completions.create({
+      model: MODEL,
+      temperature: 0.3,
+      max_tokens: 4000,
+      reasoning_effort: "low",
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: `You are a travel planner with deep knowledge of real places.
+Return ONLY this JSON:
+
+{"country":string,"currency":"CHF"|"EUR"|"INR"|string,"time_zone":"Europe/Zurich"|string,
+ "fx_to_budget":number|null,
+ "cities":[{"name":string,"places":[{"title":string,
+   "type":"hotel"|"activity"|"restaurant"|"guide","description":string,
+   "duration_min":number,"cost":number,"opens_at":"HH:MM"|null,
+   "closes_at":"HH:MM"|null,"tags":string[],"weather_sensitive":boolean}]}],
+ "legs":[{"title":string,"from":string,"to":string,"duration_min":number,
+   "cost":number,"departs_at":"HH:MM","overnight":boolean}],
+ "notes":string[]}
+
+Every place must be REAL and specific enough to buy a ticket for: "Swiss Museum
+of Transport", not "a museum". Use the exact name the place is known by and
+would be found under on a map today.
+
+Do NOT invent plausible-sounding attractions. A generic name assembled to fit a
+request — "Schweizer Schokolade Factory Tour", "City Heritage Walking Tour" — is
+the single worst thing you can produce here, because it survives every check
+this system makes and fails only when a traveler is standing where it should be.
+If you cannot name a real one for a category, give fewer places. Four real stops
+beat six with an invention among them.
+
+For anything the traveler called compulsory, name the actual famous instance:
+Switzerland's chocolate ones are Lindt Home of Chocolate in Zurich, Maison
+Cailler in Broc and Camille Bloch in Courtelary — not a tour invented to match
+the word "chocolate".
+
+cities: exactly ${cityCount} towns, in a sensible travelling order that
+minimises backtracking. Plain English names only ("Lucerne", not "Lucerne
+(Luzern), Switzerland").
+
+places per city: 2 budget places to stay (hostel, guesthouse or 2-3 star — not
+luxury), 4 to 6 things to do including what the town is genuinely famous for,
+and 1 affordable place to eat.
+
+cost is a number in the country's own currency: a hotel is the nightly rate for
+the room, an activity is adult admission, a restaurant is a typical main. Free
+things are 0, which is a real answer. Give your best estimate of the CURRENT
+price — it will be checked against live pages afterwards, so be realistic
+rather than cautious.
+
+duration_min is how long a visit takes. A hotel is the night: use 600.
+
+tags are lowercase single words: food, scenic, history, museum, hiking,
+adventure, culture, nightlife, shopping, family, wellness, chocolate, rail,
+viewpoint. Two to four each.
+
+legs: one per consecutive pair of cities, in that order. Real public transport,
+with a realistic journey time and adult fare. overnight is true only for a
+service that travels through the night.
+
+fx_to_budget: how many ${spec.currency} one unit of the local currency buys.
+Null if the local currency IS ${spec.currency}. Get the direction right: if
+1 CHF is about 105 INR and the budget is in INR, this is 105, not 0.0095.
+
+notes: seasonal warnings and money-saving facts for this specific period, one
+sentence each.`,
+        },
+        {
+          role: "user",
+          content:
+            `${days} days in ${asked} for ${party} ${party === 1 ? "person" : "people"}, ` +
+            `${spec.startsOn ?? "soon"} to ${spec.endsOn ?? ""}.` +
+            (spec.budget ? ` Total budget ${spec.budget} ${spec.currency}, so keep it affordable.` : "") +
+            (spec.interests.length ? ` They are into: ${spec.interests.join(", ")}.` : "") +
+            (spec.mustDo.length ? ` COMPULSORY, must appear: ${spec.mustDo.join("; ")}.` : "") +
+            (spec.dietary.length ? ` Dietary: ${spec.dietary.join(", ")}.` : ""),
+        },
+      ],
+    })
+  );
+
+  try {
+    const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
+    const result = SkeletonSchema.safeParse(parsed);
+    return result.success ? result.data : null;
+  } catch {
+    return null;
+  }
+}
+
+/* --------------------------------------------------------------- pass two -- */
+
+/**
+ * How many price checks one trip is allowed.
+ *
+ * Each costs about 7,000 prompt tokens, and each may be retried twice, against
+ * a 70,000-per-minute ceiling. Eight of them concurrently overran that window
+ * and the retries then failed for want of budget rather than context — which is
+ * how a run ended up verifying one price out of sixteen attempts.
+ *
+ * Five, paced, verifies more than eight in a hurry. They are also the five that
+ * matter: the must-do and the expensive stops, where a wrong estimate actually
+ * distorts the total.
+ */
+const MAX_PRICE_CHECKS = 5;
+
+/**
+ * One subject per query, and one query at a time.
+ *
+ * Two subjects means two searches, and two searches means twice the fetched
+ * page text in a context that barely holds one lot. Measured against a fresh
+ * organization with the budget untouched: the two-subject form verified 1 of 16
+ * attempts and then 0 of 10, while the identical single-subject question
+ * ("current adult price of the Gornergrat Railway return from Zermatt")
+ * succeeded every time it was asked on its own, at around 7,900 prompt tokens.
+ *
+ * So this is slower and it works, which is the correct trade for a number that
+ * ends up in front of a traveler. Concurrency is 1 for the same reason: the
+ * failures were not independent, and two of these in flight took each other
+ * down.
+ */
+const SUBJECTS_PER_CHECK = 1;
+
+/**
+ * How long to wait between price checks.
+ *
+ * One search costs about 7,500 tokens against a per-minute allowance of 8,000,
+ * so the honest spacing is a minute. Fifty seconds leaves the window most of
+ * the way refilled and keeps a five-check warm-up around four minutes.
+ */
+const PRICE_CHECK_SPACING_MS = 50_000;
+
+/**
+ * Which stops are worth spending a web search on.
+ *
+ * Not all of them, and not the cheapest. A wrong price on a 210-franc mountain
+ * railway distorts the total and the budget warning; a wrong price on a 4-franc
+ * coffee does not. So: anything answering a must-do first, because that is what
+ * the traveler came for and the one they will check themselves; then by cost,
+ * because that is where an estimate does the most damage.
+ */
+function worthChecking(
+  places: ResearchedPlace[],
+  mustDo: string[]
+): ResearchedPlace[] {
+  const wanted = mustDo.map((m) => m.toLowerCase());
+  const score = (p: ResearchedPlace) => {
+    const hay = `${p.title} ${p.description} ${p.tags.join(" ")}`.toLowerCase();
+    const isMustDo = wanted.some((w) =>
+      w.split(/\s+/).filter((t) => t.length > 3).some((t) => hay.includes(t))
+    );
+    return (isMustDo ? 1_000_000 : 0) + p.cost;
+  };
+  return [...places].sort((a, b) => score(b) - score(a));
+}
+
+/**
+ * Check a couple of prices against live pages. Allowed to come back empty.
+ *
+ * Returns only what it could actually confirm, keyed by the title it was asked
+ * about. Everything absent from the map keeps its estimate.
+ */
+async function verifyPrices(
+  batch: ResearchedPlace[],
+  currency: string
+): Promise<{
+  found: Map<string, { cost: number; sourceUrl: string | null }>;
+  sources: { title: string; url: string }[];
+}> {
+  const found = new Map<string, { cost: number; sourceUrl: string | null }>();
+  const sources: { title: string; url: string }[] = [];
+  if (!batch.length) return { found, sources };
+
+  const subjects = batch
+    .map((p) => `${p.title}, ${p.city}${p.type === "hotel" ? ", nightly double room" : ", adult admission"}`)
+    .join("; and ");
+
+  const search = await trySearch(
+    `Search the web: what is the current price in ${currency} of ${subjects}? ` +
+      `Give the number and cite the page.`,
+    /**
+     * The last attempt is a shorter *question*, not keywords.
+     *
+     * It was `"<title> <city> ticket price"` for one run, on the theory that
+     * less text means less fetched. That is backwards: a bare keyword string is
+     * a discovery query, and discovery queries are precisely what return the
+     * listicles and blog round-ups that overflow the context. A specific
+     * question ending in "cite the page" steers the search at official pages,
+     * which are the small ones. Shape matters here and length does not.
+     */
+    `Search the web: what does a ticket for ${batch[0].title} in ` +
+      `${batch[0].city} cost? Cite the page.`
+  );
+
+  if (!search.brief.trim()) return { found, sources };
+  sources.push(...search.sources);
+
+  const structured = await structure(
+    `Pull prices out of a research brief. Return ONLY:
+{"prices":[{"title":string,"cost":number|null,"source_url":string|null}]}
+
+title must be copied EXACTLY from this list, character for character:
+${batch.map((p) => `- ${p.title}`).join("\n")}
+
+cost is the number in ${currency}. Use null — not a guess, not a range, not a
+number from a different attraction — when the brief does not clearly state a
+price for that exact thing. A null leaves the planner's own estimate in place,
+which is the correct outcome; a wrong number replaces a reasonable estimate
+with a confident error.
+
+source_url must be a URL that appears in the brief, or null. Never invent one.`,
+    search.brief,
+    PriceSchema
+  );
+
+  for (const row of structured?.prices ?? []) {
+    const match = batch.find(
+      (p) => p.title.toLowerCase() === row.title.trim().toLowerCase()
+    );
+    const cost = Number(row.cost);
+    if (!match || !Number.isFinite(cost) || cost < 0) continue;
+    // A verified price ten times the estimate is far more likely to be the
+    // wrong row than a bargain missed. Reject the outliers rather than let one
+    // mis-parsed table wreck the total.
+    if (match.cost > 0 && (cost > match.cost * 8 || cost < match.cost / 8)) continue;
+    found.set(match.title, { cost, sourceUrl: url(row.source_url) });
+  }
+
+  return { found, sources };
 }
 
 /* ------------------------------------------------------------------ cache -- */
@@ -499,6 +823,10 @@ async function catalogued(
       tags: row.tags ?? [],
       sourceUrl: row.source_url,
       weatherSensitive: Boolean(row.weather_sensitive),
+      // A stored row is verified exactly when it kept the page it was read off.
+      // `source_url` is only ever written for a price that was confirmed, so it
+      // is the record of that, not a separate claim to keep in step.
+      verified: Boolean(row.source_url),
     });
     byCity.set(row.city, list);
   }
@@ -513,10 +841,8 @@ async function catalogued(
   return byCity;
 }
 
-/* -------------------------------------------------------------- the agent -- */
 
-/** Chosen so a 13-day trip is 5 concurrent city passes and not 5 minutes of them. */
-const MAX_CITIES = 5;
+/* -------------------------------------------------------------- the agent -- */
 
 export async function researchTrip(
   spec: TripSpec,
@@ -524,8 +850,27 @@ export async function researchTrip(
    *  only thing that keeps it out of a stranger's reach — see the
    *  `runs_via_trip` policy. */
   travelerId?: string | null,
-  /** Skip both caches. For "the prices look stale, go and look again". */
-  options: { fresh?: boolean } = {}
+  options: {
+    /** Skip both caches. For "the prices look stale, go and look again". */
+    fresh?: boolean;
+    /**
+     * Check prices against live pages.
+     *
+     * Off by default, and that default is forced by a hard number rather than
+     * chosen: `openai/gpt-oss-120b` allows 8,000 tokens per minute on the free
+     * tier, `groq/compound-mini` runs on it, and one web search costs about
+     * 7,500 of them. So the ceiling is roughly one search per minute, and five
+     * price checks is a five-minute wait — which is fine for a script and
+     * absurd for somebody watching a spinner.
+     *
+     * So verification is offline work. `npm run research:warm` turns it on,
+     * takes as long as it takes, and writes the verified result to the cache;
+     * every later request for that trip gets the citations for free. The
+     * interactive path runs the skeleton alone, answers in about fifteen
+     * seconds, and labels every price as an estimate — which is what it is.
+     */
+    verify?: boolean;
+  } = {}
 ): Promise<ResearchResult> {
   const supabase = createAdminClient();
 
@@ -533,8 +878,8 @@ export async function researchTrip(
    * The cheapest research is the research you already did.
    *
    * Checked before the run row is even opened, so a hit costs one indexed
-   * lookup and no tokens at all. This is what makes rehearsing a demo, or two
-   * people trying the same prompt, not cost a day's allowance each time.
+   * lookup and no tokens at all. This is what makes rehearsing, or two people
+   * trying the same prompt, not cost a day's allowance each time.
    */
   const key = fingerprint(spec);
   if (!options.fresh) {
@@ -562,8 +907,8 @@ export async function researchTrip(
         destinations: spec.destinations,
         starts_on: spec.startsOn,
         ends_on: spec.endsOn,
-        model: RESEARCH_MODEL,
-        structurer: CHAT_MODEL,
+        planner: MODEL,
+        checker: RESEARCH_MODEL,
       },
     })
     .select("id")
@@ -586,199 +931,122 @@ export async function researchTrip(
       spec.startsOn && spec.endsOn
         ? Math.round((Date.parse(spec.endsOn) - Date.parse(spec.startsOn)) / 86_400_000) + 1
         : 7;
-    const window = spec.startsOn ? `${spec.startsOn} to ${spec.endsOn}` : "the near future";
-    const asked = spec.destinations.join(", ");
-    const party = spec.partySize ?? 2;
-    const budget = spec.budget
-      ? `Their total budget for ${party} ${party === 1 ? "person" : "people"} is ` +
-        `${spec.budget} ${spec.currency}, so lean towards places that fit inside it.`
-      : "They did not give a budget, so prefer good value over luxury.";
 
-    /* ---- pass one: the shape of the trip, and how you move through it ---- */
+    /* ---- pass one: the trip, without the internet ---- */
 
-    const shapeBrief = await trySearch(
-      `A traveler is spending ${days} days in ${asked}, ${window}. ${budget}\n\n` +
-        `Answer briefly and factually:\n` +
-        `1. Which ${Math.min(MAX_CITIES, Math.max(2, Math.ceil(days / 3)))} towns should ` +
-        `they base nights in, in travelling order?\n` +
-        `2. For each consecutive pair, the train or bus between them: journey time, ` +
-        `adult fare with currency, a usual departure time, and whether it runs overnight.\n` +
-        `3. The country, its currency code, its IANA timezone, and what 1 unit of that ` +
-        `currency is worth in ${spec.currency} today.\n` +
-        `4. Anything closed or seasonal in ${window}.` +
-        (spec.mustDo.length
-          ? `\n5. Which town each of these is in: ${spec.mustDo.join("; ")}.`
-          : ""),
-      // The fallback drops everything but the two facts nothing else can be
-      // derived from. A trip can be planned without knowing the fare; it cannot
-      // be planned without knowing which towns.
-      `List ${Math.min(MAX_CITIES, Math.max(2, Math.ceil(days / 3)))} towns to visit in ` +
-        `${asked} over ${days} days, in travelling order, and give the country's ` +
-        `currency code and IANA timezone. Nothing else.`
-    );
-    await step(1, "web_search:shape", { asked, days }, {
-      sources: shapeBrief.sources.length,
-      brief: shapeBrief.brief.slice(0, 4000),
-    });
-
-    const shape = await structure(
-      `Turn a research brief into JSON. Return ONLY:
-{"country":string,"currency":"CHF"|"EUR"|"USD"|"GBP"|"INR"|"JPY"|string,
- "fx_to_budget":number|null,"time_zone":"Europe/Zurich"|string,"cities":string[],
- "legs":[{"title":string,"from":string,"to":string,"duration_min":number,
-          "cost":number,"departs_at":"HH:MM","overnight":boolean,
-          "source_url":string|null}],
- "notes":string[]}
-
-cities: the towns to base nights in, in travelling order, at most ${MAX_CITIES}.
-Use the plain English name only — "Lucerne", not "Lucerne (Luzern), Switzerland".
-
-legs: one per consecutive pair of cities in that order, both directions NOT
-needed. duration_min is the journey in minutes. cost is the adult fare as a
-number in the currency above. departs_at is a plausible "HH:MM" departure.
-overnight is true ONLY for a service that travels through the night.
-source_url must be a URL that appears in the brief, or null. Never invent one.
-
-fx_to_budget: how many ${spec.currency} one unit of the local currency buys,
-as the brief states it. Null if the brief does not say, or if the local
-currency IS ${spec.currency}. Get the direction right: if the brief says
-"1 CHF = 105 INR" and ${spec.currency} is INR, this is 105, not 0.0095.
-
-notes: seasonal warnings and money-saving facts, one sentence each. Only things
-the brief actually says.`,
-      shapeBrief.brief,
-      ShapeSchema
-    );
-
-    if (!shape || !shape.cities.length) {
+    const plan = await skeleton(spec, days);
+    if (!plan || !plan.cities.length) {
       throw new Error(
-        "The research pass came back without any usable destinations. " +
-          "Try naming the towns you want, or a country and a rough region."
+        "I could not work out an itinerary for that. Try naming the country, " +
+          "or a few towns you already know you want."
       );
     }
 
-    const cities = shape.cities.slice(0, MAX_CITIES);
+    const currency = plan.currency.trim().toUpperCase().slice(0, 3) || spec.currency;
 
-    /* ---- pass two: what is actually in each town ---- */
+    const places: ResearchedPlace[] = plan.cities.flatMap((city) =>
+      city.places.map(
+        (p): ResearchedPlace => ({
+          title: p.title.trim(),
+          type: p.type,
+          description: p.description.trim(),
+          city: city.name.trim(),
+          durationMin: clampDuration(p.duration_min, p.type),
+          cost: Math.max(0, Number(p.cost) || 0),
+          opensAt: clock(p.opens_at),
+          closesAt: clock(p.closes_at),
+          tags: (p.tags ?? []).map((t) => t.toLowerCase().trim()).filter(Boolean),
+          sourceUrl: null,
+          weatherSensitive: Boolean(p.weather_sensitive),
+          verified: false,
+        })
+      )
+    );
 
-    const interests = spec.interests.length
-      ? `They are into: ${spec.interests.join(", ")}.`
-      : "";
-    const mustDo = spec.mustDo.length
-      ? `Non-negotiables somewhere on this trip: ${spec.mustDo.join("; ")}.`
-      : "";
-    const dietary = spec.dietary.length
-      ? `Dietary needs: ${spec.dietary.join(", ")}.`
-      : "";
+    const cities = plan.cities.map((c) => c.name.trim()).filter(Boolean);
+
+    await step(1, "plan:skeleton", { days, cities: cities.length }, {
+      places: places.length,
+      legs: plan.legs.length,
+      currency,
+    });
+
+    /* ---- pass two: check the prices that matter, best-effort ---- */
+
+    const queue = options.verify
+      ? worthChecking(places, spec.mustDo).slice(0, MAX_PRICE_CHECKS * SUBJECTS_PER_CHECK)
+      : [];
+
+    const batches: ResearchedPlace[][] = [];
+    for (let i = 0; i < queue.length; i += SUBJECTS_PER_CHECK) {
+      batches.push(queue.slice(i, i + SUBJECTS_PER_CHECK));
+    }
 
     /**
-     * Towns the catalogue can already answer for.
+     * Paced, not concurrent.
      *
-     * Only the rest get a web pass. A second Swiss trip that asks for something
-     * different still reuses Lucerne, which is both the right answer and the
-     * difference between one town's worth of tokens and five.
+     * The 8,000-per-minute ceiling means two searches in the same minute take
+     * each other down — which is exactly what the earlier runs did, failing
+     * fifteen checks out of sixteen while the identical queries succeeded when
+     * asked alone. Waiting is the only thing that makes them work.
      */
-    const known = options.fresh ? new Map() : await catalogued(cities);
-    const toSearch = cities.filter((c) => !known.has(c));
-    if (known.size) {
-      console.log(
-        `[research] reusing ${known.size} town(s) from the catalogue: ` +
-          `${[...known.keys()].join(", ")}`
-      );
+    const checked: Awaited<ReturnType<typeof verifyPrices>>[] = [];
+    for (const [i, batch] of batches.entries()) {
+      if (i > 0) await new Promise((r) => setTimeout(r, PRICE_CHECK_SPACING_MS));
+      checked.push(await verifyPrices(batch, currency));
     }
 
-    // Concurrent, but only two at a time: five sequential passes is a minute
-    // the traveler spends watching a spinner, and five at once exhausts the
-    // per-minute token budget partway through and researches half a trip.
-    const cityBriefs = await mapLimit(toSearch, SEARCH_CONCURRENCY, async (city) => {
-      const brief = await trySearch(
-        `${city}, ${shape.country}, for a visitor ${window}. ${budget} ${interests} ` +
-          `${mustDo} ${dietary}\n\n` +
-          `List, each with its price in ${shape.currency} and the page you read it on:\n` +
-          `- 2 budget places to stay (hostel/guesthouse/2-3 star), nightly double rate.\n` +
-          `- 5 things to do, including what ${city} is best known for: admission price, ` +
-          `how long a visit takes, opening and closing time.\n` +
-          `- 1 affordable place to eat, typical main course price.\n` +
-          `Mark which are outdoors and weather-dependent. No prose.`,
-        // Narrower second attempt: the stops matter more than the beds, and a
-        // shorter question pulls less page text into the context.
-        `List 4 top things to do in ${city}, ${shape.country}, each with adult ` +
-          `admission price in ${shape.currency}, visit duration and opening hours.`
-      );
-      return { city, ...brief };
+    const sources: { title: string; url: string }[] = [];
+    let verifiedCount = 0;
+
+    for (const { found, sources: got } of checked) {
+      sources.push(...got);
+      for (const place of places) {
+        const hit = found.get(place.title);
+        if (!hit) continue;
+        place.cost = hit.cost;
+        place.sourceUrl = hit.sourceUrl;
+        place.verified = true;
+        verifiedCount++;
+      }
+    }
+
+    await step(2, "web:verify_prices", { attempted: queue.length }, {
+      verified: verifiedCount,
+      sources: sources.length,
     });
 
-    for (const [i, b] of cityBriefs.entries()) {
-      await step(2 + i, "web_search:city", { city: b.city }, {
-        sources: b.sources.length,
-        brief: b.brief.slice(0, 4000),
-      });
-    }
+    /* ---- the exchange rate, which is a live fact worth one query ---- */
 
-    // One at a time: an 8,000-token-per-minute window does not fit two of
-    // these plus their briefs, and a 429 here loses a town that was already
-    // successfully researched.
-    const structured = await mapLimit(
-      cityBriefs.filter((b) => b.brief.trim()),
-      1,
-      async ({ city, brief }) => {
-        const rows = await structure(
-          `Turn a research brief about ${city} into JSON. Return ONLY:
-{"places":[{"title":string,"type":"hotel"|"activity"|"restaurant"|"guide",
- "description":string,"duration_min":number,"cost":number,
- "opens_at":"HH:MM"|null,"closes_at":"HH:MM"|null,"tags":string[],
- "source_url":string|null,"weather_sensitive":boolean}]}
+    let fxToBudget = fxRate(plan.fx_to_budget, currency, spec.currency);
+    let fxVerified = false;
 
-Every place must be one the brief actually names. Do not add famous places the
-brief does not mention, however obvious they seem — an invented row is a stop
-the traveler will turn up to and find is not there.
-
-cost is a number in ${shape.currency}: for a hotel the nightly rate for the
-room, for an activity the adult admission, for a restaurant a typical main.
-Free things are 0, which is a real answer and not a missing one.
-
-duration_min is how long a visit takes. A hotel is the night: use 600.
-
-tags are lowercase single words describing it — food, scenic, history, museum,
-hiking, adventure, culture, nightlife, shopping, family, wellness, chocolate,
-rail, viewpoint. Two to four of them.
-
-source_url must be a URL that appears in the brief, or null. Never invent one.
-weather_sensitive is true only for something outdoors that rain or storm
-cancels outright.`,
-          brief,
-          PlacesSchema
-        );
-
-        return (rows?.places ?? []).map(
-          (p): ResearchedPlace => ({
-            title: p.title.trim(),
-            type: p.type,
-            description: p.description.trim(),
-            city,
-            durationMin: clampDuration(p.duration_min, p.type),
-            cost: Math.max(0, Number(p.cost) || 0),
-            opensAt: clock(p.opens_at),
-            closesAt: clock(p.closes_at),
-            tags: (p.tags ?? []).map((t) => t.toLowerCase().trim()).filter(Boolean),
-            sourceUrl: url(p.source_url),
-            weatherSensitive: Boolean(p.weather_sensitive),
-          })
-        );
-      }
-    );
-
-    const places = [...structured.flat(), ...[...known.values()].flat()];
-    if (!places.length) {
-      throw new Error(
-        "The research found the towns but nothing to do in them. This is " +
-          "usually a rate limit rather than an empty world — try again in a minute."
+    if (options.verify && currency !== spec.currency) {
+      await new Promise((r) => setTimeout(r, PRICE_CHECK_SPACING_MS));
+      const fx = await trySearch(
+        `Search the web: what is 1 ${currency} worth in ${spec.currency} today? Give the number.`,
+        // A question, not keywords — same reason as the price fallback above.
+        `Search the web: how many ${spec.currency} is one ${currency} today?`
       );
+      if (fx.brief.trim()) {
+        const found = await structure(
+          `Return ONLY {"rate":number|null} — how many ${spec.currency} one ${currency} buys, ` +
+            `as the brief states it. Null if it does not say.`,
+          fx.brief,
+          z.object({ rate: z.number().nullish() })
+        );
+        const live = fxRate(found?.rate, currency, spec.currency);
+        if (live !== null) {
+          fxToBudget = live;
+          fxVerified = true;
+          sources.push(...fx.sources);
+        }
+      }
     }
 
     /* ---- what came back ---- */
 
-    const legs: ResearchedLeg[] = shape.legs
+    const legs: ResearchedLeg[] = plan.legs
       .filter((l) => cities.includes(l.from) && cities.includes(l.to) && l.from !== l.to)
       .map((l) => ({
         title: l.title.trim(),
@@ -788,24 +1056,22 @@ cancels outright.`,
         cost: Math.max(0, Number(l.cost) || 0),
         departsAt: clock(l.departs_at) ?? "09:00",
         overnight: Boolean(l.overnight),
-        sourceUrl: url(l.source_url),
+        sourceUrl: null,
+        verified: false,
       }));
-
-    const sources = dedupeSources([
-      ...shapeBrief.sources,
-      ...cityBriefs.flatMap((b) => b.sources),
-    ]);
 
     const result: ResearchResult = {
       cities,
-      country: shape.country.trim(),
-      currency: shape.currency.trim().toUpperCase().slice(0, 3) || spec.currency,
-      timeZone: shape.time_zone.trim() || "UTC",
-      fxToBudget: fxRate(shape.fx_to_budget, shape.currency, spec.currency),
+      country: plan.country.trim(),
+      currency,
+      timeZone: plan.time_zone.trim() || "UTC",
+      fxToBudget,
+      fxVerified,
       places,
       legs,
-      sources,
-      notes: (shape.notes ?? []).map((n) => n.trim()).filter(Boolean),
+      sources: dedupeSources(sources),
+      notes: (plan.notes ?? []).map((n) => n.trim()).filter(Boolean),
+      verifiedCount,
     };
 
     await writeCache(key, spec, result);
@@ -818,6 +1084,7 @@ cancels outright.`,
           output: {
             cities: result.cities,
             places: result.places.length,
+            verified: verifiedCount,
             legs: result.legs.length,
             sources: result.sources.length,
           } as never,
@@ -838,6 +1105,7 @@ cancels outright.`,
     throw error;
   }
 }
+
 
 /* ----------------------------------------------------------------- tidy up -- */
 

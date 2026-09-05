@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, Info, TriangleAlert } from "lucide-react";
+import { ArrowLeft, BadgeCheck, ExternalLink, Info, TriangleAlert } from "lucide-react";
 import AppNav from "@/components/layout/AppNav";
 import { getViewer } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -80,12 +80,26 @@ export default async function ProposalPage({
   // read off. Built here because the plan holds inventory ids and the research
   // holds titles, and matching them once is cheaper than matching per row.
   const sourceByTitle = new Map<string, string>();
+  const verifiedTitles = new Set<string>();
   for (const place of research.places ?? []) {
     if (place.sourceUrl) sourceByTitle.set(place.title, place.sourceUrl);
+    if (place.verified) verifiedTitles.add(place.title);
   }
   for (const leg of research.legs ?? []) {
     if (leg.sourceUrl) sourceByTitle.set(leg.title, leg.sourceUrl);
+    if (leg.verified) verifiedTitles.add(leg.title);
   }
+
+  /**
+   * How much of this was actually checked against a live page.
+   *
+   * Said plainly at the top rather than left for the reader to infer from which
+   * rows happen to have a link. A plan built mostly from a planner's estimates
+   * is a perfectly good plan to book a holiday around and a bad one to quote
+   * from, and the difference is not something to bury.
+   */
+  const verified = research.verifiedCount ?? verifiedTitles.size;
+  const priced = (research.places ?? []).length;
 
   const days = [...new Set(plan.stops.map((s) => s.day))].sort((a, b) => a - b);
   const startsOn = spec.startsOn ? new Date(`${spec.startsOn}T00:00:00Z`) : null;
@@ -147,8 +161,23 @@ export default async function ProposalPage({
               <p className="mt-2 font-sans text-xs text-muted">
                 against a budget of{" "}
                 {formatMoney(plan.budget, plan.budgetCurrency)}
+                {research.fxVerified === false &&
+                  plan.budgetCurrency !== plan.currency && (
+                    <span className="text-accent"> · rate approximate</span>
+                  )}
               </p>
             )}
+            <p className="mt-3 font-sans text-xs text-muted">
+              {verified > 0 ? (
+                <>
+                  <BadgeCheck className="w-3.5 h-3.5 inline mr-1 text-accent" />
+                  {verified} of {priced} prices checked against a live page today.
+                  The rest are the planner&rsquo;s estimates.
+                </>
+              ) : (
+                <>Prices are the planner&rsquo;s estimates, not live quotes.</>
+              )}
+            </p>
           </div>
         </header>
 
@@ -225,16 +254,23 @@ export default async function ProposalPage({
                                 </span>
                               )}
                             </p>
-                            {source && (
+                            {source ? (
                               <a
                                 href={source}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="mt-1.5 inline-flex items-center gap-1 font-sans text-xs text-muted hover:text-fg transition-colors underline underline-offset-2"
+                                className="mt-1.5 inline-flex items-center gap-1 font-sans text-xs text-accent hover:text-fg transition-colors underline underline-offset-2"
                               >
-                                <ExternalLink className="w-3 h-3" />
-                                {new URL(source).hostname.replace(/^www\./, "")}
+                                <BadgeCheck className="w-3 h-3" />
+                                verified · {new URL(source).hostname.replace(/^www\./, "")}
                               </a>
+                            ) : (
+                              // Every row says where its number came from, one
+                              // way or the other. A blank here would read as a
+                              // checked price whose link was merely missing.
+                              <span className="mt-1.5 block font-sans text-xs text-muted">
+                                estimated price
+                              </span>
                             )}
                           </div>
                           <span className="font-sans text-xs text-muted tabular-nums shrink-0">

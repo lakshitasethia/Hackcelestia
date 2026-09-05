@@ -51,8 +51,13 @@ if (useFixture) {
   console.log("Storing the Switzerland FIXTURE (no web search, not real research).");
   result = research;
 } else {
-  console.log("Researching for real — this spends tokens and takes a minute…");
-  result = await researchTrip(spec, null, { fresh: true });
+  console.log(
+    "Researching for real, with live price checks. Groq's free tier allows\n" +
+    "8,000 tokens a minute on the model the search runs on and one search costs\n" +
+    "about 7,500, so this paces itself and takes several minutes. That is the\n" +
+    "whole point of doing it here instead of while somebody waits."
+  );
+  result = await researchTrip(spec, null, { fresh: true, verify: true });
   console.log(`  ${result.cities.join(" → ")} · ${result.places.length} places · ${result.sources.length} sources`);
 }
 
