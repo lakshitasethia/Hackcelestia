@@ -15,6 +15,13 @@
 begin;
 
 -- Wipe in FK order so re-seeding is clean.
+-- Proposals first: a proposal outlives the trip it built (`trip_id` is ON
+-- DELETE SET NULL), so leaving them behind means a reset hands you a plan that
+-- still offers "Yes, build this trip" — against researched inventory rows this
+-- same script is about to delete. Accepting one then fails inside `addItem`
+-- with "trip or inventory missing", which is a confusing way to learn that the
+-- catalogue was reseeded underneath it.
+delete from trip_proposals;
 delete from agent_steps;
 delete from agent_runs;
 delete from replan_proposals;
