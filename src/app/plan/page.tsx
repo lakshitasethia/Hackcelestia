@@ -50,8 +50,9 @@ export default async function PlanPage() {
           Tell us what you want.
         </h1>
         <p className="mt-6 text-body-lg text-muted max-w-2xl">
-          Nothing here is fixed. You will build the itinerary yourself from real
-          inventory on the next screen, and change it whenever you like.
+          Nothing here is fixed. Describe the trip and I will plan the whole
+          thing, or fill this in and build it yourself from real inventory on
+          the next screen. Either way you can change any of it afterwards.
         </p>
 
         <div className="mt-14 max-w-3xl">
@@ -68,7 +69,7 @@ export default async function PlanPage() {
                 id="title"
                 name="title"
                 required
-                defaultValue="Amalfi Coast"
+                defaultValue=""
                 className={field}
                 placeholder="Where are you going?"
               />

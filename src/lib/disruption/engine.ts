@@ -125,6 +125,15 @@ export async function injectDisruption(opts: {
 }
 
 /**
+ * How far a replacement may sit from the thing it replaces.
+ *
+ * Generous on purpose — Pompeii is a legitimate wet-weather answer to a boat
+ * day off Positano at ~30km, and Wagah is 30km from Amritsar — while still
+ * ruling out the other end of the country.
+ */
+const MAX_SUBSTITUTE_KM = 200;
+
+/**
  * Substitutes that survive whatever caused the disruption.
  *
  * A weather event rules out anything `weather_sensitive` — replacing a rained-off
@@ -186,6 +195,16 @@ export async function findCandidates(
       if (alreadyPlanned.has(inv.id)) return false; // already on this itinerary
       if (row.slots_total - row.slots_taken <= 0) return false;
       if (source === "weather" && inv.weather_sensitive) return false;
+
+      // A substitute has to be somewhere the group can actually get to that
+      // day. This was free when the catalogue was one stretch of coast; the
+      // moment a second region existed, a storm in Positano started offering
+      // the Golden Temple in Amritsar as a replacement — correctly weather-proof,
+      // correctly available, and six thousand kilometres away. Rows with no
+      // coordinates are kept: unknown is not the same as far.
+      const km = distanceKm(root.lat, root.lng, inv.lat, inv.lng);
+      if (km !== null && km > MAX_SUBSTITUTE_KM) return false;
+
       // Replace like with like: a boat day is an experience, not a hotel bed.
       return inv.type === "activity" || inv.type === "guide";
     })

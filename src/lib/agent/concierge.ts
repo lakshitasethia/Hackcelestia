@@ -45,9 +45,23 @@ export function conciergeThread(tripId: string): string {
   return `${THREAD_PREFIX}:${tripId}`;
 }
 
-const SYSTEM = `You are Vela, concierge for a small Amalfi Coast tour operator,
-talking to the traveler whose trip it is. Warm, specific, brief — two or three
-sentences. Never gush, never pad.
+/**
+ * Vela's brief, with the operator's patch written in rather than assumed.
+ *
+ * This said "a small Amalfi Coast tour operator" as a constant, which was true
+ * of every trip in the database until it wasn't. Asked about the Chandrashila
+ * trek she would have answered as a concierge for a coastal operator in Italy,
+ * confidently and in the wrong country. The trip already knows where it goes,
+ * so it says so.
+ */
+const systemFor = (trip: Trip) => {
+  const where = trip.destinations?.length
+    ? trip.destinations.join(", ")
+    : "the destinations on this itinerary";
+
+  return `You are Vela, concierge for a small tour operator running trips to
+${where}, talking to the traveler whose trip it is. Warm, specific, brief — two
+or three sentences. Never gush, never pad.
 
 YOU CANNOT CHANGE THE ITINERARY. To change anything you call propose_change,
 which writes a draft the traveler accepts with a button. Until they press it
@@ -79,6 +93,7 @@ Rules:
 
 After propose_change succeeds, use this shape: "I've drafted <the change> —
 <what it costs, from the figure the tool returned>. It's waiting for you."`;
+};
 
 export interface ConciergeReply {
   runId: string;
@@ -158,7 +173,7 @@ export async function askConcierge(
 
   try {
     const messages: ChatMessage[] = [
-      { role: "system", content: SYSTEM },
+      { role: "system", content: systemFor(trip) },
       { role: "user", content: briefFor(trip, items, bookings, inventory) },
       ...history,
       { role: "user", content: asked },
@@ -292,7 +307,10 @@ function briefFor(
   const titleById = new Map(items.map((i) => [i.id, i.title]));
   const { total, penaltyIfCancelled } = summarize(items, bookings);
 
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: TRIP_TZ });
+  // The trip's own zone, not the module default. Vela quoting "09:00" for a
+  // stop the itinerary shows at 12:30 is worse than her not knowing the time.
+  const tz = trip.time_zone || TRIP_TZ;
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: tz });
   const dayNumber = trip.starts_on
     ? Math.floor(
         (new Date(`${today}T00:00:00Z`).getTime() -
@@ -311,7 +329,7 @@ function briefFor(
   lines.push(
     `Today is ${today}` +
       (dayNumber && dayNumber >= 1 ? ` — day ${dayNumber} of the trip.` : ".") +
-      ` All times are local (${TRIP_TZ}).`
+      ` All times are local (${tz}).`
   );
 
   const prefs = [
@@ -331,7 +349,7 @@ function briefFor(
       .filter(Boolean)
       .join(", ");
     lines.push(
-      `- [${item.id}] day ${item.day} · ${formatTime(item.starts_at)} · ` +
+      `- [${item.id}] day ${item.day} · ${formatTime(item.starts_at, tz)} · ` +
         `${item.title} · ${formatMoney(Number(item.cost), trip.currency)} · ${item.status}` +
         (needs ? ` · needs: ${needs}` : "") +
         (item.lock_reason ? ` · LOCKED: ${item.lock_reason}` : "")

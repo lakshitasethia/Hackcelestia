@@ -46,7 +46,7 @@ in Postgres so the UI and the agent cannot disagree about it.
 |---|---|---|
 | Landing site | `/` | The pitch |
 | Sign in | `/login` | Everyone — email and password, or Google |
-| Planner | `/plan`, `/trip/[id]/build` | Traveler — dates, budget, interests, then build from real inventory |
+| Planner | `/plan`, `/trip/[id]/build` | Traveler — describe the trip and get a composed itinerary, or fill the form and build from real inventory |
 | Itinerary | `/trip/[id]` | Traveler — the plan, live costs, what is at risk |
 | Operations | `/ops` | Operator — groups, vendors, 72-hour schedule, open disruptions |
 | Impact assessment | `/ops/disruption/[id]` | Operator — blast radius, candidates, the agent, the accept flow |
@@ -117,7 +117,20 @@ a read, so it has no way to write anything anywhere.
 
 Worth saying plainly, because the alternative is being caught:
 
-- **Four agents, and they are not equally impressive.** The re-planner is the
+- **The composer routes; it does not reason about geography.** `/plan`'s
+  "plan the whole trip" button runs intake and then
+  `src/lib/agent/compose.ts`, which is a solver rather than a generation: the
+  route is breadth-first search over a hand-written leg graph
+  (`src/lib/agent/corridor.ts`), day allocation is arithmetic, and every rupee
+  is summed from catalogue rows. That is deliberate — a model asked to order
+  six Himalayan towns will send you Amritsar → Chopta → Manali, because it has
+  no way to feel two days of driving. The cost is that the corridor is written
+  down by hand, so the composer works on the north India catalogue and nowhere
+  else until someone writes the next corridor. It composes into `itinerary_items`
+  through the same `addItem` the manual builder uses, so the result is a DAG and
+  the disruption engine works on a composed trip with no extra code.
+
+- **Five agents, and they are not equally impressive.** The re-planner is the
   real one: a tool-using loop, depth decided at runtime, five tools, its trace
   persisted to `agent_steps`. The concierge and the copilot are the same loop
   with different tools and a tighter iteration cap. Intake is a single

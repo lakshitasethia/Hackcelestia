@@ -38,11 +38,14 @@ export default function ItemCard({
   item,
   dependsOn,
   currency,
+  timeZone,
 }: {
   item: ItineraryItem;
   /** Titles of the items this one cannot happen without. */
   dependsOn: string[];
   currency: string;
+  /** The trip's zone, so a 04:00 start in Garhwal reads as 04:00. */
+  timeZone: string;
 }) {
   const Icon = ICONS[item.type] ?? Compass;
   const statusLabel = STATUS_LABEL[item.status];
@@ -64,7 +67,7 @@ export default function ItemCard({
           <div className="min-w-0">
             <div className="flex items-baseline gap-3 flex-wrap">
               <span className="font-display text-lg font-semibold text-fg tabular-nums">
-                {formatTime(item.starts_at)}
+                {formatTime(item.starts_at, timeZone)}
               </span>
               <span className="font-sans text-xs uppercase tracking-wider text-muted">
                 {formatDuration(item.starts_at, item.ends_at)}

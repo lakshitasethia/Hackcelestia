@@ -26,8 +26,16 @@ const SpecSchema = z.object({
   title: z.string().nullish(),
   party_size: z.number().int().min(1).max(40).nullish(),
   budget: z.number().min(0).nullish(),
+  currency: z.string().nullish(),
   starts_on: z.string().nullish(),
   ends_on: z.string().nullish(),
+  /** Places named, in the traveler's words. Order here is not meaningful — the
+   *  composer decides the route; this is only what they asked for. */
+  destinations: z.array(z.string()).nullish(),
+  /** Things they said were non-negotiable, verbatim. The composer places these
+   *  before anything else and reports any it could not honour. */
+  must_do: z.array(z.string()).nullish(),
+  transport: z.string().nullish(),
   interests: z.array(z.string()).nullish(),
   pace: z.enum(["relaxed", "moderate", "packed"]).nullish(),
   dietary: z.array(z.string()).nullish(),
@@ -41,8 +49,12 @@ export type TripSpec = {
   title: string | null;
   partySize: number | null;
   budget: number | null;
+  currency: string;
   startsOn: string | null;
   endsOn: string | null;
+  destinations: string[];
+  mustDo: string[];
+  transport: string | null;
   interests: string[];
   pace: "relaxed" | "moderate" | "packed" | null;
   dietary: string[];
@@ -94,7 +106,9 @@ Return ONLY this object, with null for anything they did not say. Never guess:
 a wrong budget is worse than a blank one.
 
 {"title":string|null,"party_size":number|null,"budget":number|null,
+ "currency":"INR"|"EUR"|"USD"|"GBP"|null,
  "starts_on":"YYYY-MM-DD"|null,"ends_on":"YYYY-MM-DD"|null,
+ "destinations":string[],"must_do":string[],"transport":string|null,
  "interests":string[],"pace":"relaxed"|"moderate"|"packed"|null,
  "dietary":string[],"mobility":string|null,"style":string|null,
  "unclear":string[]}
@@ -102,10 +116,28 @@ a wrong budget is worse than a blank one.
 interests MUST be chosen from exactly this list, and may be empty:
 ${tags.join(", ")}
 
-budget is a total number in EUR, digits only — "about 5k" is 5000, "£3,000" is
-3000. party_size counts people, so "me and my wife" is 2. Only fill dates they
-actually gave; "next spring" is not a date, it is an entry in unclear.
-Put anything you could not pin down in unclear, in the traveler's own words.`,
+destinations is every place they named, one per entry, spelling corrected
+("Rishikesh", not "rishikeshh"). Do NOT reorder them and do NOT invent any.
+If they said they do not know the order, that is not an entry in unclear —
+deciding the order is the planner's job, not theirs.
+
+must_do is everything they called compulsory, non-negotiable, or said they
+"want to" or "need to" do, in their own words: "river rafting in Rishikesh",
+"stay in tents in Chopta". These are commitments, not preferences.
+
+transport is how they want to travel between places — "trains", "flights",
+"road" — or null.
+
+budget is a total number, digits only, and currency says which currency it is
+in. ₹ or "rs" or "INR" or an Indian itinerary means INR. "about 5k" is 5000.
+For a RANGE like "30000 to 35000", take the UPPER number — it is their ceiling.
+A budget you can read is never an entry in unclear.
+
+party_size counts people, so "me and my wife" is 2; if they say nothing, leave
+it null rather than assuming 1. Only fill dates they actually gave; "next
+spring" is not a date, it is an entry in unclear. Dates without a year mean the
+next such date in the future.
+Put anything you genuinely could not pin down in unclear, in their own words.`,
           },
           { role: "user", content: prose },
         ],
@@ -133,10 +165,17 @@ Put anything you could not pin down in unclear, in the traveler's own words.`,
       title: value.title?.trim() || null,
       partySize: value.party_size ?? null,
       budget: value.budget ?? null,
+      // The catalogue is priced in one currency per region; anything the model
+      // did not recognise falls back to INR rather than silently being read as
+      // euros, which is the bug this replaced.
+      currency: normaliseCurrency(value.currency),
       // A date it invented is worse than no date, and the form defaults are
       // sensible; so anything unparseable is dropped rather than passed on.
       startsOn: isDate(value.starts_on) ? value.starts_on! : null,
       endsOn: isDate(value.ends_on) ? value.ends_on! : null,
+      destinations: dedupe(value.destinations ?? []),
+      mustDo: (value.must_do ?? []).map((m) => m.trim()).filter(Boolean),
+      transport: value.transport?.trim() || null,
       // Belt and braces on the tag list: the prompt constrains it, this makes
       // it true.
       interests: (value.interests ?? []).filter((tag) => allowed.has(tag)),
@@ -171,6 +210,28 @@ Put anything you could not pin down in unclear, in the traveler's own words.`,
     }
     throw error;
   }
+}
+
+const CURRENCIES = new Set(["INR", "EUR", "USD", "GBP"]);
+
+function normaliseCurrency(value: string | null | undefined): string {
+  const code = value?.trim().toUpperCase();
+  return code && CURRENCIES.has(code) ? code : "INR";
+}
+
+/** Case-insensitive, order-preserving. "Delhi" and "delhi" are one place. */
+function dedupe(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of values) {
+    const value = raw.trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
 }
 
 function isDate(value: string | null | undefined): boolean {

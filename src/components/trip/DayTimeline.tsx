@@ -7,12 +7,15 @@ export default function DayTimeline({
   items,
   titleById,
   currency,
+  timeZone,
 }: {
   day: number;
   items: ItineraryItem[];
   /** Every item in the trip, so `depends_on` ids can be shown as names. */
   titleById: Map<string, string>;
   currency: string;
+  /** The trip's own zone. Item times are absolute; this is how they read. */
+  timeZone: string;
 }) {
   const dayTotal = items
     .filter((i) => i.status !== "cancelled" && i.status !== "replaced")
@@ -25,7 +28,7 @@ export default function DayTimeline({
           Day {String(day).padStart(2, "0")}
         </span>
         <h2 className="mt-2 font-display text-display-sm font-semibold uppercase text-fg">
-          {items[0] ? formatDateLong(items[0].starts_at) : ""}
+          {items[0] ? formatDateLong(items[0].starts_at, timeZone) : ""}
         </h2>
         <p className="mt-2 font-sans text-xs uppercase tracking-wider text-muted tabular-nums">
           {items.length} {items.length === 1 ? "stop" : "stops"} ·{" "}
@@ -37,6 +40,7 @@ export default function DayTimeline({
         {items.map((item) => (
           <ItemCard
             key={item.id}
+            timeZone={timeZone}
             item={item}
             currency={currency}
             dependsOn={item.depends_on

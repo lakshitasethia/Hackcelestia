@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Sparkles, Wand2 } from "lucide-react";
 import Vela from "./Vela";
-import { readDescriptionAction } from "@/app/plan/actions";
+import { readDescriptionAction, planTripAction } from "@/app/plan/actions";
 
 /**
  * Describe the trip in a sentence; the form fills itself in.
@@ -21,8 +22,10 @@ import { readDescriptionAction } from "@/app/plan/actions";
  * support one optional shortcut.
  */
 export default function IntakeBox() {
+  const router = useRouter();
   const [prose, setProse] = useState("");
   const [busy, setBusy] = useState(false);
+  const [planning, setPlanning] = useState(false);
   const [filled, setFilled] = useState<string[]>([]);
   const [unclear, setUnclear] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +91,35 @@ export default function IntakeBox() {
     }
   }
 
+  /**
+   * The whole trip, not the form.
+   *
+   * Someone who writes "suggest me an 8-day itinerary" is not asking to be
+   * handed a filled-in form and a catalogue; they are asking for the itinerary.
+   * This composes one and takes them to it. It is still a draft — nothing is
+   * booked and no seat is taken until they press Confirm on the trip page.
+   */
+  async function planEverything() {
+    if (!prose.trim() || planning) return;
+    setPlanning(true);
+    setError(null);
+    setFilled([]);
+    setUnclear([]);
+
+    try {
+      const result = await planTripAction(prose);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.push(`/trip/${result.tripId}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "That did not work.");
+    } finally {
+      setPlanning(false);
+    }
+  }
+
   return (
     <section className="surface p-5 mb-10">
       <div className="flex items-center gap-2.5">
@@ -97,8 +129,9 @@ export default function IntakeBox() {
         </h2>
       </div>
       <p className="mt-2 font-sans text-xs text-muted">
-        Describe the trip and I will fill the form in. Nothing is submitted —
-        check every field before you create it.
+        Describe the trip. I can plan the whole thing — route, days, trains and
+        costs — or just fill the form in and leave the planning to you. Either
+        way nothing is booked until you confirm it.
       </p>
 
       <textarea
@@ -106,7 +139,7 @@ export default function IntakeBox() {
         onChange={(event) => setProse(event.target.value)}
         rows={3}
         maxLength={2000}
-        placeholder="Five days on the Amalfi Coast in September for me and my wife, around €4,500. We like food and being on the water, nothing too strenuous, and she's vegetarian."
+        placeholder="Manali, Rishikesh, Delhi, Amritsar, Auli and Chopta — I don't know the order. Around ₹35,000, by train, arriving 6 September and leaving by the 15th. Rafting in Rishikesh, the Golden Temple, tents in Chopta, the Chandrashila trek and horse riding, and local food throughout."
         className="mt-4 w-full bg-transparent border border-line px-4 py-3 text-fg font-sans text-sm
                    focus:outline-none focus:border-fg transition-colors placeholder:text-muted resize-y"
       />
@@ -114,15 +147,27 @@ export default function IntakeBox() {
       <div className="mt-3 flex flex-wrap items-center gap-4">
         <button
           type="button"
+          onClick={planEverything}
+          disabled={planning || busy || !prose.trim()}
+          className="flex items-center gap-2 bg-fg text-bg px-4 py-2.5 font-sans text-xs
+                     uppercase tracking-wider font-bold hover:opacity-90 transition-opacity
+                     disabled:opacity-40"
+        >
+          <Wand2 className="w-3.5 h-3.5" />
+          {planning ? "Planning the trip…" : "Plan the whole trip"}
+        </button>
+
+        <button
+          type="button"
           onClick={read}
-          disabled={busy || !prose.trim()}
+          disabled={busy || planning || !prose.trim()}
           className="flex items-center gap-2 border border-line px-4 py-2.5 font-sans text-xs
                      uppercase tracking-wider font-bold text-muted hover:text-fg hover:border-fg
                      transition-colors disabled:opacity-40 disabled:hover:text-muted
                      disabled:hover:border-line"
         >
           <Sparkles className="w-3.5 h-3.5" />
-          {busy ? "Reading…" : "Read this and fill the form"}
+          {busy ? "Reading…" : "Just fill the form"}
         </button>
 
         {filled.length > 0 && (

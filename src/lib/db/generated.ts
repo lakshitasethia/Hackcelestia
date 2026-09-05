@@ -98,9 +98,11 @@ export interface InventoryRow {
   tags: string[];
   weather_sensitive: boolean;
   created_at: string;
+  city: string | null;
+  region: string | null;
 }
 
-export type InventoryInsert = Omit<InventoryRow, "id" | "description" | "duration_min" | "base_cost" | "lat" | "lng" | "opens_at" | "closes_at" | "tags" | "weather_sensitive" | "created_at"> & Partial<InventoryRow>;
+export type InventoryInsert = Omit<InventoryRow, "id" | "description" | "duration_min" | "base_cost" | "lat" | "lng" | "opens_at" | "closes_at" | "tags" | "weather_sensitive" | "created_at" | "city" | "region"> & Partial<InventoryRow>;
 
 export interface ItineraryItemsRow {
   id: string;
@@ -202,9 +204,11 @@ export interface TripsRow {
   coordinator_id: string | null;
   coordinator_name: string | null;
   coordinator_phone: string | null;
+  destinations: string[];
+  time_zone: string;
 }
 
-export type TripsInsert = Omit<TripsRow, "id" | "traveler_id" | "operator_id" | "title" | "contact_name" | "contact_email" | "contact_phone" | "status" | "party_size" | "budget" | "currency" | "starts_on" | "ends_on" | "prefs" | "created_at" | "updated_at" | "coordinator_id" | "coordinator_name" | "coordinator_phone"> & Partial<TripsRow>;
+export type TripsInsert = Omit<TripsRow, "id" | "traveler_id" | "operator_id" | "title" | "contact_name" | "contact_email" | "contact_phone" | "status" | "party_size" | "budget" | "currency" | "starts_on" | "ends_on" | "prefs" | "created_at" | "updated_at" | "coordinator_id" | "coordinator_name" | "coordinator_phone" | "destinations" | "time_zone"> & Partial<TripsRow>;
 
 export interface VendorsRow {
   id: string;

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createTrip } from "@/lib/db/mutations";
 import { getViewer } from "@/lib/auth/session";
 import { extractTripSpec, type TripSpec } from "@/lib/agent/intake";
+import { composeItinerary, type ComposeResult } from "@/lib/agent/compose";
 import type { TripPrefs } from "@/lib/db/types";
 
 /**
@@ -90,4 +91,73 @@ export async function createTripAction(formData: FormData): Promise<void> {
   revalidatePath("/ops");
   revalidatePath("/app");
   redirect(`/trip/${tripId}/build`);
+}
+
+
+/**
+ * One sentence in, a whole itinerary out.
+ *
+ * The path `readDescriptionAction` starts stops at a filled-in form, which is
+ * the right answer for someone tuning a trip they already understand and the
+ * wrong one for someone who typed "suggest me a full itinerary for 8 days".
+ * That person was handed a 40-row catalogue and asked to do the planning
+ * themselves.
+ *
+ * This runs intake and the composer back to back and lands them on the finished
+ * plan. It is still a *draft*: composing writes `itinerary_items`, nothing is
+ * booked, no `availability` moves, and the trip stays `status = 'draft'` until
+ * a person presses Confirm on the trip page. So the boundary the rest of the
+ * project keeps — the agent proposes, a human accepts — holds here too; what
+ * changed is that the proposal is now a whole trip rather than a blank form.
+ */
+export type PlanResult =
+  | { ok: true; tripId: string; summary: ComposeResult }
+  | { ok: false; error: string };
+
+export async function planTripAction(description: string): Promise<PlanResult> {
+  const viewer = await getViewer();
+  if (!viewer) return { ok: false, error: "Sign in before planning a trip." };
+
+  try {
+    const spec = await extractTripSpec(description);
+
+    if (!spec.startsOn || !spec.endsOn) {
+      return {
+        ok: false,
+        error: "I need the dates — tell me when you arrive and when you leave.",
+      };
+    }
+    if (!spec.destinations.length) {
+      return { ok: false, error: "Tell me where you want to go and I will plan it." };
+    }
+
+    const tripId = await createTrip({
+      title: spec.title || `${spec.destinations.slice(0, 3).join(", ")} and back`,
+      contactName: viewer.fullName || viewer.email || "Traveler",
+      contactEmail: viewer.email ?? undefined,
+      partySize: spec.partySize ?? 1,
+      budget: spec.budget,
+      startsOn: spec.startsOn,
+      endsOn: spec.endsOn,
+      prefs: {
+        interests: spec.interests,
+        pace: spec.pace ?? "moderate",
+        dietary: spec.dietary,
+        mobility: spec.mobility ?? undefined,
+        style: spec.style ?? undefined,
+      },
+      travelerId: viewer.id,
+    });
+
+    const summary = await composeItinerary(tripId, spec);
+
+    revalidatePath("/ops");
+    revalidatePath("/app");
+    return { ok: true, tripId, summary };
+  } catch (cause) {
+    return {
+      ok: false,
+      error: cause instanceof Error ? cause.message : "That did not work.",
+    };
+  }
 }

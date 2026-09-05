@@ -70,7 +70,8 @@ export default async function TripPage({
             <p className="mt-6 text-body-lg text-muted">
               {trip.starts_on && trip.ends_on && (
                 <>
-                  {formatDate(trip.starts_on)} — {formatDate(trip.ends_on)} ·{" "}
+                  {formatDate(trip.starts_on, trip.time_zone)} —{" "}
+                  {formatDate(trip.ends_on, trip.time_zone)} ·{" "}
                 </>
               )}
               {trip.party_size} {trip.party_size === 1 ? "traveler" : "travelers"}
@@ -119,6 +120,7 @@ export default async function TripPage({
           <div className="mt-16 flex flex-col gap-16">
             {[...days].map(([day, dayItems]) => (
               <DayTimeline
+                timeZone={trip.time_zone}
                 key={day}
                 day={day}
                 items={dayItems}
