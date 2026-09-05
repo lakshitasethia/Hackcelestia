@@ -1,5 +1,10 @@
 # Where this is, and what to do next
 
+> **Looking for the plan rather than the constraints?** `build_execution.md` has
+> the dated execution plan — the deck for 9 Sep, the hardening for the 26–27 Sep
+> finale, and the demo-day checklist. This file is the other half: the things
+> that cost real time and tokens to learn, and the invariants not to redesign.
+
 Written across two sessions: the one that added web research, the propose/confirm
 gate and the PDF export, and the one that closed the remaining PS-7 gaps
 (accommodation preferences, comparing alternatives, payments, Complete and
