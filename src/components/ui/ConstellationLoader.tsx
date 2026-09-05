@@ -154,7 +154,10 @@ export default function ConstellationLoader() {
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-umber-900 text-tan-500 select-none overflow-hidden"
+      // `print:hidden` because this is a full-screen fixed overlay, and a
+      // printed page has no concept of a splash that fades: it renders as a
+      // dark rectangle over the first sheet of anything anyone prints.
+      className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-umber-900 text-tan-500 select-none overflow-hidden print:hidden"
     >
       {/* Background Starfield */}
       <div className="absolute inset-0 pointer-events-none opacity-60">

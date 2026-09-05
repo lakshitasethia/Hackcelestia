@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import AppNav from "@/components/layout/AppNav";
 import LiveRefresh from "@/components/realtime/LiveRefresh";
 import Concierge from "@/components/concierge/Concierge";
@@ -63,6 +63,17 @@ export default async function TripPage({
                 · {trip.status.replace(/_/g, " ")} ·
               </span>
               <LiveRefresh tripIds={[trip.id]} />
+              {/* Opens in a new tab rather than navigating: the print view is a
+                  document, and coming back from it should not cost the
+                  traveler their place in a fortnight of scrolling. */}
+              <Link
+                href={`/trip/${trip.id}/print`}
+                target="_blank"
+                className="inline-flex items-center gap-1.5 font-sans text-xs uppercase tracking-wider text-muted hover:text-fg transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Export PDF
+              </Link>
             </div>
             <h1 className="font-display text-display-lg font-semibold uppercase text-fg text-balance">
               {trip.title}

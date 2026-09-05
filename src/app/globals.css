@@ -294,3 +294,179 @@
     scrollbar-width: none;
   }
 }
+
+/* ------------------------------------------------------------- documents --
+ *
+ * The printable itinerary at /trip/[id]/print, and only that route.
+ *
+ * Written as plain CSS outside @layer rather than as Tailwind utilities on the
+ * page, because a printed document is the one place in this app where the
+ * design system is actively wrong: the whole app is off-white on near-black,
+ * and browsers strip background colours from printed output by default. Left
+ * alone it prints as white text on nothing. So the document declares its own
+ * black-on-white world and sizes itself in points, which is the unit a sheet
+ * of paper is actually in.
+ */
+
+.print-doc {
+  background: #fff;
+  color: #111;
+  /* Paint the white out to the edges on screen without giving up the measure.
+     The app's page background is near-black, and a document floating on it
+     reads as a rendering bug rather than as paper. The shadow is the width of
+     the viewport in every direction and the clip stops it scrolling the page
+     sideways. Irrelevant in print, where the sheet is white already. */
+  box-shadow: 0 0 0 100vmax #fff;
+  clip-path: inset(0 -100vmax);
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 11pt;
+  line-height: 1.5;
+}
+
+.doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  padding-bottom: 1.5rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.doc-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #111;
+  color: #fff;
+  padding: 0.7rem 1.15rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.doc-button:hover { opacity: 0.88; }
+
+.doc-hint { font-size: 0.75rem; color: #666; }
+
+.doc-head { margin-bottom: 2.5rem; }
+.doc-eyebrow {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #777;
+  margin-bottom: 0.6rem;
+}
+.doc-title {
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+.doc-sub { font-size: 0.85rem; color: #555; margin-top: 0.45rem; }
+
+.doc-day { margin-bottom: 1.9rem; break-inside: avoid; }
+.doc-day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  border-bottom: 1px solid #111;
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+.doc-day-date {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #666;
+}
+
+.doc-table { width: 100%; border-collapse: collapse; }
+.doc-table tr { border-bottom: 1px solid #eee; break-inside: avoid; }
+.doc-table td { padding: 0.5rem 0; vertical-align: top; }
+
+.doc-time {
+  width: 4.2rem;
+  font-variant-numeric: tabular-nums;
+  color: #666;
+  font-size: 0.85rem;
+}
+.doc-what { padding-right: 1rem; }
+.doc-what-title { display: block; font-size: 0.95rem; }
+.doc-what-meta {
+  display: block;
+  font-size: 0.72rem;
+  color: #777;
+  text-transform: capitalize;
+  margin-top: 0.12rem;
+}
+.doc-note { display: block; font-size: 0.75rem; color: #555; margin-top: 0.25rem; }
+.doc-cost {
+  width: 6.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.doc-foot { margin-top: 2.5rem; border-top: 2px solid #111; padding-top: 0.9rem; }
+.doc-total {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.doc-fineprint {
+  margin-top: 1.1rem;
+  font-size: 0.7rem;
+  color: #888;
+  line-height: 1.5;
+}
+
+@media print {
+  /* The controls are the only thing on this page that is not the document. */
+  .no-print { display: none !important; }
+
+  /* Belt and braces against anything the root layout renders around the page.
+     The loader carries `print:hidden` of its own; this catches whatever gets
+     added next, because the failure mode is silent — nobody notices a stray
+     fixed overlay until it is on somebody's printed itinerary. */
+  body > *:not(.print-doc) { display: none !important; }
+
+  /* Margins belong to the sheet, not to the element, or the second page
+     starts hard against the top edge. */
+  @page { margin: 16mm 14mm; }
+
+  .print-doc {
+    max-width: none;
+    padding: 0;
+    font-size: 10.5pt;
+    box-shadow: none;
+    clip-path: none;
+  }
+
+  /* Printed links show their target — a URL is useless on paper otherwise,
+     and this document exists to be carried around off a screen. */
+  .print-doc a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.7em;
+    color: #666;
+    word-break: break-all;
+  }
+}
