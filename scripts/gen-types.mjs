@@ -2,7 +2,11 @@
 /**
  * Generate row types from the live schema — no Docker needed.
  *
- *   node scripts/gen-types.mjs > src/lib/db/generated.ts
+ *   npm run db:types
+ *
+ * Note that the redirect truncates the target before this runs, so a failure
+ * in here leaves an empty types file behind. Everything below therefore
+ * connects and validates before printing a byte.
  *
  * `supabase gen types` needs a container runtime, and it renders text columns
  * with CHECK constraints as bare `string`. This reads information_schema
@@ -11,24 +15,28 @@
  */
 import fs from "node:fs";
 import pg from "pg";
+import { loadEnv, connectionConfig, explain } from "./pg-config.mjs";
 
-for (const line of fs.readFileSync(".env.local", "utf8").split("\n")) {
-  const t = line.trim();
-  if (!t || t.startsWith("#")) continue;
-  const eq = t.indexOf("=");
-  if (eq > 0) process.env[t.slice(0, eq).trim()] ||= t.slice(eq + 1).trim();
+/**
+ * Connects through `pg-config` like every other script here.
+ *
+ * It used to build its own client pinned to `db.<ref>.supabase.co`, which
+ * publishes only an AAAA record — so on any network without an IPv6 route this
+ * died with ETIMEDOUT while `db:push`, `db:seed` and `db:verify` all worked
+ * fine through the pooler. Worse, the failure lands mid-pipeline: the shell has
+ * already truncated `src/lib/db/generated.ts` by the time the connection gives
+ * up, so a flaky network does not just fail to regenerate the types, it deletes
+ * them and breaks the build.
+ */
+loadEnv();
+
+const client = new pg.Client(connectionConfig());
+try {
+  await client.connect();
+} catch (err) {
+  console.error(`\nCould not connect to Postgres: ${explain(err)}`);
+  process.exit(1);
 }
-
-const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0];
-const client = new pg.Client({
-  host: `db.${ref}.supabase.co`,
-  port: 5432,
-  user: "postgres",
-  password: process.env.SUPABASE_DB_PASSWORD,
-  database: "postgres",
-  ssl: { rejectUnauthorized: false },
-});
-await client.connect();
 
 const { rows: columns } = await client.query(`
   select table_name, column_name, data_type, udt_name, is_nullable,
