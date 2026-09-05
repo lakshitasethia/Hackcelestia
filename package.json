@@ -24,6 +24,7 @@
     "test:intake": "VOYAGE_SERVICE_ROLE=1 tsx --conditions=react-server scripts/test-intake.mts",
     "test:research": "VOYAGE_SERVICE_ROLE=1 tsx --conditions=react-server scripts/test-research.mts",
     "test:abroad": "VOYAGE_SERVICE_ROLE=1 tsx --conditions=react-server scripts/test-compose-abroad.mts",
+    "test:assignment": "VOYAGE_SERVICE_ROLE=1 tsx --conditions=react-server scripts/test-assignment.mts",
     "db:seed:auth": "node scripts/seed-auth.mjs",
     "test:rls": "tsx --conditions=react-server scripts/test-rls.mts",
     "test:replan-tools": "VOYAGE_SERVICE_ROLE=1 tsx --conditions=react-server scripts/test-replan-tools.mts"

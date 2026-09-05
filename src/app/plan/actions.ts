@@ -13,6 +13,7 @@ import {
 import { researchTrip, type ResearchResult } from "@/lib/agent/research";
 import { ingestResearch } from "@/lib/agent/catalogue";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { houseAssignment } from "@/lib/db/assignment";
 import type { TripPrefs } from "@/lib/db/types";
 
 /**
@@ -242,6 +243,18 @@ export async function acceptProposalAction(proposalId: string): Promise<AcceptRe
 
     const { spec, plan } = proposal;
 
+    /**
+     * Hand the trip to whoever will actually run it.
+     *
+     * Without this the trip is the traveler's alone: `operator_id` is null, so
+     * it never appears on the operator's board, and with no coordinator it
+     * never reaches the guide's run sheet — which means the disruption engine,
+     * the blast radius and the re-planner are all unreachable from a trip the
+     * agent has just composed. Every one of those features works on it; there
+     * was simply no edge connecting it to the people who use them.
+     */
+    const house = await houseAssignment();
+
     const tripId = await createTrip({
       title: spec.title || `${plan.cities.slice(0, 3).join(", ")} and back`,
       contactName: viewer.fullName || viewer.email || "Traveler",
@@ -258,9 +271,21 @@ export async function acceptProposalAction(proposalId: string): Promise<AcceptRe
         style: spec.style ?? undefined,
       },
       travelerId: viewer.id,
+      operatorId: house.operatorId,
     });
 
     await commitItinerary(tripId, plan, spec);
+
+    if (house.coordinatorName) {
+      await supabase
+        .from("trips")
+        .update({
+          coordinator_id: house.coordinatorId,
+          coordinator_name: house.coordinatorName,
+          coordinator_phone: house.coordinatorPhone,
+        })
+        .eq("id", tripId);
+    }
 
     await supabase
       .from("trip_proposals")
