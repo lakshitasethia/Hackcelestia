@@ -1,6 +1,13 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getBookings, getInventory, getItems, getTrip, summarize } from "@/lib/db/queries";
+import {
+  citiesOnTrip,
+  getBookings,
+  getInventory,
+  getItems,
+  getTrip,
+  summarize,
+} from "@/lib/db/queries";
 import { CHAT_MODEL, runToolLoop, type ChatMessage } from "./runtime";
 import type { StepRecorder } from "./tool";
 import { buildConciergeTools, dateOfDay } from "./concierge-tools";
@@ -122,12 +129,31 @@ export async function askConcierge(
   const asked = question.trim();
   if (!asked) throw new Error("askConcierge: nothing was asked");
 
-  const [items, bookings, inventory, history] = await Promise.all([
+  const [items, bookings, allInventory, history, cities] = await Promise.all([
     getItems(tripId),
     getBookings(tripId),
     getInventory(tripId),
     recentTurns(tripId),
+    citiesOnTrip(tripId),
   ]);
+
+  /**
+   * Only what is in the towns this trip visits.
+   *
+   * Asked for a cooking class on a trip through Garhwal, Vela found the one
+   * cooking class in the catalogue and offered it — the Amalfitana class, in
+   * Italy. The row was real, which is exactly why nothing downstream caught it.
+   * A rule about geography is cheaper and more honest than a prompt asking her
+   * to be sensible about it.
+   *
+   * Rows with no town recorded are kept: the traveler's own additions carry one,
+   * but an older row that never did should not silently vanish from her view.
+   */
+  const here = new Set(cities);
+  const inventory =
+    here.size === 0
+      ? allInventory
+      : allInventory.filter((i) => !i.city || here.has(i.city));
 
   // Recorded before the model runs, so a request that fails mid-flight still
   // shows in the thread as something the traveler said.

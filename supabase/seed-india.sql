@@ -442,14 +442,20 @@ update inventory set overnight = true
 insert into trips
   (id, traveler_id, operator_id, title, contact_name, contact_email, contact_phone,
    coordinator_name, coordinator_phone,
-   status, party_size, budget, currency, starts_on, ends_on, prefs)
+   status, party_size, budget, currency, starts_on, ends_on, time_zone, prefs)
 values
   ('7a000000-0000-4000-a000-000000000001', null, '0d000000-0000-4000-a000-000000000001',
    'North India — Sharma party', 'Ananya Sharma', 'ananya@example.com', '+91 98000 00000',
    -- The guide on the ground. Plain text rather than a join, because profiles
    -- hang off auth.users and the seed runs before anybody has signed in.
    'Marco Ferrara', '+91 98110 00006',
+   -- Without this the column default applies, which is Europe/Rome: every time
+   -- on the itinerary then renders three and a half hours out, and the
+   -- concierge cheerfully tells the traveler the rafting is at six in the
+   -- morning. The brief already reads `trip.time_zone`; it just had nothing
+   -- to read.
    'in_progress', 2, 35000.00, 'INR', demo_base_date() - 3, demo_base_date() + 4,
+   'Asia/Kolkata',
    '{"interests":["adventure","scenic","culture"],"pace":"moderate","dietary":["vegetarian"],
      "mobility":"comfortable walking, no technical climbing","style":"midrange"}'::jsonb);
 

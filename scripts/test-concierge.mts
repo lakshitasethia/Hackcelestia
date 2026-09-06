@@ -46,7 +46,7 @@ check(asked.text.length > 0, "a question gets an answer");
 // ------------------------------------------------------------ a change --
 
 const change = await ask(
-  "We'd love to do a cooking class on day 4, some time in the afternoon. Can you sort that?"
+  "We'd love an ayurvedic massage on day 4, some time in the afternoon. Can you sort that?"
 );
 check(change.proposalId !== null, "a change request produces a draft");
 

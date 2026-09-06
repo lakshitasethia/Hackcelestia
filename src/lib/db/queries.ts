@@ -376,6 +376,36 @@ export type InventoryOption = Inventory & {
  * explore page, where no trip exists yet — the private rows stay out, because a
  * place one person added to their own holiday is not a listing.
  */
+/**
+ * The towns a trip actually visits.
+ *
+ * The catalogue is no longer one region. Once Positano and Rishikesh sit in the
+ * same table, "everything bookable" stops being a useful thing to hand an
+ * assistant: asked for a cooking class on a Himalayan trip, Vela found the only
+ * one in the database and offered an *Amalfitana* class, in Italy, for a day the
+ * group spends on the Ganga. She was not hallucinating — the row is real — which
+ * is worse, because nothing downstream would have caught it.
+ *
+ * Suggesting something in a town nobody is going to is never useful, so the
+ * concierge sees the towns on the itinerary and nothing else.
+ */
+export async function citiesOnTrip(tripId: string): Promise<string[]> {
+  const supabase = await readClient();
+  const { data, error } = await supabase
+    .from("itinerary_items")
+    .select("inventory(city)")
+    .eq("trip_id", tripId)
+    .not("inventory_id", "is", null);
+
+  if (error) throw new Error(`citiesOnTrip: ${error.message}`);
+
+  const cities = new Set<string>();
+  for (const row of (data ?? []) as unknown as { inventory: { city: string | null } | null }[]) {
+    if (row.inventory?.city) cities.add(row.inventory.city);
+  }
+  return [...cities];
+}
+
 export async function getInventory(forTrip?: string): Promise<InventoryOption[]> {
   const supabase = await readClient();
   const query = supabase

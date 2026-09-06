@@ -47,7 +47,7 @@ export function buildConciergeTools(
       const supabase = createAdminClient();
       const date = dateOfDay(trip.starts_on ?? "", day);
 
-      const [{ data: rows }, { data: planned }] = await Promise.all([
+      const [{ data: rows }, { data: towns }, { data: planned }] = await Promise.all([
         supabase
           .from("inventory")
           .select("*, vendors(name, channel)")
@@ -56,6 +56,14 @@ export function buildConciergeTools(
           // learn about it from someone else's holiday and offer it around.
           .or(`added_for_trip.is.null,added_for_trip.eq.${trip.id}`)
           .order("title"),
+        // The towns this trip actually visits. Without it `search_catalogue` is
+        // a back door around the same scoping the opening brief applies, and
+        // Vela offers an Amalfitana cooking class for a day on the Ganga.
+        supabase
+          .from("itinerary_items")
+          .select("inventory(city)")
+          .eq("trip_id", trip.id)
+          .not("inventory_id", "is", null),
         // Something already on the itinerary is not something to add to it.
         supabase
           .from("itinerary_items")
@@ -71,6 +79,12 @@ export function buildConciergeTools(
           .filter((id): id is string => Boolean(id))
       );
 
+      const here = new Set(
+        ((towns ?? []) as unknown as { inventory: { city: string | null } | null }[])
+          .map((t) => t.inventory?.city)
+          .filter((c): c is string => Boolean(c))
+      );
+
       type Row = {
         id: string;
         title: string;
@@ -80,6 +94,7 @@ export function buildConciergeTools(
         base_cost: number;
         opens_at: string | null;
         tags: string[] | null;
+        city: string | null;
         vendors: { name: string; channel: string } | null;
       };
 
@@ -90,6 +105,8 @@ export function buildConciergeTools(
 
       const scored = ((rows ?? []) as unknown as Row[])
         .filter((row) => !already.has(row.id))
+        // In a town this trip visits, or in no recorded town at all.
+        .filter((row) => here.size === 0 || !row.city || here.has(row.city))
         .map((row) => {
           const haystack = [
             row.title,

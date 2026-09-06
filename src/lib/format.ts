@@ -9,9 +9,18 @@
  * the time it leaves according to their laptop.
  */
 
-/** Where the seeded trip happens. Belongs on the trips table once we support
- *  more than one region; hard-coded until there is a second one. */
-export const TRIP_TZ = "Europe/Rome";
+/**
+ * The fallback zone, for the few reads with no trip in scope.
+ *
+ * It is on `trips.time_zone` now, and everything that has a trip uses that —
+ * this is what is left: the coordinator's run-sheet window and the relative
+ * day labels, which ask "what is today" before they know whose trip it is.
+ *
+ * It said Europe/Rome while the seeded demo was on the Amalfi Coast. The demo
+ * is north India, and a default that disagrees with the only trip in the
+ * database is a bug waiting for someone to forget to pass a zone.
+ */
+export const TRIP_TZ = "Asia/Kolkata";
 
 export function formatTime(iso: string, tz = TRIP_TZ): string {
   return new Date(iso).toLocaleTimeString("en-GB", {
