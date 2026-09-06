@@ -330,4 +330,15 @@ values
   ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000020',
    '0e000000-0000-4000-a000-000000000006', 'confirmed', 150.00, 0.00, 'MF-0075');
 
+-- Give the Amalfi rows a town, so nothing in the catalogue has a null city.
+--
+-- This lived in `seed-india.sql` — the multi-city columns arrived with that
+-- catalogue and the backfill was written next to them. When India was dropped
+-- from `npm run db:seed` on 6 Sep 2026 the backfill went with it, and every
+-- Positano row came back with `city = null`: invisible to anything that groups
+-- the catalogue by town, including `/explore`. It belongs here, with the rows
+-- it describes.
+update inventory set city = 'Positano', region = 'Amalfi Coast'
+where id::text like '19000000%' and city is null;
+
 commit;

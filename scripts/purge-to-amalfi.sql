@@ -47,4 +47,26 @@ delete from operators where id = '2a000000-0000-4000-a000-000000000001';
 -- The cached Switzerland research. Rebuilt on demand by `research:warm`.
 delete from research_cache;
 
+-- Anything the research path stocked, whatever destination it was for.
+--
+-- `ingestResearch` mints these with random UUIDs under an operator it creates
+-- called "Voyage Research", so no id prefix finds them and the first version of
+-- this script missed them entirely — Switzerland was still in the catalogue
+-- after a purge that reported success. They also come back every time
+-- `npm run test:cache` or `npm run test:abroad` runs, which is correct
+-- behaviour for those suites and means this script is worth re-running before
+-- a demo rather than once.
+delete from availability where inventory_id in (
+  select i.id from inventory i
+  join vendors v on v.id = i.vendor_id
+  join operators o on o.id = v.operator_id
+  where o.name = 'Voyage Research');
+delete from inventory where vendor_id in (
+  select v.id from vendors v
+  join operators o on o.id = v.operator_id
+  where o.name = 'Voyage Research');
+delete from vendors where operator_id in
+  (select id from operators where name = 'Voyage Research');
+delete from operators where name = 'Voyage Research';
+
 commit;
