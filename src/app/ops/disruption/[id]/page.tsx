@@ -5,10 +5,15 @@ import { AlertTriangle, ArrowLeft, Bot, Lock, Sparkles, User } from "lucide-reac
 import AppNav from "@/components/layout/AppNav";
 import LiveRefresh from "@/components/realtime/LiveRefresh";
 import { assessDisruption } from "@/lib/disruption/engine";
-import { getAgentRuns, getItems, getProposals } from "@/lib/db/queries";
+import {
+  getAgentRuns,
+  getItems,
+  getProposals,
+  getVendorThread,
+} from "@/lib/db/queries";
 import TracePanel from "@/components/agent/TracePanel";
 import ProposalCard from "@/components/agent/ProposalCard";
-import { runAgentAction } from "./actions";
+import { runAgentAction, recordVendorReplyAction } from "./actions";
 import { formatDateLong, formatMoney, formatTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -35,10 +40,11 @@ export default async function DisruptionPage({
   const assessment = await assessDisruption(params.id);
   if (!assessment) notFound();
 
-  const [runs, proposals, allItems] = await Promise.all([
+  const [runs, proposals, allItems, thread] = await Promise.all([
     getAgentRuns(params.id),
     getProposals(params.id),
     getItems(assessment.disruption.trip_id),
+    getVendorThread(`replan:${params.id}`),
   ]);
   const titleById = new Map(allItems.map((i) => [i.id, i.title]));
   const latestRun = runs[0] ?? null;
@@ -288,6 +294,136 @@ export default async function DisruptionPage({
             </div>
           </div>
         )}
+
+        {/* The supplier's side of it.
+            `check_vendor` has always written the outbound half; this is where
+            the answer comes back. Pasting is the honest prototype of an inbox —
+            the work worth showing is not receiving a message, it is turning
+            "not at 9, but we could do 2" into a proposal somebody can accept. */}
+        <section className="mt-16 border-t border-line pt-10">
+          <h2 className="font-display text-display-sm font-semibold uppercase text-fg">
+            Supplier thread
+          </h2>
+          <p className="mt-2 font-sans text-xs uppercase tracking-wider text-muted">
+            What the agent asked, and what came back
+          </p>
+
+          <div className="mt-6 grid grid-cols-1 xl:grid-cols-12 gap-10">
+            <div className="xl:col-span-7 flex flex-col gap-3">
+              {thread.length === 0 ? (
+                <p className="font-sans text-sm text-muted">
+                  Nothing sent yet. The re-planner writes here when it checks a
+                  supplier&rsquo;s availability.
+                </p>
+              ) : (
+                thread.map((message) => {
+                  const parsed = message.structured as {
+                    alternativeTime?: string | null;
+                    canAccommodate?: boolean | null;
+                    conditions?: string[];
+                    maxPartySize?: number | null;
+                    price?: number | null;
+                  } | null;
+                  const inbound = message.direction === "inbound";
+
+                  return (
+                    <div
+                      key={message.id}
+                      className={`surface p-4 ${inbound ? "xl:ml-10" : "xl:mr-10"}`}
+                    >
+                      <p className="font-sans text-xs uppercase tracking-wider text-muted flex items-center gap-2">
+                        {inbound ? (
+                          <User className="w-3.5 h-3.5" />
+                        ) : (
+                          <Bot className="w-3.5 h-3.5" />
+                        )}
+                        {inbound
+                          ? message.vendors?.name ?? "Supplier"
+                          : "Voyage"}
+                        <span className="ml-auto tabular-nums">
+                          {formatTime(message.sent_at)}
+                        </span>
+                      </p>
+                      <p className="mt-2 font-sans text-sm text-fg">
+                        {message.body}
+                      </p>
+
+                      {inbound && parsed && (
+                        <p className="mt-3 pt-3 border-t border-line font-sans text-xs text-muted">
+                          <span className="uppercase tracking-wider">Read as</span>{" "}
+                          {parsed.canAccommodate === true
+                            ? "can take it"
+                            : parsed.canAccommodate === false
+                              ? "cannot take the time asked"
+                              : "no clear yes or no"}
+                          {parsed.alternativeTime
+                            ? ` · offers ${parsed.alternativeTime}`
+                            : ""}
+                          {parsed.price !== null && parsed.price !== undefined
+                            ? ` · quoted ${parsed.price}`
+                            : ""}
+                          {parsed.maxPartySize
+                            ? ` · max ${parsed.maxPartySize}`
+                            : ""}
+                          {(parsed.conditions ?? []).length > 0
+                            ? ` · ${(parsed.conditions ?? []).join("; ")}`
+                            : ""}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <form
+              action={recordVendorReplyAction}
+              className="xl:col-span-5 surface p-4 flex flex-col gap-3 self-start"
+            >
+              <input type="hidden" name="disruptionId" value={disruption.id} />
+              <input type="hidden" name="tripId" value={disruption.trip_id} />
+
+              <label className="font-sans text-xs uppercase tracking-wider text-muted">
+                Log a reply
+              </label>
+
+              <select
+                name="itemId"
+                defaultValue={root?.id ?? ""}
+                aria-label="Which stop the reply is about"
+                className="bg-transparent border border-line px-3 py-2 text-fg font-sans text-xs focus:outline-none focus:border-fg transition-colors"
+              >
+                <option value="">Not about a particular stop</option>
+                {affected.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.title} · {formatTime(item.starts_at)}
+                  </option>
+                ))}
+              </select>
+
+              <textarea
+                name="body"
+                required
+                rows={4}
+                placeholder={'e.g. "sorry, 9 is gone — we could do 2pm, same price, but only 6 people"'}
+                aria-label="What the supplier wrote"
+                className="bg-transparent border border-line px-3 py-2 text-fg font-sans text-xs focus:outline-none focus:border-fg transition-colors"
+              />
+
+              <button
+                type="submit"
+                className="border border-line px-3 py-2 font-sans text-xs uppercase tracking-wider font-bold text-muted hover:text-fg hover:border-fg transition-colors"
+              >
+                Read it
+              </button>
+
+              <p className="font-sans text-xs text-muted">
+                If it changes the plan, it appears above as a proposal you can
+                accept. Nothing is booked by reading a message.
+              </p>
+            </form>
+          </div>
+        </section>
 
         <div className="mt-20 pt-8 border-t border-line flex flex-wrap gap-6 justify-between">
           <Link href="/ops" className="link-underline">

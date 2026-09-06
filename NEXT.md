@@ -157,6 +157,36 @@ that would have stocked it.
 
 ## Closed since this was written
 
+- **Vendor comms, the one USP the plan named and the product did not do.**
+  `plan-phase2.md:138` called it "the coordination USP, automated" — drafts the
+  message, parses *"we can do 2pm not 9am"* back into structured availability.
+  Half of it had always existed: `check_vendor` writes the outbound message, and
+  `messages.structured` has carried the comment "parsed shape of an inbound
+  reply" since the first migration while staying null for the life of the
+  project. `agent/vendor-reply.ts` closes it.
+
+  The extraction is the boring half. What makes it the coordination feature is
+  the mapping: a reply that changes the plan becomes a `move` operation, goes
+  through the same `validateOps`, lands as an ordinary proposal card and is
+  applied by the same `applyProposal` an operator already clicks. A supplier
+  gets no more authority over an itinerary than the model does. Proposals from
+  this path carry `source: 'vendor'`, because crediting the agent with the
+  supplier's idea would make the trace lie about where a decision came from.
+
+  Two deliberate limits, both in the code as comments: only `move` is generated
+  (a different *service* is a new option that has to be priced and compared,
+  which is `search_availability`'s job), and a different *date* is recorded but
+  never turned into an operation, because moving a stop across days changes what
+  it depends on and that is a re-plan rather than a reschedule.
+
+  **The bug worth remembering.** The first version built the new time as an ISO
+  instant with `setUTCHours`, so a supplier in Positano offering "2pm" produced
+  14:00Z — four in the afternoon on the terrace. `validateOps` already converts
+  `local_time` plus a day in the trip's own zone, and its own comment describes
+  that exact bug happening to the model. `replyToOps` now emits a wall-clock
+  time and lets the one implementation of that rule do the conversion.
+  `npm run test:vendor-reply` pins it, in both directions.
+
 - **Nothing covered the screens, so every recent bug was found by clicking.**
   `npm run test:screens` now drives real HTTP against the dev server as a
   signed-in traveler, operator and guide: the middleware, RLS, the server
@@ -246,6 +276,8 @@ that would have stocked it.
     npm run test:lifecycle   # the eleven stages, payments, closing out, reviews
     npm run test:assignment  # the trip reaches operator and guide, via real RLS
     npm run test:rls
+    npm run test:custom-stop # a traveler adds a place the catalogue lacks, and it stays theirs
+    npm run test:vendor-reply # a supplier's reply becomes structure, then a decision
     npm run test:screens     # every screen renders, for the right person (needs dev)
     npm run test:failover    # the agents survive Groq running out of budget
     npm run research:warm -- "<prompt>"   # offline price verification, minutes

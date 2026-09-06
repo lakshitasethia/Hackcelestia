@@ -35,6 +35,7 @@
     "test:replan-tools": "VOYAGE_SERVICE_ROLE=1 tsx --conditions=react-server scripts/test-replan-tools.mts",
     "test:failover": "VOYAGE_SERVICE_ROLE=1 tsx --conditions=react-server scripts/test-failover.mts",
     "test:custom-stop": "VOYAGE_SERVICE_ROLE=1 tsx --conditions=react-server scripts/test-custom-stop.mts",
+    "test:vendor-reply": "VOYAGE_SERVICE_ROLE=1 tsx --conditions=react-server scripts/test-vendor-reply.mts",
     "test:screens": "VOYAGE_SERVICE_ROLE=1 tsx --conditions=react-server scripts/test-screens.mts"
   },
   "dependencies": {

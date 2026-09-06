@@ -428,6 +428,37 @@ export async function getAgentRuns(
   }));
 }
 
+/**
+ * One vendor conversation, in order.
+ *
+ * Both halves live in `messages` under the same `thread_key` — the agent's
+ * approach and whatever the supplier wrote back — so the operator reads a
+ * conversation rather than an outbound log next to an inbox.
+ */
+export type ThreadMessage = {
+  id: string;
+  direction: "outbound" | "inbound";
+  from_role: string;
+  body: string;
+  structured: Record<string, unknown> | null;
+  sent_at: string;
+  vendors: { name: string } | null;
+};
+
+export async function getVendorThread(
+  threadKey: string
+): Promise<ThreadMessage[]> {
+  const supabase = await readClient();
+  const { data, error } = await supabase
+    .from("messages")
+    .select("id, direction, from_role, body, structured, sent_at, vendors(name)")
+    .eq("thread_key", threadKey)
+    .order("sent_at");
+
+  if (error) throw new Error(`getVendorThread: ${error.message}`);
+  return (data ?? []) as unknown as ThreadMessage[];
+}
+
 export async function getProposals(
   disruptionId: string
 ): Promise<ReplanProposal[]> {
