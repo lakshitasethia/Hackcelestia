@@ -215,120 +215,18 @@ from (
 ) as inv(id, default_start, slots, price)
 cross join generate_series(0, 4) as d;
 
--- ------------------------------------------------------------ the trip --
-
-insert into trips
-  (id, traveler_id, operator_id, title, contact_name, contact_email, contact_phone,
-   coordinator_name, coordinator_phone,
-   status, party_size, budget, currency, starts_on, ends_on, prefs)
-values
-  ('7a000000-0000-4000-a000-000000000001', null, '0d000000-0000-4000-a000-000000000001',
-   'Amalfi Coast — Sharma party', 'Ananya Sharma', 'ananya@example.com', '+91 98000 00000',
-   -- The guide on the ground. Named in plain text rather than joined to a
-   -- profile because profiles hang off auth.users, and there is no sign-in yet.
-   'Marco Ferrara', '+39 089 000 006',
-   'in_progress', 2, 4500.00, 'EUR', current_date, current_date + 4,
-   '{"interests":["food","scenic","water"],"pace":"relaxed","dietary":["vegetarian"],
-     "mobility":"no steep climbs","style":"boutique"}'::jsonb);
-
--- --------------------------------------------------- itinerary (the DAG) --
+-- The seeded demo trip lives in `seed-india.sql`, not here.
 --
--- Day 2 is the demo. The chain is:
+-- It used to be an Amalfi Coast group in euros. It became a north India trip in
+-- rupees on 6 Sep 2026, for a plain reason: Razorpay's test mode settles in INR
+-- unless you activate international payments, which needs business
+-- verification. A demo that cannot take a payment is worse than a demo set
+-- somewhere less photogenic — and judges in New Panvel know what a Chandrashila
+-- permit costs.
 --
---   hotel ──> transfer ──> boat ──┬──> lunch
---                                 └──> return transfer ──> dinner
---
--- Kill the boat and four items downstream go with it. The hotel is locked
--- (non-refundable), which the re-planner has to respect and explain.
-
-insert into itinerary_items
-  (id, trip_id, day, seq, inventory_id, vendor_id, title, type, starts_at, ends_at,
-   lat, lng, cost, status, depends_on, lock_reason)
-values
-  -- Day 1
-  ('17000000-0000-4000-a000-000000000001', '7a000000-0000-4000-a000-000000000001', 1, 1,
-   '19000000-0000-4000-a000-000000000001', '0e000000-0000-4000-a000-000000000001',
-   'Check in — Hotel Le Sirene', 'hotel',
-   ((current_date + time '15:00') at time zone 'Europe/Rome'), ((current_date + time '16:00') at time zone 'Europe/Rome'),
-   40.6281, 14.4850, 1280.00, 'confirmed', '{}',
-   'Non-refundable rate — 4 nights prepaid'),
-
-  ('17000000-0000-4000-a000-000000000002', '7a000000-0000-4000-a000-000000000001', 1, 2,
-   '19000000-0000-4000-a000-000000000005', '0e000000-0000-4000-a000-000000000004',
-   'Dinner — Trattoria da Enzo', 'restaurant',
-   ((current_date + time '20:00') at time zone 'Europe/Rome'), ((current_date + time '22:00') at time zone 'Europe/Rome'),
-   40.6285, 14.4855, 180.00, 'confirmed',
-   '{17000000-0000-4000-a000-000000000001}', null),
-
-  -- Day 2 — the one the storm hits
-  ('17000000-0000-4000-a000-000000000010', '7a000000-0000-4000-a000-000000000001', 2, 1,
-   '19000000-0000-4000-a000-000000000003', '0e000000-0000-4000-a000-000000000003',
-   'Transfer — hotel to Positano marina', 'transport',
-   (((current_date + 1) + time '08:20') at time zone 'Europe/Rome'), (((current_date + 1) + time '08:45') at time zone 'Europe/Rome'),
-   40.6281, 14.4850, 45.00, 'confirmed',
-   '{17000000-0000-4000-a000-000000000001}', null),
-
-  ('17000000-0000-4000-a000-000000000011', '7a000000-0000-4000-a000-000000000001', 2, 2,
-   '19000000-0000-4000-a000-000000000002', '0e000000-0000-4000-a000-000000000002',
-   'Private boat day to Capri', 'activity',
-   (((current_date + 1) + time '09:00') at time zone 'Europe/Rome'), (((current_date + 1) + time '16:00') at time zone 'Europe/Rome'),
-   40.6270, 14.4840, 780.00, 'confirmed',
-   '{17000000-0000-4000-a000-000000000010}', null),
-
-  ('17000000-0000-4000-a000-000000000012', '7a000000-0000-4000-a000-000000000001', 2, 3,
-   '19000000-0000-4000-a000-000000000004', '0e000000-0000-4000-a000-000000000004',
-   'Lunch ashore on Capri', 'restaurant',
-   (((current_date + 1) + time '12:30') at time zone 'Europe/Rome'), (((current_date + 1) + time '14:00') at time zone 'Europe/Rome'),
-   40.5510, 14.2430, 110.00, 'confirmed',
-   '{17000000-0000-4000-a000-000000000011}', null),
-
-  ('17000000-0000-4000-a000-000000000013', '7a000000-0000-4000-a000-000000000001', 2, 4,
-   '19000000-0000-4000-a000-000000000003', '0e000000-0000-4000-a000-000000000003',
-   'Transfer — marina to hotel', 'transport',
-   (((current_date + 1) + time '16:15') at time zone 'Europe/Rome'), (((current_date + 1) + time '16:40') at time zone 'Europe/Rome'),
-   40.6270, 14.4840, 45.00, 'confirmed',
-   '{17000000-0000-4000-a000-000000000011}', null),
-
-  ('17000000-0000-4000-a000-000000000014', '7a000000-0000-4000-a000-000000000001', 2, 5,
-   '19000000-0000-4000-a000-000000000005', '0e000000-0000-4000-a000-000000000004',
-   'Dinner — Trattoria da Enzo', 'restaurant',
-   (((current_date + 1) + time '20:00') at time zone 'Europe/Rome'), (((current_date + 1) + time '22:00') at time zone 'Europe/Rome'),
-   40.6285, 14.4855, 180.00, 'confirmed',
-   '{17000000-0000-4000-a000-000000000013}', null),
-
-  -- Day 3
-  ('17000000-0000-4000-a000-000000000020', '7a000000-0000-4000-a000-000000000001', 3, 1,
-   '19000000-0000-4000-a000-000000000008', '0e000000-0000-4000-a000-000000000006',
-   'Ravello — Villa Rufolo with Marco', 'guide',
-   (((current_date + 2) + time '10:00') at time zone 'Europe/Rome'), (((current_date + 2) + time '13:00') at time zone 'Europe/Rome'),
-   40.6490, 14.6110, 150.00, 'confirmed',
-   '{17000000-0000-4000-a000-000000000001}', null);
-
--- ------------------------------------------------------------ bookings --
--- Penalties are what make the re-planner's cost deltas honest: cancelling the
--- boat this close in costs real money, and the agent has to say so.
-
-insert into bookings (trip_id, item_id, vendor_id, state, amount, penalty, external_ref)
-values
-  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000001',
-   '0e000000-0000-4000-a000-000000000001', 'confirmed', 1280.00, 1280.00, 'LS-4471'),
-  -- Tonight's dinner. Missing until an end-to-end check noticed that one
-  -- confirmed stop had nothing reserved behind it, which quietly understated
-  -- the operator's booked value. verify.sql now refuses to let that recur.
-  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000002',
-   '0e000000-0000-4000-a000-000000000004', 'confirmed', 180.00, 0.00, 'DE-3300'),
-  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000011',
-   '0e000000-0000-4000-a000-000000000002', 'confirmed', 780.00, 195.00, 'ABC-8820'),
-  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000010',
-   '0e000000-0000-4000-a000-000000000003', 'confirmed', 45.00, 0.00, 'CTX-1190'),
-  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000013',
-   '0e000000-0000-4000-a000-000000000003', 'confirmed', 45.00, 0.00, 'CTX-1191'),
-  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000012',
-   '0e000000-0000-4000-a000-000000000004', 'confirmed', 110.00, 0.00, 'DE-3301'),
-  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000014',
-   '0e000000-0000-4000-a000-000000000004', 'confirmed', 180.00, 0.00, 'DE-3302'),
-  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000020',
-   '0e000000-0000-4000-a000-000000000006', 'confirmed', 150.00, 0.00, 'MF-0075');
+-- The Amalfi catalogue below stays. Several suites build throwaway trips from
+-- those rows, and `/explore` showing two regions is a truer picture of an
+-- operator than one showing a single town.
 
 -- Give the Amalfi rows a town, so nothing in the catalogue has a null city.
 --

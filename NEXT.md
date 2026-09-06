@@ -88,35 +88,51 @@ and are tier-locked rather than bursting, so they are deliberately not in the
 chain. `npm run test:failover` proves the offline parts and then spends a few
 hundred real tokens proving a tool loop completes on the fallback.
 
-## The demo database is Amalfi only, on purpose
+## The demo trip is north India, in rupees
 
-As of 6 Sep 2026 the database holds **one trip** — Ananya Sharma's Amalfi Coast
-group — and **one catalogue**, Positano's. The north India catalogue (Delhi,
-Manali, Auli, Chopta, Rishikesh, Amritsar, Haridwar, Chandigarh) and the cached
-Switzerland research were deleted, and `supabase/seed-india.sql` was taken out
-of `npm run db:seed` so a re-seed does not bring them back. The file is still in
-the repo; putting it back in that script restores everything.
+As of 6 Sep 2026 the seeded demo is **"North India — Sharma party"**: two
+travelers, eight days, Delhi → Manali → Rishikesh → Chopta → Auli, ₹26,800
+against a ₹35,000 budget. It was the Amalfi Coast in euros until Razorpay
+forced the question — test mode settles in INR unless you activate
+international payments, which needs business verification, so a demo priced in
+euros could not take a payment at all.
 
-`scripts/purge-to-amalfi.sql` is the cut, if it has to be made again.
+**The trip now lives in `supabase/seed-india.sql`, not `seed.sql`.** It is built
+from the India catalogue, and `seed.sql` runs first, so it could not stay where
+it was. `seed.sql` is now the Amalfi *catalogue* only — those rows stay because
+several suites build throwaway trips from them, and `/explore` showing two
+regions is a truer picture of an operator than one showing a single town.
 
-**This knowingly breaks `npm run test:lodging`.** That suite composes
-Delhi → Rishikesh → Chopta and proves the accommodation-preference path,
-including the case where a town has no room in the bracket asked for. With no
-India catalogue it dies at `compose.ts:310` with "Nothing in the catalogue
-matches those places yet". It is the only suite affected — everything else
-passes. Two ways out when it matters: restore the India seed, or write a
-second Amalfi-area town so the composer has somewhere to fail over to. It
-cannot be ported to Positano alone, because the whole point of the test is a
-choice between towns.
+The route was checked against real timings rather than invented: Delhi–Manali
+548km on an overnight Volvo (11–15h, departing 5–9pm), Manali–Haridwar 483km and
+around fifteen hours, Haridwar–Rishikesh 25km, Rishikesh–Chopta 169km in 5–7
+hours, Chopta–Auli 135–148km in 5–6.
 
-`/plan` itself still works. `app/plan/actions.ts` researches the destinations
-and calls `ingestResearch` *before* `planItinerary`, so a named destination is
-stocked on demand — which is exactly how the Switzerland trip in
-`npm run test:abroad` is composed, with no India rows involved. What changed is
-that every plan now pays for a research pass rather than composing instantly
-from stock, and `/explore` shows Positano and nothing else. `test:lodging`
-breaks because it calls `planItinerary` directly and skips the research step
-that would have stocked it.
+**The disruption demo is now the rafting, not the boat.** Tomorrow's
+white-water session at Shivpuri is the weather-sensitive root; killing it takes
+the riverside lunch, the yoga session and the aarti with it, at depths 1, 2 and
+3. The cab to Chopta the following morning hangs off the *hotel*, so the back
+half of the holiday survives — which is the whole point, and `verify.sql` now
+asserts it explicitly.
+
+Three things had to be added to make that work, and they are worth knowing
+about:
+
+- **Indoor Rishikesh activities.** Everything else to do there — the rafting,
+  the aarti on the ghat — is weather-sensitive too, so a cause-aware engine
+  correctly refused to replace a rained-off river trip with another thing the
+  rain had stopped, and then had nothing to offer. The Beatles Ashram, a yoga
+  hall and a massage room are indoors, real, and exactly what a Rishikesh
+  operator would suggest. Without them the storm demo produces zero candidates.
+- **A direct Delhi → Manali coach.** The corridor only had Delhi → Amritsar →
+  Chandigarh → Manali, and nobody breaks that journey up that way.
+- **`to_city` on all nine India legs.** They named their destination in the
+  title and left the column null, and `loadLegGraph` only sees transport rows
+  that have one — so the composer ordered north India's towns correctly and then
+  had no trains or coaches to put between them. Switzerland only worked because
+  research fills the column in.
+
+`npm run test:lodging` works again as a result of the catalogue coming back.
 
 ## Ranked backlog
 
@@ -145,9 +161,12 @@ that would have stocked it.
    month, must-dos and currency, so the two entries came from differently
    worded asks.
 
-3. **The demo needs two trips.** Switzerland shows planning; Amalfi shows
-   disruption and re-planning, because it has seeded availability and spare
-   alternatives. One trip doing both is downstream of item 1.
+3. **The demo needs two trips.** The seeded north India group shows disruption
+   and re-planning, because it has seeded availability and — since the indoor
+   Rishikesh rows were added — spare alternatives that survive a storm. What it
+   does not show is *planning*, because it already exists. A second trip
+   composed live from a sentence is the other half of the pitch, and one trip
+   cannot be both an itinerary in progress and one being created.
 
 4. **Invented places.** The planner prompt now names this as the worst thing it
    can produce and lists real examples, after it emitted a "Schweizer Schokolade

@@ -55,11 +55,18 @@ export default async function OpsPage() {
     getOperatorMoney(trips),
   ]);
 
-  const { liveTrips, travellers, booked, atRisk } = operatorTotals(
+  const { liveTrips, travellers, booked, atRisk, currency } = operatorTotals(
     trips,
     schedule,
     costs
   );
+
+  // Undefined lets formatMoney apply its own default; null from operatorTotals
+  // means the groups do not share a currency, and adding them up would be
+  // arithmetic on unlike units.
+  const mixed = currency === null && trips.length > 0;
+  const money$ = (amount: number) =>
+    mixed ? amount.toLocaleString("en-IN") : formatMoney(amount, currency ?? undefined);
 
   return (
     <main
@@ -151,13 +158,17 @@ export default async function OpsPage() {
           <dl className="grid grid-cols-2 lg:grid-cols-5 gap-x-8 gap-y-8">
             {[
               { label: "Live trips", value: String(liveTrips), note: `${travellers} travelers on the ground` },
-              { label: "Booked value", value: formatMoney(booked), note: "across all groups" },
+              {
+                label: "Booked value",
+                value: money$(booked),
+                note: mixed ? "across all groups — mixed currencies" : "across all groups",
+              },
               {
                 label: "Outstanding",
-                value: formatMoney(Math.abs(money.outstanding)),
+                value: money$(Math.abs(money.outstanding)),
                 note:
                   money.outstanding > 0
-                    ? `${formatMoney(money.paid)} collected so far`
+                    ? `${money$(money.paid)} collected so far`
                     : "everything collected",
                 flag: money.outstanding > 0,
               },

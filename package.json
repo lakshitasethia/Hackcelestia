@@ -9,7 +9,7 @@
     "lint": "next lint",
     "db:push": "supabase db push",
     "db:setup": "node scripts/db-setup.mjs",
-    "db:seed": "node scripts/sql.mjs supabase/seed.sql && node scripts/seed-auth.mjs",
+    "db:seed": "node scripts/sql.mjs supabase/seed.sql && node scripts/sql.mjs supabase/seed-india.sql && node scripts/seed-auth.mjs",
     "db:types": "node scripts/gen-types.mjs > src/lib/db/generated.ts",
     "db:verify": "node scripts/sql.mjs supabase/verify.sql",
     "test:disruption": "VOYAGE_SERVICE_ROLE=1 tsx --conditions=react-server scripts/test-disruption.mts",

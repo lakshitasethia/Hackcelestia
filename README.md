@@ -3,14 +3,15 @@
 **Personalized dynamic tour planning and tour operations.** HackCelestia PS-7.
 
 A tour operator's week does not fall apart at the planning stage. It falls apart
-at 07:40 on the second morning, when the skipper calls to say the swell is too
-high, and four other bookings quietly depend on that boat. Voyage is built
+at 07:40 on the fifth morning, when the river guide calls to say the flow is too
+high to put in, and three other bookings quietly depend on that raft. Voyage is
+built
 around that moment: an itinerary modelled as a dependency graph, a deterministic
 engine that computes exactly what a break costs, and an agent that proposes ways
 out for a human to accept.
 
 Three people see the same trip: the **traveler** who booked it, the **operator**
-who runs it, and the **coordinator** standing on the quay. When one of them
+who runs it, and the **coordinator** standing on the ghat. When one of them
 changes something, the other two see it without refreshing.
 
 ---
@@ -21,8 +22,8 @@ An itinerary is a **DAG, not a list**. Every stop declares what it cannot happen
 without:
 
 ```
-hotel ──> transfer ──> boat ──┬──> lunch on Capri
-                              └──> return transfer ──> dinner
+hotel ──> shuttle ──> rafting ──> lunch ──> yoga ──> aarti
+      └──> cab to Chopta ──> the rest of the trip
 ```
 
 `itinerary_items.depends_on uuid[]` is that edge. It means "identify impact" —
@@ -30,11 +31,14 @@ the thing PS-7 actually asks for — is a graph traversal rather than a pile of
 hand-written special cases:
 
 ```sql
-select * from blast_radius('…the boat…');   -- 4 items, max depth 2
+select * from blast_radius('…the rafting…');   -- 4 items, max depth 3
 ```
 
-Kill the boat and lunch, the return transfer and dinner go with it. The hotel
-does not, because nothing downstream flows backwards. Blast radius, timing
+Kill the rafting and the lunch, the yoga and the aarti go with it. The hotel
+does not, because nothing downstream flows backwards — and neither does the cab
+to Chopta the next morning, because it hangs off the hotel rather than the
+river. That is the difference between this and a list: an afternoon of rain
+takes an afternoon, not the back half of a holiday. Blast radius, timing
 conflicts and cost deltas all fall out of the same walk, and the traversal lives
 in Postgres so the UI and the agent cannot disagree about it.
 
@@ -95,8 +99,8 @@ product.
 2. The **deterministic engine** (`src/lib/disruption/engine.ts`) traverses the
    graph, marks the blast radius `at_risk`, totals the exposure and the
    non-refundable portion, and finds substitutes that survive the *cause* — a
-   storm rules out anything `weather_sensitive`, so the boat is never replaced
-   with another boat.
+   storm rules out anything `weather_sensitive`, so a rained-off river trip is
+   never replaced with another thing the rain has also stopped.
 3. The **re-planning agent** (`src/lib/agent/replan.ts`) reads that assessment,
    calls the same tools, and writes two or three genuinely different plans.
 4. Every tool call it made is rendered in the trace panel, with arguments,

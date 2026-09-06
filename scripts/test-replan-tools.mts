@@ -40,24 +40,24 @@ const db = serviceRoleClient();
 
 await clearDisruptions(DEMO_TRIP_ID);
 
-// The boat is the stop the whole demo turns on, so it is the one to break.
+// The rafting is the stop the whole demo turns on, so it is the one to break.
 const { data: items } = await db
   .from("itinerary_items")
   .select("id, title")
   .eq("trip_id", DEMO_TRIP_ID);
 
-const boat = (items as { id: string; title: string }[]).find((i) =>
-  i.title.toLowerCase().includes("boat")
+const raft = (items as { id: string; title: string }[]).find((i) =>
+  i.title.toLowerCase().includes("rafting")
 );
-if (!boat) throw new Error("no boat on the seeded trip — re-run npm run db:seed");
+if (!raft) throw new Error("no rafting on the seeded trip — re-run npm run db:seed");
 
 const { id: disruptionId } = await injectDisruption({
   tripId: DEMO_TRIP_ID,
-  rootItemId: boat.id,
+  rootItemId: raft.id,
   source: "weather",
   severity: "high",
   headline: "Storm warning — tools smoke test",
-  payload: { condition: "Swell too high to sail." },
+  payload: { condition: "Flow too high to put in." },
 });
 
 try {
@@ -69,14 +69,14 @@ try {
 
   // -- get_blast_radius ------------------------------------------------------
 
-  const radius = JSON.parse(await byName.get_blast_radius.run({ item_id: boat.id }));
+  const radius = JSON.parse(await byName.get_blast_radius.run({ item_id: raft.id }));
   check("get_blast_radius returns the four affected stops", radius.length === 4,
     `${radius.length} items`);
   check("the break itself is at depth 0",
-    radius.some((r: { item_id: string; depth: number }) => r.item_id === boat.id && r.depth === 0));
-  // The hotel *check-in* is upstream of the boat and must not be in the radius.
-  // Matching on "hotel" alone would catch "Transfer — hotel to Positano
-  // marina", which is downstream and belongs there.
+    radius.some((r: { item_id: string; depth: number }) => r.item_id === raft.id && r.depth === 0));
+  // The hotel *check-in* is upstream of the rafting and must not be in the
+  // radius. Matching on "hotel" alone would once have caught a transfer named
+  // after it, which is downstream and belongs there.
   check("the hotel check-in is not in the radius (it is upstream)",
     !radius.some((r: { title: string }) => r.title.toLowerCase().includes("check in")),
     radius.map((r: { title: string }) => r.title).join("; "));
@@ -84,27 +84,28 @@ try {
   // -- search_availability ---------------------------------------------------
 
   const options = JSON.parse(
-    await byName.search_availability.run({ item_id: boat.id })
+    await byName.search_availability.run({ item_id: raft.id })
   );
   const list = Array.isArray(options) ? options : options.options ?? [];
   check("search_availability offers replacements", list.length > 0, `${list.length} options`);
-  check("and none of them is the broken boat",
+  check("and none of them is the cancelled rafting",
     !list.some((o: { inventory_id?: string; id?: string }) =>
-      (o.inventory_id ?? o.id) === boat.id));
+      (o.inventory_id ?? o.id) === raft.id));
 
   // -- price_option ----------------------------------------------------------
 
   const first = list[0] as { inventory_id: string; starts_at: string; title: string };
   const priced = JSON.parse(
     await byName.price_option.run({
-      item_id: boat.id,
+      item_id: raft.id,
       with_inventory_id: first.inventory_id,
     })
   );
   check("price_option returns a numeric net delta",
     typeof priced.net_delta === "number",
     `${first.title}: ${priced.net_delta}`);
-  // The boat is prepaid, so its penalty has to show up in the arithmetic —
+  // The rafting carries a deposit, so its penalty has to show up in the
+  // arithmetic —
   // this is the number the whole "what does the break cost" claim rests on.
   check("...that accounts for the forfeited deposit",
     priced.cancellation_penalty > 0 &&
@@ -136,7 +137,7 @@ try {
       rationale: "Written by test:replan-tools, not by a model.",
       cost_delta: 0,
       operations: [
-        { op: "drop", item_id: boat.id, reason: "Storm — cannot sail." },
+        { op: "drop", item_id: raft.id, reason: "Storm — cannot put in." },
       ],
     })
   );
@@ -154,11 +155,11 @@ try {
 
   // The boundary the whole design rests on: a proposal is a draft, and drafting
   // one must not touch the live itinerary.
-  const { data: boatNow } = await db
-    .from("itinerary_items").select("status").eq("id", boat.id).single();
+  const { data: raftNow } = await db
+    .from("itinerary_items").select("status").eq("id", raft.id).single();
   check("...and changes nothing on the live itinerary",
-    (boatNow as { status: string }).status !== "cancelled",
-    `boat is ${(boatNow as { status: string }).status}`);
+    (raftNow as { status: string }).status !== "cancelled",
+    `rafting is ${(raftNow as { status: string }).status}`);
 } finally {
   await clearDisruptions(DEMO_TRIP_ID);
 }

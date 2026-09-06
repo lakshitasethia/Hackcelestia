@@ -260,7 +260,22 @@ export function operatorTotals(
   );
   const atRisk = schedule.filter((s) => s.status === "at_risk").length;
 
-  return { liveTrips: live.length, travellers, booked, atRisk };
+  /**
+   * What the figures above are denominated in.
+   *
+   * The board renders one number per column across every group, and
+   * `formatMoney` defaults to euros — so a rupee trip was reported to the
+   * operator as `€26,800`. The amount was right and the label was a lie, which
+   * is the worse of the two failures.
+   *
+   * Null means the trips do not share a currency, and in that case the sums
+   * above are the addition of unlike things. The board says so rather than
+   * printing a total in whichever currency happened to be first.
+   */
+  const currencies = new Set(trips.map((t) => t.currency).filter(Boolean));
+  const currency = currencies.size === 1 ? [...currencies][0] : null;
+
+  return { liveTrips: live.length, travellers, booked, atRisk, currency };
 }
 
 /**

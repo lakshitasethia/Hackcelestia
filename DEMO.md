@@ -114,9 +114,9 @@ Open `/app`.
 
 Window B, `/trip/<id>`. Scroll to Day 02.
 
-> "Two travelers, five days on the Amalfi Coast, €4,500. Note what's under each
-> stop: **Needs**. Lunch on Capri needs the boat. The return transfer needs the
-> boat. Dinner needs the return transfer."
+> "Two travelers, eight days Delhi to Auli, ₹35,000. Note what's under each
+> stop: **Needs**. The riverside lunch needs the rafting. The yoga session needs
+> the lunch. The aarti needs the yoga."
 
 > "That's not decoration — the itinerary is a dependency graph, not a list. It's
 > the reason the next sixty seconds work at all."
@@ -151,7 +151,7 @@ Then say the honest part out loud, because someone will ask:
 
 > "The model is not choosing this. The dates, the price and the dependency
 > wiring are computed before it sees anything, and the number on that card is
-> recomputed by the server — in testing the model was out by €670 on its own
+> recomputed by the server — in testing the model was out by ₹670 on its own
 > arithmetic, which is why nothing takes its word for it."
 
 ### 0:45 — The operator's board *(20s)*
@@ -166,12 +166,12 @@ Window A, `/ops`.
 
 Window C, `/field`. This is the phone.
 
-> "Marco is on the quay. Tomorrow's boat day is on his run sheet."
+> "Marco is on the ghat at Tapovan. Tomorrow's rafting is on his run sheet."
 
-Open **Flag a problem** on the boat. Type — really type it, it reads as real:
+Open **Flag a problem** on the rafting. Type — really type it, it reads as real:
 
 ```
-Skipper says the swell is too high to sail.
+River guide says the flow is too high to put in.
 ```
 
 Set the cause to **Weather**. Then **Report to the office.**
@@ -184,24 +184,25 @@ Set the cause to **Weather**. Then **Report to the office.**
 Point at Window A. **Do not touch it.** It already says one open disruption.
 
 > "Nobody refreshed that. The operator's board just heard about a problem
-> reported from a phone on a quay in Positano."
+> reported from a phone on a ghat in Rishikesh."
 
 ### 1:45 — Impact, computed not guessed *(30s)*
 
 Window A → **Assess impact**.
 
-> "Four items affected. €1,115 exposed. €195 of it non-refundable — that number
+> "Four items affected. ₹2,050 exposed. ₹300 of it non-refundable — that number
 > is what stops the naive answer of 'just cancel it'."
 
 Point at the indented chain.
 
-> "The indentation is the dependency depth. The boat, then lunch and the return
+> "The indentation is the dependency depth. The rafting, then lunch, then the
 > transfer one hop out, then dinner two hops out. The hotel is *not* in there —
 > nothing flows backwards. And it's locked: four nights prepaid, non-refundable.
 > Any re-plan has to work around it."
 
-> "Six candidate replacements, and every one of them survives a storm. No boat
-> is being offered to replace a boat. All of that is a graph traversal and a
+> "Every candidate offered survives a storm — an ashram, a yoga hall, a massage
+> room. Nothing outdoors is offered to replace something the rain stopped. All
+> of that is a graph traversal and a
 > query — no model has run yet."
 
 ### 2:15 — The agent *(30s)*
@@ -244,10 +245,10 @@ Point at Window B, then Window C. Both have already changed.
 |---|---|---|
 | Anywhere before **Accept** | `/ops` → Demo controls → **Reset trip** | Clears the disruption, restores every at-risk stop, wipes the field reports, and deletes the concierge and copilot conversations along with any undecided drafts. Instant, no re-seed, and you can do it while someone is asking a question. |
 | You accepted a **concierge** suggestion | `npm run db:seed` (~1s) | Same reason as below: accepting is a real write. Reset trip deliberately keeps an accepted change, because deleting the record of a decision somebody made is not what "reset" should mean. |
-| You **accepted a plan** | `npm run db:seed` (~1s) | Accepting is a real, permanent write — the boat is `replaced`, three stops are `cancelled`, and a substitute now sits in the itinerary. **Reset trip cannot undo that**, and it is not supposed to: an operator cannot un-cancel a supplier by clicking a button. Re-seeding rebuilds the group from `supabase/seed.sql`. |
+| You **accepted a plan** | `npm run db:seed` (~1s) | Accepting is a real, permanent write — the rafting is `replaced`, three stops are `cancelled`, and a substitute now sits in the itinerary. **Reset trip cannot undo that**, and it is not supposed to: an operator cannot un-cancel a supplier by clicking a button. Re-seeding rebuilds the group from `supabase/seed-india.sql`. |
 
 Between rehearsals of the full path, re-seed. It is faster than explaining to a
-judge why the boat is missing.
+judge why the rafting is missing.
 
 ---
 

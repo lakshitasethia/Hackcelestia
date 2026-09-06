@@ -23,11 +23,12 @@ check("storm scenario finds a weather-sensitive target", !!disruption, disruptio
 if (!disruption) process.exit(1);
 
 const a = (await assessDisruption(disruption.id))!;
-check("root is the boat", !!a.root?.title.toLowerCase().includes("boat"), a.root?.title);
+check("root is the rafting", !!a.root?.title.toLowerCase().includes("rafting"), a.root?.title);
 check("blast radius is 4 items", a.affected.length === 4, `got ${a.affected.length}`);
-check("max depth is 2", Math.max(...a.affected.map((i) => i.depth)) === 2);
-check("exposure sums the affected items", a.exposure === 1115, `€${a.exposure}`);
-check("non-refundable is the boat penalty only", a.sunk === 195, `€${a.sunk}`);
+// Lunch, then yoga, then the aarti — a three-deep chain off one activity.
+check("max depth is 3", Math.max(...a.affected.map((i) => i.depth)) === 3);
+check("exposure sums the affected items", a.exposure === 2050, `₹${a.exposure}`);
+check("non-refundable is the rafting deposit only", a.sunk === 300, `₹${a.sunk}`);
 check("candidates found", a.candidates.length > 0, `${a.candidates.length}`);
 check(
   "no weather-sensitive candidate offered",
@@ -35,7 +36,7 @@ check(
   a.candidates.map((c) => c.inventory.title).join(", ")
 );
 check(
-  "the broken boat is not offered as its own replacement",
+  "the cancelled rafting is not offered as its own replacement",
   a.candidates.every((c) => c.inventory.id !== a.root?.inventory_id)
 );
 check("candidates sorted nearest first",

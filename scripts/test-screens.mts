@@ -162,8 +162,23 @@ check(shown.length > 0,
   "the rail carries a next action, not just a highlighted stage",
   shown.join(", ") || "no action rendered");
 
-check(has(trip.html, "\u20ac") || has(trip.html, "eur"),
-  "costs are shown in the trip's own currency");
+/**
+ * The trip's own currency, read from the trip rather than assumed.
+ *
+ * This asserted a euro sign, which was true for exactly as long as the demo
+ * was on the Amalfi Coast. A check about "the trip's own currency" that names
+ * one currency is not checking that at all.
+ */
+const { getTrip } = await import("../src/lib/db/queries.js");
+const demoTrip = (await getTrip(TRIP))!;
+const SYMBOL: Record<string, string> = {
+  INR: "\u20b9", EUR: "\u20ac", USD: "$", GBP: "\u00a3", CHF: "CHF", JPY: "\u00a5",
+};
+const symbol = SYMBOL[demoTrip.currency] ?? demoTrip.currency;
+check(
+  has(trip.html, symbol) || has(trip.html, demoTrip.currency.toLowerCase()),
+  `costs are shown in the trip's own currency (${demoTrip.currency})`
+);
 
 /**
  * The intro loader is a full-screen opaque overlay, and it belongs to the
@@ -221,17 +236,28 @@ const ops = await signIn("ops@costiera-dmc.example");
  *
  * The board reported the sum of *budgets* as "booked value" and as what was
  * outstanding, while the traveler's page summed the actual itinerary — so the
- * demo trip read EUR 4,500 on one screen and EUR 2,770 on the other, in a
+ * demo trip read 4,500 on one screen and 2,770 on the other, in a
  * product whose entire pitch is that three people see the same trip. Both now
  * come from the same rows; this is what keeps them there.
  */
-const money = /ITINERARY TOTAL[\s\S]{0,200}?(\u20ac[\d,]+)/i.exec(
-  trip.html.replace(/<[^>]+>/g, " ").replace(/&#x20AC;|&euro;/gi, "\u20ac")
-);
+/**
+ * Currency-agnostic on purpose. This matched a hard-coded euro sign until the
+ * demo trip moved from the Amalfi Coast to north India and started quoting
+ * rupees, at which point a check about two screens agreeing went red for a
+ * reason that had nothing to do with whether they agreed. What is being
+ * asserted is that the two figures are the same, not what they are denominated
+ * in.
+ */
+const AMOUNT = /(?:ITINERARY TOTAL|BOOKED VALUE)[\s\S]{0,200}?([\u20b9\u20ac$\u00a3][\d,]+)/i;
+const strip = (html: string) =>
+  html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&#x20AC;|&euro;/gi, "\u20ac")
+    .replace(/&#x20B9;|&#8377;/gi, "\u20b9");
+
+const money = AMOUNT.exec(strip(trip.html));
 const opsBoard = await page(ops, "/ops");
-const opsMoney = /BOOKED VALUE[\s\S]{0,200}?(\u20ac[\d,]+)/i.exec(
-  opsBoard.html.replace(/<[^>]+>/g, " ").replace(/&#x20AC;|&euro;/gi, "\u20ac")
-);
+const opsMoney = AMOUNT.exec(strip(opsBoard.html));
 
 check(Boolean(money && opsMoney),
   "both surfaces state a figure for the trip",

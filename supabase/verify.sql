@@ -8,22 +8,32 @@
 -- up debugging both at once. Every row below should read PASS.
 
 with checks as (
-  -- The demo case: killing the day-2 boat should take exactly four items --
-  -- itself, the two that depend on it directly, and dinner one hop further.
-  select 'blast radius from boat = 4 items' as label,
-         (select count(*) from blast_radius('17000000-0000-4000-a000-000000000011')) = 4 as ok
+  -- The demo case: killing tomorrow's rafting should take exactly four items --
+  -- itself, and the lunch, yoga and aarti that chain off it. The cab to Chopta
+  -- the morning after hangs off the hotel instead, so the back half of the
+  -- holiday survives an afternoon of rain. That distinction is the product.
+  select 'blast radius from the rafting = 4 items' as label,
+         (select count(*) from blast_radius('17000000-0000-4000-a000-000000000041')) = 4 as ok
 
   union all
-  select 'boat blast radius excludes the hotel (upstream)',
+  select 'rafting blast radius excludes the hotel (upstream)',
          not exists (
-           select 1 from blast_radius('17000000-0000-4000-a000-000000000011')
-           where item_id = '17000000-0000-4000-a000-000000000001'
+           select 1 from blast_radius('17000000-0000-4000-a000-000000000041')
+           where item_id = '17000000-0000-4000-a000-000000000031'
          )
 
   union all
-  select 'dinner sits 2 hops from the boat',
-         (select depth from blast_radius('17000000-0000-4000-a000-000000000011')
-           where item_id = '17000000-0000-4000-a000-000000000014') = 2
+  -- The one that matters most: a washed-out river must not cancel Chopta.
+  select 'the cab to Chopta survives the rafting being cancelled',
+         not exists (
+           select 1 from blast_radius('17000000-0000-4000-a000-000000000041')
+           where item_id = '17000000-0000-4000-a000-000000000050'
+         )
+
+  union all
+  select 'the aarti sits 3 hops from the rafting',
+         (select depth from blast_radius('17000000-0000-4000-a000-000000000041')
+           where item_id = '17000000-0000-4000-a000-000000000044') = 3
 
   union all
   select 'trip root reaches every item',
@@ -32,20 +42,20 @@ with checks as (
 
   union all
   select 'a leaf reaches only itself',
-         (select count(*) from blast_radius('17000000-0000-4000-a000-000000000014')) = 1
+         (select count(*) from blast_radius('17000000-0000-4000-a000-000000000044')) = 1
 
   union all
   select 'unknown id returns empty, not an error',
          (select count(*) from blast_radius('00000000-0000-4000-a000-000000000000')) = 0
 
   union all
-  select 'hotel is locked so the re-planner must work around it',
+  select 'the Rishikesh hotel is locked so the re-planner must work around it',
          (select lock_reason from itinerary_items
-           where id = '17000000-0000-4000-a000-000000000001') is not null
+           where id = '17000000-0000-4000-a000-000000000031') is not null
 
   union all
   -- If this fails the agent finds nothing, proposes nothing, and looks broken.
-  select 'weather-proof substitutes exist for the boat day',
+  select 'weather-proof substitutes exist for the rafting day',
          (select count(*) from availability a
             join inventory i on i.id = a.inventory_id
            where a.date = current_date + 1
@@ -72,10 +82,10 @@ with checks as (
   union all
   -- Guards the naive-timestamp trap: a bare `current_date + time` is cast using
   -- the server's zone (UTC), which silently moved the 09:00 departure to 11:00.
-  select 'boat departs 09:00 Positano local, not UTC',
-         (select to_char(starts_at at time zone 'Europe/Rome', 'HH24:MI')
+  select 'the rafting puts in at 09:30 Rishikesh local, not UTC',
+         (select to_char(starts_at at time zone 'Asia/Kolkata', 'HH24:MI')
             from itinerary_items
-           where id = '17000000-0000-4000-a000-000000000011') = '09:00'
+           where id = '17000000-0000-4000-a000-000000000041') = '09:30'
 
   union all
   select 'seeded trip is live today',
@@ -114,13 +124,13 @@ with checks as (
          not exists (select 1 from itinerary_items where field_state <> 'pending')
 
   union all
-  -- The run sheet spans today and tomorrow. If the boat day fell outside it the
+  -- The run sheet spans today and tomorrow. If the rafting fell outside it the
   -- coordinator would never see the stop the whole demo is about.
-  select 'the boat day falls inside the two-day run sheet',
+  select 'the rafting day falls inside the two-day run sheet',
          (select count(*) from itinerary_items
-           where id = '17000000-0000-4000-a000-000000000011'
-             and starts_at >= (current_date at time zone 'Europe/Rome')
-             and starts_at <  ((current_date + 2) at time zone 'Europe/Rome')) = 1
+           where id = '17000000-0000-4000-a000-000000000041'
+             and starts_at >= (current_date at time zone 'Asia/Kolkata')
+             and starts_at <  ((current_date + 2) at time zone 'Asia/Kolkata')) = 1
 
   union all
   -- A proposal with neither owner is unreachable from every surface and

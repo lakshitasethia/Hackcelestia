@@ -317,6 +317,60 @@ values
    600, 11000.00, 30.5560, 79.5620, null, null,
    '{luxury,scenic}', false, 'Auli', 'Uttarakhand', 'luxury');
 
+-- ------------------------------------ what the demo trip actually needs --
+--
+-- Four rows the corridor did not have, added when the seeded demo became a
+-- north India trip.
+--
+-- The three Rishikesh activities are not padding. The storm demo turns on the
+-- re-planner having something to offer once rafting is ruled out, and every
+-- other thing to do in Rishikesh — the rafting itself, the aarti on the ghat —
+-- is weather-sensitive too. A cause-aware engine correctly refused to replace
+-- a rained-off river trip with another thing the rain had also stopped, and
+-- then had nothing left to say. An ashram, a yoga hall and a massage room are
+-- indoors, real, and exactly what a Rishikesh operator would actually offer.
+--
+-- The Delhi coach is the leg the corridor was missing. Delhi to Manali is 548km
+-- and 11-15 hours, and the overnight Volvo leaving between 5 and 9pm is how
+-- people genuinely do it — the alternative was routing the demo through
+-- Amritsar and Chandigarh to use three existing legs for a journey nobody
+-- breaks up that way.
+
+insert into inventory
+  (id, vendor_id, title, type, description, duration_min, base_cost,
+   opens_at, tags, weather_sensitive, city, region, to_city, overnight, country, time_zone)
+values
+  ('29000000-0000-4000-a000-000000000201', '2e000000-0000-4000-a000-000000000002',
+   'Overnight coach: Delhi → Manali', 'transport',
+   'AC Volvo sleeper, 548km through the night. Boards near Kashmere Gate, arrives Manali bus stand mid-morning.',
+   840, 1800.00, '20:00', '{overnight,scenic}', false,
+   'Delhi', 'Delhi NCR', 'Manali', true, 'India', 'Asia/Kolkata'),
+
+  ('29000000-0000-4000-a000-000000000202', '2e000000-0000-4000-a000-000000000004',
+   'Transfer — Tapovan to Shivpuri put-in', 'transport',
+   'The rafting operator''s shuttle upstream to the put-in point.',
+   45, 400.00, '08:00', '{adventure}', false,
+   'Rishikesh', 'Garhwal', null, false, 'India', 'Asia/Kolkata'),
+
+  ('29000000-0000-4000-a000-000000000203', '2e000000-0000-4000-a000-000000000008',
+   'Yoga & meditation, Parmarth Niketan', 'activity',
+   'Morning or evening session in the hall on the ghat. Indoors, runs whatever the weather does.',
+   90, 500.00, '07:00', '{wellness,culture,indoor}', false,
+   'Rishikesh', 'Garhwal', null, false, 'India', 'Asia/Kolkata'),
+
+  ('29000000-0000-4000-a000-000000000204', '2e000000-0000-4000-a000-000000000008',
+   'Beatles Ashram (Chaurasi Kutia)', 'activity',
+   'The abandoned Maharishi ashram in Rajaji forest, painted wall to wall. Covered domes throughout.',
+   120, 600.00, '09:00', '{culture,history,indoor}', false,
+   'Rishikesh', 'Garhwal', null, false, 'India', 'Asia/Kolkata'),
+
+  ('29000000-0000-4000-a000-000000000205', '2e000000-0000-4000-a000-000000000008',
+   'Ayurvedic massage, Tapovan', 'activity',
+   'An hour of abhyanga at a Tapovan clinic. Entirely indoors.',
+   60, 1500.00, '10:00', '{wellness,indoor}', false,
+   'Rishikesh', 'Garhwal', null, false, 'India', 'Asia/Kolkata')
+on conflict (id) do nothing;
+
 -- Everything seeded before this block is the cheap option, so say so once
 -- rather than editing sixteen rows above and missing one.
 update inventory set tier = 'budget'
@@ -340,6 +394,270 @@ select i.id,
 from inventory i
 cross join generate_series(current_date - 1, current_date + 45, interval '1 day') d
 where i.id::text like '29000000%';
+
+-- ------------------------------------------------- legs the composer can use --
+--
+-- Every one of these rows names its destination in its title and left `to_city`
+-- null, which meant `loadLegGraph` — whose whole query is "transport rows with
+-- a to_city" — could not see a single one of them. The corridor ordered towns
+-- correctly and then had no trains or coaches to put between them, so a
+-- composed north India trip arrived without any way of getting from one town to
+-- the next. Switzerland worked only because research fills the column in.
+
+update inventory set to_city = 'Amritsar'   where id = '29000000-0000-4000-a000-000000000010';
+update inventory set to_city = 'Chandigarh' where id = '29000000-0000-4000-a000-000000000011';
+update inventory set to_city = 'Manali'     where id = '29000000-0000-4000-a000-000000000012';
+update inventory set to_city = 'Haridwar'   where id = '29000000-0000-4000-a000-000000000013';
+update inventory set to_city = 'Rishikesh'  where id = '29000000-0000-4000-a000-000000000014';
+update inventory set to_city = 'Chopta'     where id = '29000000-0000-4000-a000-000000000015';
+update inventory set to_city = 'Auli'       where id = '29000000-0000-4000-a000-000000000016';
+update inventory set to_city = 'Haridwar'   where id = '29000000-0000-4000-a000-000000000017';
+update inventory set to_city = 'Delhi'      where id = '29000000-0000-4000-a000-000000000018';
+
+-- The two overnight legs really are overnight, and the day allocator has to
+-- know: a coach that leaves Manali at four and arrives at seven the next
+-- morning costs a night, not an afternoon.
+update inventory set overnight = true
+ where id in ('29000000-0000-4000-a000-000000000013',
+              '29000000-0000-4000-a000-000000000201');
+
+-- ================================================================ the demo --
+--
+-- One group, eight days, Delhi to Auli and back down. It lives here rather than
+-- in `seed.sql` because it is built from the rows above, and `seed.sql` runs
+-- first.
+--
+-- The route is the one people actually travel, checked against real timings
+-- rather than invented: Delhi to Manali is 548km on an overnight Volvo (11-15h,
+-- leaving between 5 and 9pm); Manali to Haridwar is 483km and the best part of
+-- fifteen hours; Haridwar to Rishikesh is 25km; Rishikesh to Chopta is 169km
+-- and 5-7 hours of narrowing mountain road; Chopta to Auli is another 135-148km
+-- and 5-6 hours. Nothing here claims a journey that cannot be made.
+--
+-- Dates run from current_date - 3 so the trip is genuinely *in progress*: three
+-- days behind it, today in Rishikesh, and the demo tomorrow. That also puts
+-- real stops inside the guide's 48-hour run sheet without anything being
+-- special-cased.
+
+insert into trips
+  (id, traveler_id, operator_id, title, contact_name, contact_email, contact_phone,
+   coordinator_name, coordinator_phone,
+   status, party_size, budget, currency, starts_on, ends_on, prefs)
+values
+  ('7a000000-0000-4000-a000-000000000001', null, '0d000000-0000-4000-a000-000000000001',
+   'North India — Sharma party', 'Ananya Sharma', 'ananya@example.com', '+91 98000 00000',
+   -- The guide on the ground. Plain text rather than a join, because profiles
+   -- hang off auth.users and the seed runs before anybody has signed in.
+   'Marco Ferrara', '+91 98110 00006',
+   'in_progress', 2, 35000.00, 'INR', current_date - 3, current_date + 4,
+   '{"interests":["adventure","scenic","culture"],"pace":"moderate","dietary":["vegetarian"],
+     "mobility":"comfortable walking, no technical climbing","style":"midrange"}'::jsonb);
+
+-- --------------------------------------------------- itinerary (the DAG) --
+--
+-- Day 5 is the demo. The chain is:
+--
+--   hotel ──> shuttle ──> RAFTING ──> lunch ──> yoga ──> aarti
+--         └──> cab to Chopta ──> ...the rest of the trip
+--
+-- Kill the rafting and three stops go with it, at depths 1, 2 and 3 — while the
+-- cab to Chopta and everything after it survive, because they hang off the
+-- hotel rather than off the river. That distinction is the entire product: a
+-- flat list would have cancelled the back half of a holiday over an afternoon
+-- of rain.
+--
+-- The Rishikesh hotel is locked and prepaid, so the re-planner has to work
+-- around it and say why, exactly as the Positano one used to.
+
+insert into itinerary_items
+  (id, trip_id, day, seq, inventory_id, vendor_id, title, type, starts_at, ends_at,
+   lat, lng, cost, status, depends_on, lock_reason)
+values
+  -- Day 1 — Delhi, and the night coach north
+  ('17000000-0000-4000-a000-000000000001', '7a000000-0000-4000-a000-000000000001', 1, 1,
+   '29000000-0000-4000-a000-000000000101', '2e000000-0000-4000-a000-000000000003',
+   'Check in — Bloomrooms, New Delhi station', 'hotel',
+   (((current_date - 3) + time '12:00') at time zone 'Asia/Kolkata'), (((current_date - 3) + time '13:00') at time zone 'Asia/Kolkata'),
+   28.6420, 77.2190, 3200.00, 'confirmed', '{}', null),
+
+  ('17000000-0000-4000-a000-000000000002', '7a000000-0000-4000-a000-000000000001', 1, 2,
+   '29000000-0000-4000-a000-000000000002', '2e000000-0000-4000-a000-000000000008',
+   'Old Delhi food walk, Chandni Chowk', 'activity',
+   (((current_date - 3) + time '15:00') at time zone 'Asia/Kolkata'), (((current_date - 3) + time '18:00') at time zone 'Asia/Kolkata'),
+   28.6560, 77.2300, 900.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000001}', null),
+
+  ('17000000-0000-4000-a000-000000000003', '7a000000-0000-4000-a000-000000000001', 1, 3,
+   '29000000-0000-4000-a000-000000000201', '2e000000-0000-4000-a000-000000000002',
+   'Overnight coach: Delhi → Manali', 'transport',
+   (((current_date - 3) + time '20:00') at time zone 'Asia/Kolkata'), (((current_date - 2) + time '10:00') at time zone 'Asia/Kolkata'),
+   28.6670, 77.2280, 1800.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000002}', null),
+
+  -- Day 2 — Manali
+  ('17000000-0000-4000-a000-000000000010', '7a000000-0000-4000-a000-000000000001', 2, 1,
+   '29000000-0000-4000-a000-000000000131', '2e000000-0000-4000-a000-000000000003',
+   'Check in — Apple orchard guesthouse, Manali', 'hotel',
+   (((current_date - 2) + time '11:00') at time zone 'Asia/Kolkata'), (((current_date - 2) + time '12:00') at time zone 'Asia/Kolkata'),
+   32.2430, 77.1890, 3400.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000003}', null),
+
+  ('17000000-0000-4000-a000-000000000011', '7a000000-0000-4000-a000-000000000001', 2, 2,
+   '29000000-0000-4000-a000-000000000032', '2e000000-0000-4000-a000-000000000008',
+   'Hadimba temple & Old Manali walk', 'guide',
+   (((current_date - 2) + time '15:00') at time zone 'Asia/Kolkata'), (((current_date - 2) + time '17:30') at time zone 'Asia/Kolkata'),
+   32.2490, 77.1830, 300.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000010}', null),
+
+  ('17000000-0000-4000-a000-000000000012', '7a000000-0000-4000-a000-000000000001', 2, 3,
+   '29000000-0000-4000-a000-000000000033', '2e000000-0000-4000-a000-000000000008',
+   'Himachali dham thali', 'restaurant',
+   (((current_date - 2) + time '19:30') at time zone 'Asia/Kolkata'), (((current_date - 2) + time '21:00') at time zone 'Asia/Kolkata'),
+   32.2400, 77.1880, 400.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000011}', null),
+
+  -- Day 3 — Solang, then the long coach down to the plains
+  ('17000000-0000-4000-a000-000000000020', '7a000000-0000-4000-a000-000000000001', 3, 1,
+   '29000000-0000-4000-a000-000000000031', '2e000000-0000-4000-a000-000000000007',
+   'Horse riding, Solang Valley', 'activity',
+   (((current_date - 1) + time '09:00') at time zone 'Asia/Kolkata'), (((current_date - 1) + time '10:30') at time zone 'Asia/Kolkata'),
+   32.3170, 77.1560, 700.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000010}', null),
+
+  ('17000000-0000-4000-a000-000000000021', '7a000000-0000-4000-a000-000000000001', 3, 2,
+   '29000000-0000-4000-a000-000000000013', '2e000000-0000-4000-a000-000000000002',
+   'Coach: Manali → Haridwar', 'transport',
+   (((current_date - 1) + time '16:00') at time zone 'Asia/Kolkata'), ((current_date + time '07:00') at time zone 'Asia/Kolkata'),
+   32.2400, 77.1880, 1400.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000020}', null),
+
+  -- Day 4 — today. Rishikesh.
+  ('17000000-0000-4000-a000-000000000030', '7a000000-0000-4000-a000-000000000001', 4, 1,
+   '29000000-0000-4000-a000-000000000014', '2e000000-0000-4000-a000-000000000002',
+   'Shared cab: Haridwar → Rishikesh', 'transport',
+   ((current_date + time '08:00') at time zone 'Asia/Kolkata'), ((current_date + time '08:45') at time zone 'Asia/Kolkata'),
+   29.9457, 78.1642, 250.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000021}', null),
+
+  ('17000000-0000-4000-a000-000000000031', '7a000000-0000-4000-a000-000000000001', 4, 2,
+   '29000000-0000-4000-a000-000000000141', '2e000000-0000-4000-a000-000000000003',
+   'Check in — Ganga Kinare, Rishikesh', 'hotel',
+   ((current_date + time '12:00') at time zone 'Asia/Kolkata'), ((current_date + time '13:00') at time zone 'Asia/Kolkata'),
+   30.1080, 78.2940, 4200.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000030}',
+   'Non-refundable rate — 3 nights prepaid'),
+
+  ('17000000-0000-4000-a000-000000000032', '7a000000-0000-4000-a000-000000000001', 4, 3,
+   '29000000-0000-4000-a000-000000000043', '2e000000-0000-4000-a000-000000000008',
+   'Chotiwala thali & German Bakery', 'restaurant',
+   ((current_date + time '20:00') at time zone 'Asia/Kolkata'), ((current_date + time '21:30') at time zone 'Asia/Kolkata'),
+   30.1230, 78.3200, 350.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000031}', null),
+
+  -- Day 5 — tomorrow. The one the storm hits.
+  ('17000000-0000-4000-a000-000000000040', '7a000000-0000-4000-a000-000000000001', 5, 1,
+   '29000000-0000-4000-a000-000000000202', '2e000000-0000-4000-a000-000000000004',
+   'Transfer — Tapovan to Shivpuri put-in', 'transport',
+   (((current_date + 1) + time '08:30') at time zone 'Asia/Kolkata'), (((current_date + 1) + time '09:15') at time zone 'Asia/Kolkata'),
+   30.1080, 78.2940, 400.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000031}', null),
+
+  ('17000000-0000-4000-a000-000000000041', '7a000000-0000-4000-a000-000000000001', 5, 2,
+   '29000000-0000-4000-a000-000000000041', '2e000000-0000-4000-a000-000000000004',
+   'White-water rafting, Shivpuri to Rishikesh', 'activity',
+   (((current_date + 1) + time '09:30') at time zone 'Asia/Kolkata'), (((current_date + 1) + time '13:30') at time zone 'Asia/Kolkata'),
+   30.1350, 78.3800, 1200.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000040}', null),
+
+  ('17000000-0000-4000-a000-000000000042', '7a000000-0000-4000-a000-000000000001', 5, 3,
+   '29000000-0000-4000-a000-000000000043', '2e000000-0000-4000-a000-000000000008',
+   'Riverside lunch — Chotiwala', 'restaurant',
+   (((current_date + 1) + time '14:00') at time zone 'Asia/Kolkata'), (((current_date + 1) + time '15:00') at time zone 'Asia/Kolkata'),
+   30.1230, 78.3200, 350.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000041}', null),
+
+  ('17000000-0000-4000-a000-000000000043', '7a000000-0000-4000-a000-000000000001', 5, 4,
+   '29000000-0000-4000-a000-000000000203', '2e000000-0000-4000-a000-000000000008',
+   'Yoga & meditation, Parmarth Niketan', 'activity',
+   (((current_date + 1) + time '16:30') at time zone 'Asia/Kolkata'), (((current_date + 1) + time '18:00') at time zone 'Asia/Kolkata'),
+   30.1160, 78.3180, 500.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000042}', null),
+
+  ('17000000-0000-4000-a000-000000000044', '7a000000-0000-4000-a000-000000000001', 5, 5,
+   '29000000-0000-4000-a000-000000000042', '2e000000-0000-4000-a000-000000000008',
+   'Ganga aarti at Triveni Ghat', 'guide',
+   (((current_date + 1) + time '18:30') at time zone 'Asia/Kolkata'), (((current_date + 1) + time '20:00') at time zone 'Asia/Kolkata'),
+   30.1090, 78.2950, 0.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000043}', null),
+
+  -- Day 6 — up to Chopta. Hangs off the hotel, not the river.
+  ('17000000-0000-4000-a000-000000000050', '7a000000-0000-4000-a000-000000000001', 6, 1,
+   '29000000-0000-4000-a000-000000000015', '2e000000-0000-4000-a000-000000000005',
+   'Shared cab: Rishikesh → Chopta', 'transport',
+   (((current_date + 2) + time '07:00') at time zone 'Asia/Kolkata'), (((current_date + 2) + time '13:00') at time zone 'Asia/Kolkata'),
+   30.1080, 78.2940, 2200.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000031}', null),
+
+  ('17000000-0000-4000-a000-000000000051', '7a000000-0000-4000-a000-000000000001', 6, 2,
+   '29000000-0000-4000-a000-000000000052', '2e000000-0000-4000-a000-000000000005',
+   'Deopraag maggi & garhwali dinner', 'restaurant',
+   (((current_date + 2) + time '19:30') at time zone 'Asia/Kolkata'), (((current_date + 2) + time '21:00') at time zone 'Asia/Kolkata'),
+   30.4890, 79.2170, 350.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000050}', null),
+
+  -- Day 7 — the summit push
+  ('17000000-0000-4000-a000-000000000060', '7a000000-0000-4000-a000-000000000001', 7, 1,
+   '29000000-0000-4000-a000-000000000051', '2e000000-0000-4000-a000-000000000006',
+   'Chandrashila summit trek via Tungnath', 'guide',
+   (((current_date + 3) + time '05:00') at time zone 'Asia/Kolkata'), (((current_date + 3) + time '12:00') at time zone 'Asia/Kolkata'),
+   30.4890, 79.2170, 1800.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000050}', null),
+
+  -- Day 8 — across to Auli
+  ('17000000-0000-4000-a000-000000000070', '7a000000-0000-4000-a000-000000000001', 8, 1,
+   '29000000-0000-4000-a000-000000000016', '2e000000-0000-4000-a000-000000000009',
+   'Shared cab: Chopta → Auli', 'transport',
+   (((current_date + 4) + time '07:00') at time zone 'Asia/Kolkata'), (((current_date + 4) + time '12:30') at time zone 'Asia/Kolkata'),
+   30.4890, 79.2170, 1900.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000060}', null),
+
+  ('17000000-0000-4000-a000-000000000071', '7a000000-0000-4000-a000-000000000001', 8, 2,
+   '29000000-0000-4000-a000-000000000061', '2e000000-0000-4000-a000-000000000009',
+   'Auli ropeway & Gorson Bugyal walk', 'activity',
+   (((current_date + 4) + time '14:00') at time zone 'Asia/Kolkata'), (((current_date + 4) + time '18:00') at time zone 'Asia/Kolkata'),
+   30.5280, 79.5660, 1200.00, 'confirmed',
+   '{17000000-0000-4000-a000-000000000070}', null);
+
+-- ------------------------------------------------------------ bookings --
+-- Penalties are what make the re-planner's cost deltas honest: standing down
+-- the rafting this close in forfeits the operator's deposit, and the agent has
+-- to say so rather than pretending a cancellation is free.
+
+insert into bookings (trip_id, item_id, vendor_id, state, amount, penalty, external_ref)
+values
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000001', '2e000000-0000-4000-a000-000000000003', 'confirmed', 3200.00, 0.00, 'BR-88120'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000002', '2e000000-0000-4000-a000-000000000008', 'confirmed', 900.00, 0.00, 'FW-2210'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000003', '2e000000-0000-4000-a000-000000000002', 'confirmed', 1800.00, 0.00, 'HR-55010'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000010', '2e000000-0000-4000-a000-000000000003', 'confirmed', 3400.00, 0.00, 'AO-3390'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000011', '2e000000-0000-4000-a000-000000000008', 'confirmed', 300.00, 0.00, 'HM-0071'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000012', '2e000000-0000-4000-a000-000000000008', 'confirmed', 400.00, 0.00, 'DH-0072'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000020', '2e000000-0000-4000-a000-000000000007', 'confirmed', 700.00, 0.00, 'SV-4410'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000021', '2e000000-0000-4000-a000-000000000002', 'confirmed', 1400.00, 0.00, 'HR-55011'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000030', '2e000000-0000-4000-a000-000000000002', 'confirmed', 250.00, 0.00, 'HC-1180'),
+  -- Prepaid and non-refundable: the whole amount is at risk, which is what
+  -- makes the lock mean something to the re-planner.
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000031', '2e000000-0000-4000-a000-000000000003', 'confirmed', 4200.00, 4200.00, 'GK-7730'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000032', '2e000000-0000-4000-a000-000000000008', 'confirmed', 350.00, 0.00, 'CW-0081'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000040', '2e000000-0000-4000-a000-000000000004', 'confirmed', 400.00, 0.00, 'RC-9910'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000041', '2e000000-0000-4000-a000-000000000004', 'confirmed', 1200.00, 300.00, 'RC-9911'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000042', '2e000000-0000-4000-a000-000000000008', 'confirmed', 350.00, 0.00, 'CW-0082'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000043', '2e000000-0000-4000-a000-000000000008', 'confirmed', 500.00, 0.00, 'PN-0090'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000044', '2e000000-0000-4000-a000-000000000008', 'confirmed', 0.00, 0.00, 'TG-0091'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000050', '2e000000-0000-4000-a000-000000000005', 'confirmed', 2200.00, 0.00, 'CM-6610'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000051', '2e000000-0000-4000-a000-000000000005', 'confirmed', 350.00, 0.00, 'CM-6611'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000060', '2e000000-0000-4000-a000-000000000006', 'confirmed', 1800.00, 0.00, 'GT-2240'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000070', '2e000000-0000-4000-a000-000000000009', 'confirmed', 1900.00, 0.00, 'AR-3310'),
+  ('7a000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000071', '2e000000-0000-4000-a000-000000000009', 'confirmed', 1200.00, 0.00, 'AR-3311');
 
 -- Backfill the Amalfi rows so nothing in the catalogue has a null city.
 update inventory set city = 'Positano', region = 'Amalfi Coast'

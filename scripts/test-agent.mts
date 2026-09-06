@@ -58,7 +58,7 @@ const { data: proposals } = await supabase
   .from("replan_proposals").select("cost_delta, rationale, plan").eq("disruption_id", d!.id);
 console.log(`\nPROPOSALS (${(proposals ?? []).length}):`);
 for (const p of (proposals ?? []) as { cost_delta: number; rationale: string; plan: unknown[] }[]) {
-  console.log(`\n  delta EUR ${p.cost_delta} · ${p.plan.length} operations`);
+  console.log(`\n  delta ${p.cost_delta} · ${p.plan.length} operations`);
   console.log(`  ${p.rationale.split("\n")[0]}`);
 }
 console.log(`\nSUMMARY:\n${result.summary}`);
@@ -134,7 +134,7 @@ const chosen = (drafts ?? [])[0] as
 if (!chosen) {
   console.log("SKIP — the agent recorded no draft to accept");
 } else {
-  console.log(`plan: ${chosen.rationale.split("\n")[0]} (EUR ${chosen.cost_delta}, ${chosen.plan.length} ops)`);
+  console.log(`plan: ${chosen.rationale.split("\n")[0]} (${chosen.cost_delta}, ${chosen.plan.length} ops)`);
   const { applied } = await applyProposal(chosen.id);
 
   const after = await getItems(DEMO_TRIP_ID);
@@ -167,8 +167,10 @@ if (!chosen) {
   check("nothing is left flagged at risk", !after.some((i) => i.status === "at_risk"));
 
   const { penaltyIfCancelled } = summarize(after, bookings);
+  // The prepaid Rishikesh hotel, and nothing else: the rafting's deposit is
+  // spent once the stop is stood down, not still pending.
   check("pending penalties exclude what was already cancelled",
-    penaltyIfCancelled === 1280, `EUR ${penaltyIfCancelled}`);
+    penaltyIfCancelled === 4200, `INR ${penaltyIfCancelled}`);
 
   console.log("\nThis suite leaves the trip re-planned. Run `npm run db:seed` to reset.");
 }

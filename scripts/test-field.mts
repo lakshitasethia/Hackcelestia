@@ -35,10 +35,10 @@ check("assignment resolves to the demo trip",
 const sheet = await getRunSheet(DEMO_TRIP_ID, 2);
 check("run sheet is not empty", sheet.length > 0, `${sheet.length} stops`);
 
-const boat = sheet.find((i) => i.title.toLowerCase().includes("boat"));
-// If tomorrow's boat is outside the window the guide never sees the stop the
+const raft = sheet.find((i) => i.title.toLowerCase().includes("rafting"));
+// If tomorrow's rafting is outside the window the guide never sees the stop the
 // whole demo turns on, and the failure is silent in the UI.
-check("tomorrow's boat day is on the run sheet", !!boat, boat?.starts_at);
+check("tomorrow's rafting is on the run sheet", !!raft, raft?.starts_at);
 
 const days = groupByLocalDay(sheet);
 check("run sheet splits into Today and Tomorrow",
@@ -60,30 +60,30 @@ check("the database stamps the report time", !!doneItem.field_updated_at);
 
 // -- escalating a stop -----------------------------------------------------
 
-if (!boat) process.exit(1);
+if (!raft) process.exit(1);
 
-await reportFieldState(boat.id, "issue", "Skipper says the swell is too high.");
+await reportFieldState(raft.id, "issue", "River guide says the flow is too high to put in.");
 check("no disruption exists until one is opened",
-  (await findOpenDisruptionFor(boat.id)) === null);
+  (await findOpenDisruptionFor(raft.id)) === null);
 
 const raised = await injectDisruption({
   tripId: DEMO_TRIP_ID,
-  rootItemId: boat.id,
+  rootItemId: raft.id,
   source: "vendor",
   severity: "high",
-  headline: `Flagged on the ground — ${boat.title}`,
+  headline: `Flagged on the ground — ${raft.title}`,
   payload: { reported_by: "coordinator" },
 });
 check("flagging opens a disruption the operator can see", !!raised.id);
 
-const flagged = (await getRunSheet(DEMO_TRIP_ID, 2)).find((i) => i.id === boat.id)!;
+const flagged = (await getRunSheet(DEMO_TRIP_ID, 2)).find((i) => i.id === raft.id)!;
 check("the flagged stop carries the guide's note",
-  flagged.field_note === "Skipper says the swell is too high.", flagged.field_note ?? "");
+  flagged.field_note === "River guide says the flow is too high to put in.", flagged.field_note ?? "");
 check("the office marks the stop at risk", flagged.status === "at_risk");
 
 // Flagging twice must add detail, not a second identical ticket in the queue.
 check("a second flag finds the open disruption",
-  (await findOpenDisruptionFor(boat.id)) === raised.id);
+  (await findOpenDisruptionFor(raft.id)) === raised.id);
 
 // -- reset -----------------------------------------------------------------
 

@@ -23,15 +23,15 @@ const supabase = createAdminClient();
 await clearDisruptions(DEMO_TRIP_ID);
 
 const disruption = (await runScenario(DEMO_TRIP_ID, "storm"))!;
-const boat = (await getItems(DEMO_TRIP_ID)).find((i) =>
-  i.title.toLowerCase().includes("boat")
+const raft = (await getItems(DEMO_TRIP_ID)).find((i) =>
+  i.title.toLowerCase().includes("rafting")
 )!;
 
 /**
  * The exact shape that broke a live demo: the model emitted a `replace` with a
  * real item and a real substitute but no times at all. The proposal rendered
  * correctly, the insert failed on a NOT NULL, the error was discarded, and the
- * boat was marked `replaced` anyway — leaving the group with a cancelled day
+ * stop was marked `replaced` anyway — leaving the group with a cancelled day
  * and nothing booked in its place.
  */
 const { data: bad } = await supabase
@@ -41,11 +41,11 @@ const { data: bad } = await supabase
     plan: [
       {
         op: "replace",
-        item_id: boat.id,
-        with_inventory_id: "19000000-0000-4000-a000-00000000000d",
+        item_id: raft.id,
+        with_inventory_id: "29000000-0000-4000-a000-000000000204",
         reason: "no times supplied",
       },
-      { op: "drop", item_id: boat.id, reason: "should never run" },
+      { op: "drop", item_id: raft.id, reason: "should never run" },
     ],
     cost_delta: 0,
     rationale: "regression fixture",
@@ -67,13 +67,13 @@ check("a plan with no times is refused", threw, message.split("\n")[0]);
 check("the refusal names the offending operation", message.includes("start or end time"));
 
 const after = await getItems(DEMO_TRIP_ID);
-const boatAfter = after.find((i) => i.id === boat.id)!;
-check("the broken stop is NOT marked replaced", boatAfter.status !== "replaced", boatAfter.status);
+const raftAfter = after.find((i) => i.id === raft.id)!;
+check("the broken stop is NOT marked replaced", raftAfter.status !== "replaced", raftAfter.status);
 check("no orphan replacement was created", after.length === (await getItems(DEMO_TRIP_ID)).length);
 check(
   "the later drop in the same plan never ran",
-  boatAfter.status !== "cancelled",
-  boatAfter.status
+  raftAfter.status !== "cancelled",
+  raftAfter.status
 );
 
 // An inventory id that does not exist must be caught by the same pre-flight.
@@ -84,10 +84,10 @@ const { data: ghost } = await supabase
     plan: [
       {
         op: "replace",
-        item_id: boat.id,
-        with_inventory_id: "19000000-0000-4000-a000-0000deadbeef",
-        starts_at: boat.starts_at,
-        ends_at: boat.ends_at,
+        item_id: raft.id,
+        with_inventory_id: "29000000-0000-4000-a000-0000deadbeef",
+        starts_at: raft.starts_at,
+        ends_at: raft.ends_at,
         reason: "inventory does not exist",
       },
     ],
@@ -112,14 +112,14 @@ const { data: good } = await supabase
   .insert({
     disruption_id: disruption.id,
     // A replace *and* a drop, so the drop assertions below are not vacuous:
-    // lunch on Capri cannot happen once the boat to Capri is gone.
+    // the riverside lunch cannot happen once the rafting is gone.
     plan: [
       {
         op: "replace",
-        item_id: boat.id,
-        with_inventory_id: "19000000-0000-4000-a000-00000000000d",
-        starts_at: boat.starts_at,
-        ends_at: boat.ends_at,
+        item_id: raft.id,
+        with_inventory_id: "29000000-0000-4000-a000-000000000204",
+        starts_at: raft.starts_at,
+        ends_at: raft.ends_at,
         reason: "valid swap",
       },
       {
@@ -141,18 +141,18 @@ check("a valid plan still applies", applied === 2, `${applied} operations`);
 const final = await getItems(DEMO_TRIP_ID);
 check(
   "the broken stop is replaced",
-  final.find((i) => i.id === boat.id)?.status === "replaced"
+  final.find((i) => i.id === raft.id)?.status === "replaced"
 );
-const substitute = final.find((i) => i.title.includes("Lemon grove"));
+const substitute = final.find((i) => i.title.includes("Beatles Ashram"));
 check("the substitute actually exists on the itinerary", !!substitute, substitute?.title);
 check(
   "the substitute inherited the broken stop's dependencies",
-  JSON.stringify(substitute?.depends_on) === JSON.stringify(boat.depends_on)
+  JSON.stringify(substitute?.depends_on) === JSON.stringify(raft.depends_on)
 );
 check(
   "downstream stops now depend on the substitute",
   final
-    .filter((i) => i.depends_on.includes(boat.id))
+    .filter((i) => i.depends_on.includes(raft.id))
     .every((i) => i.status === "cancelled" || i.status === "replaced"),
   "nothing live still points at the replaced stop"
 );
@@ -160,14 +160,14 @@ check(
 // -- the money follows the itinerary ---------------------------------------
 //
 // The itinerary being right is only half of it. Before this, accepting a plan
-// left the boat's booking `confirmed` and its seat consumed, so the traveler's
+// left the rafting's booking `confirmed` and its seat consumed, so the traveler's
 // summary went on quoting a EUR 195 cancellation penalty for a stop that was
 // no longer on the trip.
 
 const bookings = await getBookings(DEMO_TRIP_ID);
-const boatBooking = bookings.find((b) => b.item_id === boat.id);
-check("the replaced stop's booking is cancelled", boatBooking?.state === "cancelled",
-  boatBooking?.state ?? "no booking row");
+const raftBooking = bookings.find((b) => b.item_id === raft.id);
+check("the replaced stop's booking is cancelled", raftBooking?.state === "cancelled",
+  raftBooking?.state ?? "no booking row");
 
 const subBooking = bookings.find((b) => b.item_id === substitute?.id);
 check("the substitute has a booking of its own", !!subBooking, subBooking?.state);
@@ -194,8 +194,8 @@ check("every dropped stop had its booking cancelled too",
 // The number that was wrong on screen.
 const { penaltyIfCancelled } = summarize(final, bookings);
 check("the summary no longer counts the dead stop's penalty",
-  penaltyIfCancelled === 1280,
-  `EUR ${penaltyIfCancelled} (hotel 1280 only; the boat's 195 is spent, not pending)`);
+  penaltyIfCancelled === 4200,
+  `INR ${penaltyIfCancelled} (hotel 4200 only; the rafting's 300 is spent, not pending)`);
 
 // -- seats move with the bookings -------------------------------------------
 
@@ -203,24 +203,24 @@ const seatRows = await supabase
   .from("availability")
   .select("inventory_id, date, slots_taken")
   .in("inventory_id", [
-    "19000000-0000-4000-a000-00000000000d", // lemon grove walk, now booked
-    "19000000-0000-4000-a000-000000000002", // the boat, released
+    "29000000-0000-4000-a000-000000000204", // Beatles Ashram, now booked
+    "29000000-0000-4000-a000-000000000041", // the rafting, released
   ]);
 
 const day = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-CA", { timeZone: "Europe/Rome" });
+  new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
 const taken = (inv: string, on: string) =>
   ((seatRows.data ?? []) as { inventory_id: string; date: string; slots_taken: number }[])
     .find((r) => r.inventory_id === inv && r.date === on)?.slots_taken;
 
 check("booking the substitute consumed one of its seats",
-  taken("19000000-0000-4000-a000-00000000000d", day(substitute!.starts_at)) === 1,
-  String(taken("19000000-0000-4000-a000-00000000000d", day(substitute!.starts_at))));
-// The seeded boat never consumed a seat, so releasing it must not push the
+  taken("29000000-0000-4000-a000-000000000204", day(substitute!.starts_at)) === 1,
+  String(taken("29000000-0000-4000-a000-000000000204", day(substitute!.starts_at))));
+// The seeded rafting never consumed a seat, so releasing it must not push the
 // count below zero — the clamp in adjust_availability is what guarantees that.
 check("releasing a seat never drives the count negative",
-  (taken("19000000-0000-4000-a000-000000000002", day(boat.starts_at)) ?? 0) >= 0);
+  (taken("29000000-0000-4000-a000-000000000041", day(raft.starts_at)) ?? 0) >= 0);
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
