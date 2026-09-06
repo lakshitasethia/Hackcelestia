@@ -51,6 +51,10 @@ export function buildConciergeTools(
         supabase
           .from("inventory")
           .select("*, vendors(name, channel)")
+          // The shared catalogue, plus whatever this traveler added themselves.
+          // Vela may suggest their own reindeer farm back to them; she may not
+          // learn about it from someone else's holiday and offer it around.
+          .or(`added_for_trip.is.null,added_for_trip.eq.${trip.id}`)
           .order("title"),
         // Something already on the itinerary is not something to add to it.
         supabase

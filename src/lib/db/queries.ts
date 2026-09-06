@@ -353,14 +353,25 @@ export type InventoryOption = Inventory & {
   vendors: { id: string; name: string; channel: "auto" | "manual" } | null;
 };
 
-/** Everything bookable, for the traveler's picker. */
-export async function getInventory(): Promise<InventoryOption[]> {
+/**
+ * Everything bookable, for the traveler's picker.
+ *
+ * `forTrip` widens the answer rather than narrowing it: the shared catalogue,
+ * plus anything that trip's own traveler added by hand. Called without it — the
+ * explore page, where no trip exists yet — the private rows stay out, because a
+ * place one person added to their own holiday is not a listing.
+ */
+export async function getInventory(forTrip?: string): Promise<InventoryOption[]> {
   const supabase = await readClient();
-  const { data, error } = await supabase
+  const query = supabase
     .from("inventory")
     .select("*, vendors(id, name, channel)")
     .order("type")
     .order("title");
+
+  const { data, error } = await (forTrip
+    ? query.or(`added_for_trip.is.null,added_for_trip.eq.${forTrip}`)
+    : query.is("added_for_trip", null));
 
   if (error) throw new Error(`getInventory: ${error.message}`);
   return (data ?? []) as unknown as InventoryOption[];
@@ -370,7 +381,12 @@ export async function getInventory(): Promise<InventoryOption[]> {
  *  actually exists rather than a hard-coded list that drifts from inventory. */
 export async function getInterestTags(): Promise<string[]> {
   const supabase = await readClient();
-  const { data, error } = await supabase.from("inventory").select("tags");
+  // Shared rows only. A tag that exists once, on a stop one traveler typed in,
+  // is not an interest the form should be offering everybody.
+  const { data, error } = await supabase
+    .from("inventory")
+    .select("tags")
+    .is("added_for_trip", null);
   if (error) throw new Error(`getInterestTags: ${error.message}`);
 
   const tags = new Set<string>();
@@ -458,15 +474,28 @@ export async function getCoordinatorTrips(): Promise<Trip[]> {
  * tomorrow's 09:00 departure is tonight's problem, and it is also where a
  * disruption lands first.
  */
+/**
+ * A stop, plus the one thing about it the guide cannot afford to assume.
+ *
+ * `added_for_trip` rides along so the run sheet can say a stop was added by the
+ * traveler and never verified by anybody. Marco standing on a quay planning his
+ * morning around a reindeer farm that exists only because a customer read about
+ * it is the failure this prevents, and it is not a failure the stop's title
+ * would ever reveal.
+ */
+export type RunSheetItem = ItineraryItem & {
+  inventory: { added_for_trip: string | null } | null;
+};
+
 export async function getRunSheet(
   tripId: string,
   days = 2
-): Promise<ItineraryItem[]> {
+): Promise<RunSheetItem[]> {
   const supabase = await readClient();
 
   const { data, error } = await supabase
     .from("itinerary_items")
-    .select("*")
+    .select("*, inventory(added_for_trip)")
     .eq("trip_id", tripId)
     .gte("starts_at", startOfLocalDay(0).toISOString())
     .lt("starts_at", startOfLocalDay(days).toISOString())
@@ -474,14 +503,14 @@ export async function getRunSheet(
     .order("starts_at");
 
   if (error) throw new Error(`getRunSheet: ${error.message}`);
-  return (data ?? []) as ItineraryItem[];
+  return (data ?? []) as unknown as RunSheetItem[];
 }
 
 /** Run-sheet items split into local days, each labelled Today / Tomorrow. */
-export function groupByLocalDay(
-  items: ItineraryItem[]
-): { label: string; items: ItineraryItem[] }[] {
-  const days = new Map<string, ItineraryItem[]>();
+export function groupByLocalDay<T extends ItineraryItem>(
+  items: T[]
+): { label: string; items: T[] }[] {
+  const days = new Map<string, T[]>();
   for (const item of items) {
     const key = relativeDayLabel(item.starts_at);
     if (!days.has(key)) days.set(key, []);
@@ -579,6 +608,8 @@ export async function getAlternatives(
       const inv = row.inventory;
       if (!inv) return false;
       if (inv.id === item.inventory_id) return false; // the one already booked
+      // Someone else's hand-added stop is not an alternative to anything here.
+      if (inv.added_for_trip && inv.added_for_trip !== item.trip_id) return false;
       if (inv.type !== item.type) return false; // like for like
       // Same town. A row with no city recorded is kept rather than guessed at.
       if (here?.city && inv.city && inv.city !== here.city) return false;

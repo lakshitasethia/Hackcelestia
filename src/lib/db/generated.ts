@@ -109,9 +109,10 @@ export interface InventoryRow {
   country: string | null;
   time_zone: string | null;
   tier: "budget" | "midrange" | "boutique" | "luxury" | null;
+  added_for_trip: string | null;
 }
 
-export type InventoryInsert = Omit<InventoryRow, "id" | "description" | "duration_min" | "base_cost" | "lat" | "lng" | "opens_at" | "closes_at" | "tags" | "weather_sensitive" | "created_at" | "city" | "region" | "to_city" | "overnight" | "source_url" | "sourced_at" | "provisional" | "country" | "time_zone" | "tier"> & Partial<InventoryRow>;
+export type InventoryInsert = Omit<InventoryRow, "id" | "description" | "duration_min" | "base_cost" | "lat" | "lng" | "opens_at" | "closes_at" | "tags" | "weather_sensitive" | "created_at" | "city" | "region" | "to_city" | "overnight" | "source_url" | "sourced_at" | "provisional" | "country" | "time_zone" | "tier" | "added_for_trip"> & Partial<InventoryRow>;
 
 export interface ItineraryItemsRow {
   id: string;
@@ -204,7 +205,7 @@ export interface ReplanProposalsRow {
   decided_at: string | null;
   decided_by: string | null;
   trip_id: string | null;
-  source: "replan" | "concierge";
+  source: "replan" | "concierge" | "traveler";
 }
 
 export type ReplanProposalsInsert = Omit<ReplanProposalsRow, "id" | "disruption_id" | "run_id" | "plan" | "cost_delta" | "rationale" | "state" | "created_at" | "decided_at" | "decided_by" | "trip_id" | "source"> & Partial<ReplanProposalsRow>;

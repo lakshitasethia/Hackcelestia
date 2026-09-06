@@ -210,6 +210,9 @@ export async function findCandidates(
       const inv = row.inventory;
       if (!inv) return false;
       if (inv.id === root.inventory_id) return false; // the thing that broke
+      // A stop another traveler added by hand is theirs, not a substitute to
+      // offer here. Their own additions stay eligible on their own trip.
+      if (inv.added_for_trip && inv.added_for_trip !== root.trip_id) return false;
       if (alreadyPlanned.has(inv.id)) return false; // already on this itinerary
       if (row.slots_total - row.slots_taken <= 0) return false;
       if (source === "weather" && inv.weather_sensitive) return false;

@@ -76,7 +76,7 @@ export default function PricingSection() {
             as="p"
             className="font-display uppercase text-display-sm font-semibold text-fg text-balance"
           >
-            {`A traditional agency buries its margin somewhere between the flight you booked and the room you never saw. We do the opposite. Every hotel night, every private transfer, every guided afternoon is priced at the rate the supplier actually quoted us — and you watch that number move in real time as you build. No bundled totals, no cancellation traps, no quiet markup for the privilege of asking.`}
+            {`A traditional agency buries its margin somewhere between the flight you booked and the room you never saw. We do the opposite. Every hotel night, every private transfer, every guided afternoon is priced at the rate the supplier actually quoted us, and you watch that number move in real time as you build. No bundled totals, no cancellation traps, no quiet markup for the privilege of asking.`}
           </HighlightText>
 
           <p className="mt-10 text-body-lg text-muted max-w-2xl mx-auto">

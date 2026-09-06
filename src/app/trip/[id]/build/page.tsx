@@ -10,7 +10,12 @@ import {
   groupByDay,
 } from "@/lib/db/queries";
 import { formatMoney, formatTime } from "@/lib/format";
-import { addItemAction, removeItemAction, confirmTripAction } from "./actions";
+import {
+  addCustomStopAction,
+  addItemAction,
+  removeItemAction,
+  confirmTripAction,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +31,7 @@ export default async function BuildPage({
 
   const [items, inventory] = await Promise.all([
     getItems(trip.id),
-    getInventory(),
+    getInventory(trip.id),
   ]);
 
   const byDay = groupByDay(items);
@@ -170,6 +175,116 @@ export default async function BuildPage({
 
           <aside className="xl:col-span-5">
             <div className="xl:sticky xl:top-24">
+              {/* Found something we haven't?
+                  The catalogue is finite and a traveler's reading is not, so
+                  the honest answer to "it isn't in here" is a form rather than
+                  an apology. What it asks for is exactly what the rest of the
+                  product needs to keep working on the stop: a town, so the
+                  transit guard can place it and the re-planner does not offer
+                  a substitute two countries away; a duration, for the timeline;
+                  and whether weather can stop it, so a storm rules it out the
+                  way it rules out the boat. */}
+              <details className="surface p-4 mb-6 group">
+                <summary className="flex items-center gap-2 cursor-pointer font-display text-base font-semibold uppercase text-fg list-none">
+                  <Plus className="w-4 h-4 shrink-0" />
+                  Add a place we don&apos;t have
+                </summary>
+
+                <p className="mt-3 font-sans text-xs text-muted">
+                  Yours alone — it goes on this trip and is never suggested to
+                  anyone else. Nothing is booked automatically; your operator
+                  gets it as something to arrange and confirm.
+                </p>
+
+                <form action={addCustomStopAction} className="mt-4 grid gap-3">
+                  <input type="hidden" name="tripId" value={trip.id} />
+
+                  <input
+                    name="title"
+                    required
+                    placeholder="Name of the place"
+                    aria-label="Name of the place"
+                    className={field}
+                  />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      name="city"
+                      required
+                      placeholder="Town"
+                      aria-label="Town"
+                      className={field}
+                    />
+                    <select name="type" defaultValue="activity" aria-label="Kind" className={field}>
+                      <option value="activity">Activity</option>
+                      <option value="restaurant">Restaurant</option>
+                      <option value="hotel">Hotel</option>
+                      <option value="guide">Guide</option>
+                      <option value="transport">Transport</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <select name="day" defaultValue={1} aria-label="Day" className={field}>
+                      {days.map((day) => (
+                        <option key={day} value={day}>
+                          Day {day}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="time"
+                      name="localTime"
+                      defaultValue="09:00"
+                      aria-label="Start time"
+                      className={field}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="number"
+                      name="durationMin"
+                      min={15}
+                      step={15}
+                      defaultValue={120}
+                      aria-label="Minutes"
+                      className={field}
+                    />
+                    <input
+                      type="number"
+                      name="cost"
+                      min={0}
+                      step="0.01"
+                      defaultValue={0}
+                      aria-label={`Cost in ${trip.currency}`}
+                      className={field}
+                    />
+                  </div>
+
+                  <input
+                    type="url"
+                    name="sourceUrl"
+                    placeholder="Link you found it on (optional)"
+                    aria-label="Link you found it on"
+                    className={field}
+                  />
+
+                  <label className="flex items-center gap-2 font-sans text-xs text-muted">
+                    <input type="checkbox" name="weatherSensitive" />
+                    Weather can cancel this
+                  </label>
+
+                  <button
+                    type="submit"
+                    className="flex items-center justify-center gap-1.5 border border-line px-3 py-2 font-sans text-xs uppercase tracking-wider font-bold text-muted hover:text-fg hover:border-fg transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add to my trip
+                  </button>
+                </form>
+              </details>
+
               <h2 className="font-display text-display-sm font-semibold uppercase text-fg">
                 Catalogue
               </h2>

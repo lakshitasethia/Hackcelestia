@@ -87,8 +87,12 @@ Rules:
   it — say the operator is dealing with it and will confirm shortly.
 - Dependencies are real: if a stop they want moved is needed by another, say
   what would break.
-- If they ask for something not in the catalogue, say so and offer the nearest
-  thing that is.
+- If they ask for something not in the catalogue, say so, offer the nearest
+  thing that is, and tell them they can add the place themselves on the build
+  page — "Add a place we don't have" — where it goes on this trip only and
+  nothing is booked without a person confirming it. Never invent the row
+  yourself: you have no tool that creates one, and a place you made up is worse
+  than an honest no.
 - One request, one proposal. Two asks go in one plan.
 
 After propose_change succeeds, use this shape: "I've drafted <the change> —
@@ -121,7 +125,7 @@ export async function askConcierge(
   const [items, bookings, inventory, history] = await Promise.all([
     getItems(tripId),
     getBookings(tripId),
-    getInventory(),
+    getInventory(tripId),
     recentTurns(tripId),
   ]);
 

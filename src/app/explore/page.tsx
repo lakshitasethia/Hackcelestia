@@ -89,8 +89,8 @@ export default async function ExplorePage({
           What is out there.
         </h1>
         <p className="mt-6 text-body-lg text-muted max-w-2xl">
-          Everything bookable, by town. Nothing here commits you to anything —
-          when you have a shape in mind, plan the trip and these are the stops
+          Everything bookable, by town. Nothing here commits you to anything.
+          When you have a shape in mind, plan the trip and these are the stops
           it is built from.
         </p>
 
@@ -224,7 +224,7 @@ export default async function ExplorePage({
                               read off a web page, not a seat somebody holds. */}
                           {item.provisional && (
                             <p className="font-sans text-xs text-accent mt-2">
-                              Found on the web — price is an estimate until an
+                              Found on the web: price is an estimate until an
                               operator confirms it.
                             </p>
                           )}
@@ -239,7 +239,7 @@ export default async function ExplorePage({
         <div className="mt-20 pt-8 border-t border-line flex flex-wrap items-center justify-between gap-6">
           <p className="font-sans text-sm text-muted max-w-xl">
             Seen enough? Describe the trip and the planner will build an
-            itinerary out of these — or anywhere else in the world.
+            itinerary out of these, or anywhere else in the world.
           </p>
           <Link href="/plan" className="btn-solid px-6 py-3 text-xs tracking-wider group">
             <span>Plan a trip</span>

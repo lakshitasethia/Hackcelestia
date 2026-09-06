@@ -46,7 +46,7 @@ export default function Footer() {
           <div className="md:col-span-5 flex flex-col justify-between">
             <div>
               {/* Stacked Wordmark */}
-              <a href={isHome ? "#top" : "/"} aria-label={isHome ? "VOYAGE — back to top" : "VOYAGE — home"} className="flex items-center gap-3 group mb-4">
+              <a href={isHome ? "#top" : "/"} aria-label={isHome ? "VOYAGE: back to top" : "VOYAGE: home"} className="flex items-center gap-3 group mb-4">
                 <div className="w-10 h-10 border border-line bg-fg text-bg flex items-center justify-center font-display font-black text-xl">
                   V
                 </div>
@@ -92,8 +92,8 @@ export default function Footer() {
                 ) : (
                   <span
                     key={label}
-                    aria-label={`${label} — coming soon`}
-                    title={`${label} — coming soon`}
+                    aria-label={`${label} (coming soon)`}
+                    title={`${label} (coming soon)`}
                     className={`${shared} cursor-default`}
                   >
                     <Icon className="w-[18px] h-[18px]" />

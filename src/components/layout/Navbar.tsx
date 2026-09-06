@@ -94,7 +94,7 @@ export default function Navbar({ viewer = null }: { viewer?: NavViewer }) {
           {/* Logo / Wordmark */}
           <a
             href={homeHref}
-            aria-label={isHome ? "VOYAGE — back to top" : "VOYAGE — home"}
+            aria-label={isHome ? "VOYAGE: back to top" : "VOYAGE: home"}
             className="flex items-center gap-3 group focus:outline-none"
           >
             <div

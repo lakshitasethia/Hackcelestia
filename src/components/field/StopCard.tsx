@@ -10,7 +10,8 @@ import {
   UserRound,
   UtensilsCrossed,
 } from "lucide-react";
-import type { ItemType, ItineraryItem } from "@/lib/db/types";
+import type { ItemType } from "@/lib/db/types";
+import type { RunSheetItem } from "@/lib/db/queries";
 import { formatDuration, formatTime } from "@/lib/format";
 import { flagStopAction, reportStopAction } from "@/app/field/[id]/actions";
 
@@ -36,7 +37,7 @@ export default function StopCard({
   item,
   dependsOn,
 }: {
-  item: ItineraryItem;
+  item: RunSheetItem;
   dependsOn: string[];
 }) {
   const Icon = ICONS[item.type] ?? Compass;
@@ -92,6 +93,16 @@ export default function StopCard({
                 : "Flagged at risk — the office is working on it."}
             </p>
           )}
+          {/* The traveler found this one; nobody has checked it exists.
+              Worth saying out loud on the one screen where somebody is about to
+              drive a group to it. */}
+          {item.inventory?.added_for_trip && (
+            <p className="mt-2 inline-flex items-center gap-1.5 border border-line px-2 py-1 font-sans text-[0.65rem] uppercase tracking-wider text-muted">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              Added by the traveler — not verified or booked by the office
+            </p>
+          )}
+
           {item.notes && (
             <p className="mt-2 font-sans text-xs text-muted border-l-2 border-line pl-3">
               {item.notes}

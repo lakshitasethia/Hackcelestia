@@ -151,6 +151,177 @@ export async function addItem(input: {
 }
 
 /**
+ * Add a place the catalogue has never heard of.
+ *
+ * `addItem` needs an `inventoryId`, and the concierge's validator rejects an id
+ * it cannot find. That rule is why a model cannot invent a "Schweizer
+ * Schokolade Factory Tour" and put it on a holiday, and it is not relaxed here.
+ * What it also blocked, though, was a *person* adding a real place they knew
+ * about — a reindeer farm outside Rovaniemi that no catalogue in this database
+ * has ever listed. A model inventing a place is a hallucination; a traveler
+ * naming one is research, and the two deserve different answers.
+ *
+ * So this mints a real row from facts a human supplied and then does nothing
+ * clever: it calls the same `addItem` as the manual builder, so the stop chains
+ * into the DAG, the blast radius walks it, the compare screen prices it and the
+ * PDF prints it with no special cases anywhere downstream.
+ *
+ * Three properties are deliberate:
+ *
+ * - **`added_for_trip` is set**, so the row is never *offered* on another trip.
+ *   One traveler's guess must not become the substitute a re-planner suggests
+ *   to somebody else at 2am.
+ * - **The vendor is `manual`**, so `confirmTrip` holds the stop rather than
+ *   reserving it. Nothing a traveler typed in gets auto-booked; a human has to
+ *   ring somebody. This is the same treatment researched rows get.
+ * - **`provisional` is true**, so every surface that already distinguishes a
+ *   checked row from an unchecked one keeps doing so without being taught a
+ *   third category.
+ */
+export async function addCustomStop(input: {
+  tripId: string;
+  day: number;
+  localTime: string; // "HH:MM" in the trip's timezone
+  timeZone: string;
+  title: string;
+  type: ItineraryItem["type"];
+  /** The town it is in. Without it the transit guard cannot place the stop. */
+  city: string | null;
+  durationMin: number;
+  cost: number;
+  /** So a storm knows to rule it out, the way it rules out the boat. */
+  weatherSensitive: boolean;
+  /** Where the traveler read about it, when they have a link. */
+  sourceUrl?: string | null;
+}): Promise<ItineraryItem> {
+  const supabase = serviceRoleClient();
+
+  const { data: trip } = await supabase
+    .from("trips")
+    .select("operator_id")
+    .eq("id", input.tripId)
+    .single();
+
+  if (!trip) throw new Error("addCustomStop: no such trip");
+
+  /**
+   * Whose books it lands on.
+   *
+   * A trip a traveler composed for themselves may not have an operator yet —
+   * one is assigned when the proposal is accepted. A vendor row needs one
+   * regardless, so fall back to the oldest operator, which is the same answer
+   * `houseAssignment` gives and the same one the deployment was seeded around.
+   */
+  let operatorId = (trip as { operator_id: string | null }).operator_id;
+  if (!operatorId) {
+    const { data: fallback } = await supabase
+      .from("operators")
+      .select("id")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    operatorId = (fallback as { id: string } | null)?.id ?? null;
+  }
+  if (!operatorId) throw new Error("addCustomStop: no operator to attach to");
+
+  /**
+   * One vendor per operator, reused. It exists to carry `channel = 'manual'`
+   * through to `confirmTrip` and to give the operator's board an honest label
+   * for the row — not to pretend a business has been contacted.
+   */
+  const VENDOR_NAME = "Added by traveler";
+  const { data: existingVendor } = await supabase
+    .from("vendors")
+    .select("id")
+    .eq("operator_id", operatorId)
+    .eq("name", VENDOR_NAME)
+    .maybeSingle();
+
+  let vendorId = (existingVendor as { id: string } | null)?.id ?? null;
+  if (!vendorId) {
+    const { data: created, error: vendorError } = await supabase
+      .from("vendors")
+      .insert({
+        operator_id: operatorId,
+        name: VENDOR_NAME,
+        type: input.type === "transport" ? "transport" : "activity",
+        channel: "manual",
+        // Nobody has judged this supplier, because there may not be one yet.
+        reliability: 0.5,
+      })
+      .select("id")
+      .single();
+
+    if (vendorError) throw new Error(`addCustomStop: ${vendorError.message}`);
+    vendorId = (created as { id: string }).id;
+  }
+
+  const { data: inventory, error: inventoryError } = await supabase
+    .from("inventory")
+    .insert({
+      vendor_id: vendorId,
+      title: input.title,
+      type: input.type,
+      duration_min: input.durationMin,
+      base_cost: input.cost,
+      city: input.city,
+      weather_sensitive: input.weatherSensitive,
+      provisional: true,
+      added_for_trip: input.tripId,
+      source_url: input.sourceUrl ?? null,
+      time_zone: input.timeZone,
+    })
+    .select("id")
+    .single();
+
+  if (inventoryError) throw new Error(`addCustomStop: ${inventoryError.message}`);
+  const inventoryId = (inventory as { id: string }).id;
+
+  /**
+   * A slot, so the stop behaves like every other one.
+   *
+   * Without an `availability` row the compare screen and the re-planner's
+   * candidate search — both of which read `availability` and join inventory —
+   * would simply never see it, and a stop that cannot be compared or replaced
+   * is a hole in the graph rather than a member of it. Computed with the same
+   * `zonedTime` call `addItem` makes, from the same inputs, so the two agree.
+   */
+  const startsAt = zonedTime(
+    (
+      await supabase
+        .from("trips")
+        .select("starts_on")
+        .eq("id", input.tripId)
+        .single()
+    ).data!.starts_on as string,
+    input.day,
+    input.localTime,
+    input.timeZone
+  );
+
+  const { error: availabilityError } = await supabase.from("availability").insert({
+    inventory_id: inventoryId,
+    date: startsAt.toISOString().slice(0, 10),
+    starts_at: startsAt.toISOString(),
+    slots_total: 1,
+    slots_taken: 0,
+    price: input.cost,
+  });
+
+  if (availabilityError) {
+    throw new Error(`addCustomStop: ${availabilityError.message}`);
+  }
+
+  return addItem({
+    tripId: input.tripId,
+    day: input.day,
+    inventoryId,
+    localTime: input.localTime,
+    timeZone: input.timeZone,
+  });
+}
+
+/**
  * Write a whole composed itinerary in one round trip.
  *
  * `addItem` is the right shape for adding one stop to a trip somebody is

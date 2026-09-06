@@ -176,7 +176,7 @@ export default function DestinationCarousel() {
               </div>
 
               {/* Card Details */}
-              <div className="p-5 flex flex-col justify-between h-[210px] bg-surface">
+              <div className="p-5 flex flex-col justify-between min-h-[240px] bg-surface">
                 <div>
                   <div className="flex items-center gap-1.5 text-accent font-sans text-xs font-bold uppercase tracking-wider mb-1">
                     <MapPin className="w-3.5 h-3.5" />

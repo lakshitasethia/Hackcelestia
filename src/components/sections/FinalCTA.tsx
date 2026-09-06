@@ -1,7 +1,7 @@
 "use client";
 
 import Photo from "@/components/ui/Photo";
-import { ArrowRight, Sparkles, Check } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 
 export default function FinalCTA() {
   return (
@@ -40,11 +40,6 @@ export default function FinalCTA() {
       </div>
 
       <div data-reveal className="max-w-5xl mx-auto px-5 sm:px-8 lg:px-12 text-center relative z-10">
-        <div className="inline-flex items-center gap-2 px-3 py-1 bg-fg text-bg border border-line mb-6 font-sans text-xs font-bold uppercase tracking-widest">
-          <Sparkles className="w-3.5 h-3.5 text-accent" />
-          The New Standard in Tour Planning
-        </div>
-
         <h2 className="font-display text-display-lg font-semibold uppercase text-balance">
           Stop settling for someone else’s itinerary.
         </h2>

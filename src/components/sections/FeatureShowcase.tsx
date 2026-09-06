@@ -26,7 +26,7 @@ export default function FeatureShowcase() {
             </h2>
             <p className="mt-6 text-body-lg text-muted max-w-2xl">
               Four architectural decisions separate a Voyage itinerary from a fixed
-              agency package — modular components, visible trade-offs, supplier-rate
+              agency package: modular components, visible trade-offs, supplier-rate
               pricing, and a plan that repairs itself.
             </p>
           </div>
@@ -64,7 +64,7 @@ export default function FeatureShowcase() {
                   <span className="font-display uppercase text-label tracking-label text-fg">
                     {item.name}
                     {item.flagship && (
-                      <span className="ml-3 text-accent normal-case">— flagship</span>
+                      <span className="ml-3 text-accent normal-case">(flagship)</span>
                     )}
                   </span>
                   <p className="mt-2 text-sm text-muted leading-relaxed">{item.note}</p>

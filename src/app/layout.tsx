@@ -33,9 +33,9 @@ export const viewport = {
 };
 
 const SITE_NAME = "VOYAGE";
-const TITLE = "VOYAGE — Personalized Dynamic Tour Planning Platform";
+const TITLE = "VOYAGE · Personalized Dynamic Tour Planning Platform";
 const DESCRIPTION =
-  "Build your custom itinerary from real hotels, transport and guides — priced live at supplier rates, and re-routed automatically when weather or delays hit mid-trip.";
+  "Build your custom itinerary from real hotels, transport and guides, priced live at supplier rates and re-routed automatically when weather or delays hit mid-trip.";
 
 /**
  * `metadataBase` resolves the relative icon/OG paths to absolute URLs, which
@@ -49,7 +49,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
     default: TITLE,
-    template: `%s — ${SITE_NAME}`,
+    template: `%s · ${SITE_NAME}`,
   },
   description: DESCRIPTION,
   applicationName: SITE_NAME,

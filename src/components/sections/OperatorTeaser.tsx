@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Layers, Radio, Network, Sparkles, Building, Users } from "lucide-react";
+import { ArrowRight, Layers, Radio, Network, Building, Users } from "lucide-react";
 
 export default function OperatorTeaser() {
   const operatorFeatures = [
@@ -28,8 +28,6 @@ export default function OperatorTeaser() {
     <section id="for-operators" data-scroll-theme="dark" className="py-20 sm:py-28 border-b border-line relative overflow-hidden">
       {/* Background Starfield (Celestial Bookend) */}
       <div className="absolute inset-0 pointer-events-none opacity-40">
-        <Sparkles className="absolute top-[15%] right-[15%] w-5 h-5 text-accent animate-pulse" />
-        <Sparkles className="absolute bottom-[20%] left-[10%] w-4 h-4 text-accent animate-pulse" />
         <div className="absolute top-1/2 right-1/3 w-2 h-2 rounded-full bg-fg animate-twinkle" />
         <div className="absolute top-1/4 left-1/5 w-1.5 h-1.5 rounded-full bg-fg animate-twinkle" />
       </div>

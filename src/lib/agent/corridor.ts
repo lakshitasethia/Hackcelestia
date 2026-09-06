@@ -134,6 +134,7 @@ export async function loadLegGraph(cities: string[]): Promise<LegGraph> {
     .from("inventory")
     .select("id, city, to_city, opens_at, overnight")
     .eq("type", "transport")
+    .is("added_for_trip", null)
     .not("to_city", "is", null)
     .in("city", cities)
     .in("to_city", cities);
@@ -180,6 +181,9 @@ export async function servedCities(): Promise<string[]> {
     .from("inventory")
     .select("city")
     .not("city", "is", null)
+    // One person adding a stop in Rovaniemi does not make Rovaniemi a town
+    // this catalogue can plan a trip through.
+    .is("added_for_trip", null)
     .neq("type", "transport");
 
   const cities = new Set<string>();

@@ -274,7 +274,10 @@ export async function planItinerary(
   const query = supabase
     .from("inventory")
     .select("id, title, type, description, duration_min, base_cost, opens_at, tags, city, time_zone, tier")
-    .not("city", "is", null);
+    .not("city", "is", null)
+    // Shared catalogue only. A stop one traveler added to their own itinerary
+    // is not inventory this composer may plan somebody else's holiday around.
+    .is("added_for_trip", null);
 
   const { data, error } = await (hint.length ? query.in("city", hint) : query);
   if (error) throw new Error(`planItinerary: ${error.message}`);
