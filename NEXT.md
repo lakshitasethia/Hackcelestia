@@ -297,6 +297,7 @@ about:
     npm run test:rls
     npm run test:custom-stop # a traveler adds a place the catalogue lacks, and it stays theirs
     npm run test:vendor-reply # a supplier's reply becomes structure, then a decision
+    npm run test:demo-date   # a pinned DEMO_DATE moves the seed and the app as one
     npm run test:screens     # every screen renders, for the right person (needs dev)
     npm run test:failover    # the agents survive Groq running out of budget
     npm run research:warm -- "<prompt>"   # offline price verification, minutes

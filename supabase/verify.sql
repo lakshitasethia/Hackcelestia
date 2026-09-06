@@ -58,7 +58,7 @@ with checks as (
   select 'weather-proof substitutes exist for the rafting day',
          (select count(*) from availability a
             join inventory i on i.id = a.inventory_id
-           where a.date = current_date + 1
+           where a.date = demo_base_date() + 1
              and a.slots_total > a.slots_taken
              and not i.weather_sensitive
              and i.type in ('activity', 'guide')) >= 2
@@ -80,7 +80,7 @@ with checks as (
          )
 
   union all
-  -- Guards the naive-timestamp trap: a bare `current_date + time` is cast using
+  -- Guards the naive-timestamp trap: a bare `demo_base_date() + time` is cast using
   -- the server's zone (UTC), which silently moved the 09:00 departure to 11:00.
   select 'the rafting puts in at 09:30 Rishikesh local, not UTC',
          (select to_char(starts_at at time zone 'Asia/Kolkata', 'HH24:MI')
@@ -89,7 +89,7 @@ with checks as (
 
   union all
   select 'seeded trip is live today',
-         (select starts_on <= current_date and ends_on >= current_date
+         (select starts_on <= demo_base_date() and ends_on >= demo_base_date()
             from trips where id = '7a000000-0000-4000-a000-000000000001')
 
   union all
@@ -129,8 +129,8 @@ with checks as (
   select 'the rafting day falls inside the two-day run sheet',
          (select count(*) from itinerary_items
            where id = '17000000-0000-4000-a000-000000000041'
-             and starts_at >= (current_date at time zone 'Asia/Kolkata')
-             and starts_at <  ((current_date + 2) at time zone 'Asia/Kolkata')) = 1
+             and starts_at >= (demo_base_date() at time zone 'Asia/Kolkata')
+             and starts_at <  ((demo_base_date() + 2) at time zone 'Asia/Kolkata')) = 1
 
   union all
   -- A proposal with neither owner is unreachable from every surface and

@@ -382,7 +382,7 @@ update inventory set tier = 'budget'
 -- leave a catalogue with no bookable slots at all, and `search_availability`
 -- returning an empty set makes the composer and the agent both look broken.
 --
--- Dated from current_date for the same reason the Amalfi seed is: a demo that
+-- Dated from demo_base_date() for the same reason the Amalfi seed is: a demo that
 -- only works in the month it was written is a demo that fails on stage.
 insert into availability (inventory_id, date, starts_at, slots_total, slots_taken, price)
 select i.id,
@@ -392,7 +392,7 @@ select i.id,
        0,
        i.base_cost
 from inventory i
-cross join generate_series(current_date - 1, current_date + 45, interval '1 day') d
+cross join generate_series(demo_base_date() - 1, demo_base_date() + 45, interval '1 day') d
 where i.id::text like '29000000%';
 
 -- ------------------------------------------------- legs the composer can use --
@@ -434,7 +434,7 @@ update inventory set overnight = true
 -- and 5-7 hours of narrowing mountain road; Chopta to Auli is another 135-148km
 -- and 5-6 hours. Nothing here claims a journey that cannot be made.
 --
--- Dates run from current_date - 3 so the trip is genuinely *in progress*: three
+-- Dates run from demo_base_date() - 3 so the trip is genuinely *in progress*: three
 -- days behind it, today in Rishikesh, and the demo tomorrow. That also puts
 -- real stops inside the guide's 48-hour run sheet without anything being
 -- special-cased.
@@ -449,7 +449,7 @@ values
    -- The guide on the ground. Plain text rather than a join, because profiles
    -- hang off auth.users and the seed runs before anybody has signed in.
    'Marco Ferrara', '+91 98110 00006',
-   'in_progress', 2, 35000.00, 'INR', current_date - 3, current_date + 4,
+   'in_progress', 2, 35000.00, 'INR', demo_base_date() - 3, demo_base_date() + 4,
    '{"interests":["adventure","scenic","culture"],"pace":"moderate","dietary":["vegetarian"],
      "mobility":"comfortable walking, no technical climbing","style":"midrange"}'::jsonb);
 
@@ -477,20 +477,20 @@ values
   ('17000000-0000-4000-a000-000000000001', '7a000000-0000-4000-a000-000000000001', 1, 1,
    '29000000-0000-4000-a000-000000000101', '2e000000-0000-4000-a000-000000000003',
    'Check in — Bloomrooms, New Delhi station', 'hotel',
-   (((current_date - 3) + time '12:00') at time zone 'Asia/Kolkata'), (((current_date - 3) + time '13:00') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() - 3) + time '12:00') at time zone 'Asia/Kolkata'), (((demo_base_date() - 3) + time '13:00') at time zone 'Asia/Kolkata'),
    28.6420, 77.2190, 3200.00, 'confirmed', '{}', null),
 
   ('17000000-0000-4000-a000-000000000002', '7a000000-0000-4000-a000-000000000001', 1, 2,
    '29000000-0000-4000-a000-000000000002', '2e000000-0000-4000-a000-000000000008',
    'Old Delhi food walk, Chandni Chowk', 'activity',
-   (((current_date - 3) + time '15:00') at time zone 'Asia/Kolkata'), (((current_date - 3) + time '18:00') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() - 3) + time '15:00') at time zone 'Asia/Kolkata'), (((demo_base_date() - 3) + time '18:00') at time zone 'Asia/Kolkata'),
    28.6560, 77.2300, 900.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000001}', null),
 
   ('17000000-0000-4000-a000-000000000003', '7a000000-0000-4000-a000-000000000001', 1, 3,
    '29000000-0000-4000-a000-000000000201', '2e000000-0000-4000-a000-000000000002',
    'Overnight coach: Delhi → Manali', 'transport',
-   (((current_date - 3) + time '20:00') at time zone 'Asia/Kolkata'), (((current_date - 2) + time '10:00') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() - 3) + time '20:00') at time zone 'Asia/Kolkata'), (((demo_base_date() - 2) + time '10:00') at time zone 'Asia/Kolkata'),
    28.6670, 77.2280, 1800.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000002}', null),
 
@@ -498,21 +498,21 @@ values
   ('17000000-0000-4000-a000-000000000010', '7a000000-0000-4000-a000-000000000001', 2, 1,
    '29000000-0000-4000-a000-000000000131', '2e000000-0000-4000-a000-000000000003',
    'Check in — Apple orchard guesthouse, Manali', 'hotel',
-   (((current_date - 2) + time '11:00') at time zone 'Asia/Kolkata'), (((current_date - 2) + time '12:00') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() - 2) + time '11:00') at time zone 'Asia/Kolkata'), (((demo_base_date() - 2) + time '12:00') at time zone 'Asia/Kolkata'),
    32.2430, 77.1890, 3400.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000003}', null),
 
   ('17000000-0000-4000-a000-000000000011', '7a000000-0000-4000-a000-000000000001', 2, 2,
    '29000000-0000-4000-a000-000000000032', '2e000000-0000-4000-a000-000000000008',
    'Hadimba temple & Old Manali walk', 'guide',
-   (((current_date - 2) + time '15:00') at time zone 'Asia/Kolkata'), (((current_date - 2) + time '17:30') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() - 2) + time '15:00') at time zone 'Asia/Kolkata'), (((demo_base_date() - 2) + time '17:30') at time zone 'Asia/Kolkata'),
    32.2490, 77.1830, 300.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000010}', null),
 
   ('17000000-0000-4000-a000-000000000012', '7a000000-0000-4000-a000-000000000001', 2, 3,
    '29000000-0000-4000-a000-000000000033', '2e000000-0000-4000-a000-000000000008',
    'Himachali dham thali', 'restaurant',
-   (((current_date - 2) + time '19:30') at time zone 'Asia/Kolkata'), (((current_date - 2) + time '21:00') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() - 2) + time '19:30') at time zone 'Asia/Kolkata'), (((demo_base_date() - 2) + time '21:00') at time zone 'Asia/Kolkata'),
    32.2400, 77.1880, 400.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000011}', null),
 
@@ -520,14 +520,14 @@ values
   ('17000000-0000-4000-a000-000000000020', '7a000000-0000-4000-a000-000000000001', 3, 1,
    '29000000-0000-4000-a000-000000000031', '2e000000-0000-4000-a000-000000000007',
    'Horse riding, Solang Valley', 'activity',
-   (((current_date - 1) + time '09:00') at time zone 'Asia/Kolkata'), (((current_date - 1) + time '10:30') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() - 1) + time '09:00') at time zone 'Asia/Kolkata'), (((demo_base_date() - 1) + time '10:30') at time zone 'Asia/Kolkata'),
    32.3170, 77.1560, 700.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000010}', null),
 
   ('17000000-0000-4000-a000-000000000021', '7a000000-0000-4000-a000-000000000001', 3, 2,
    '29000000-0000-4000-a000-000000000013', '2e000000-0000-4000-a000-000000000002',
    'Coach: Manali → Haridwar', 'transport',
-   (((current_date - 1) + time '16:00') at time zone 'Asia/Kolkata'), ((current_date + time '07:00') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() - 1) + time '16:00') at time zone 'Asia/Kolkata'), ((demo_base_date() + time '07:00') at time zone 'Asia/Kolkata'),
    32.2400, 77.1880, 1400.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000020}', null),
 
@@ -535,14 +535,14 @@ values
   ('17000000-0000-4000-a000-000000000030', '7a000000-0000-4000-a000-000000000001', 4, 1,
    '29000000-0000-4000-a000-000000000014', '2e000000-0000-4000-a000-000000000002',
    'Shared cab: Haridwar → Rishikesh', 'transport',
-   ((current_date + time '08:00') at time zone 'Asia/Kolkata'), ((current_date + time '08:45') at time zone 'Asia/Kolkata'),
+   ((demo_base_date() + time '08:00') at time zone 'Asia/Kolkata'), ((demo_base_date() + time '08:45') at time zone 'Asia/Kolkata'),
    29.9457, 78.1642, 250.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000021}', null),
 
   ('17000000-0000-4000-a000-000000000031', '7a000000-0000-4000-a000-000000000001', 4, 2,
    '29000000-0000-4000-a000-000000000141', '2e000000-0000-4000-a000-000000000003',
    'Check in — Ganga Kinare, Rishikesh', 'hotel',
-   ((current_date + time '12:00') at time zone 'Asia/Kolkata'), ((current_date + time '13:00') at time zone 'Asia/Kolkata'),
+   ((demo_base_date() + time '12:00') at time zone 'Asia/Kolkata'), ((demo_base_date() + time '13:00') at time zone 'Asia/Kolkata'),
    30.1080, 78.2940, 4200.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000030}',
    'Non-refundable rate — 3 nights prepaid'),
@@ -550,7 +550,7 @@ values
   ('17000000-0000-4000-a000-000000000032', '7a000000-0000-4000-a000-000000000001', 4, 3,
    '29000000-0000-4000-a000-000000000043', '2e000000-0000-4000-a000-000000000008',
    'Chotiwala thali & German Bakery', 'restaurant',
-   ((current_date + time '20:00') at time zone 'Asia/Kolkata'), ((current_date + time '21:30') at time zone 'Asia/Kolkata'),
+   ((demo_base_date() + time '20:00') at time zone 'Asia/Kolkata'), ((demo_base_date() + time '21:30') at time zone 'Asia/Kolkata'),
    30.1230, 78.3200, 350.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000031}', null),
 
@@ -558,35 +558,35 @@ values
   ('17000000-0000-4000-a000-000000000040', '7a000000-0000-4000-a000-000000000001', 5, 1,
    '29000000-0000-4000-a000-000000000202', '2e000000-0000-4000-a000-000000000004',
    'Transfer — Tapovan to Shivpuri put-in', 'transport',
-   (((current_date + 1) + time '08:30') at time zone 'Asia/Kolkata'), (((current_date + 1) + time '09:15') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() + 1) + time '08:30') at time zone 'Asia/Kolkata'), (((demo_base_date() + 1) + time '09:15') at time zone 'Asia/Kolkata'),
    30.1080, 78.2940, 400.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000031}', null),
 
   ('17000000-0000-4000-a000-000000000041', '7a000000-0000-4000-a000-000000000001', 5, 2,
    '29000000-0000-4000-a000-000000000041', '2e000000-0000-4000-a000-000000000004',
    'White-water rafting, Shivpuri to Rishikesh', 'activity',
-   (((current_date + 1) + time '09:30') at time zone 'Asia/Kolkata'), (((current_date + 1) + time '13:30') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() + 1) + time '09:30') at time zone 'Asia/Kolkata'), (((demo_base_date() + 1) + time '13:30') at time zone 'Asia/Kolkata'),
    30.1350, 78.3800, 1200.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000040}', null),
 
   ('17000000-0000-4000-a000-000000000042', '7a000000-0000-4000-a000-000000000001', 5, 3,
    '29000000-0000-4000-a000-000000000043', '2e000000-0000-4000-a000-000000000008',
    'Riverside lunch — Chotiwala', 'restaurant',
-   (((current_date + 1) + time '14:00') at time zone 'Asia/Kolkata'), (((current_date + 1) + time '15:00') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() + 1) + time '14:00') at time zone 'Asia/Kolkata'), (((demo_base_date() + 1) + time '15:00') at time zone 'Asia/Kolkata'),
    30.1230, 78.3200, 350.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000041}', null),
 
   ('17000000-0000-4000-a000-000000000043', '7a000000-0000-4000-a000-000000000001', 5, 4,
    '29000000-0000-4000-a000-000000000203', '2e000000-0000-4000-a000-000000000008',
    'Yoga & meditation, Parmarth Niketan', 'activity',
-   (((current_date + 1) + time '16:30') at time zone 'Asia/Kolkata'), (((current_date + 1) + time '18:00') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() + 1) + time '16:30') at time zone 'Asia/Kolkata'), (((demo_base_date() + 1) + time '18:00') at time zone 'Asia/Kolkata'),
    30.1160, 78.3180, 500.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000042}', null),
 
   ('17000000-0000-4000-a000-000000000044', '7a000000-0000-4000-a000-000000000001', 5, 5,
    '29000000-0000-4000-a000-000000000042', '2e000000-0000-4000-a000-000000000008',
    'Ganga aarti at Triveni Ghat', 'guide',
-   (((current_date + 1) + time '18:30') at time zone 'Asia/Kolkata'), (((current_date + 1) + time '20:00') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() + 1) + time '18:30') at time zone 'Asia/Kolkata'), (((demo_base_date() + 1) + time '20:00') at time zone 'Asia/Kolkata'),
    30.1090, 78.2950, 0.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000043}', null),
 
@@ -594,14 +594,14 @@ values
   ('17000000-0000-4000-a000-000000000050', '7a000000-0000-4000-a000-000000000001', 6, 1,
    '29000000-0000-4000-a000-000000000015', '2e000000-0000-4000-a000-000000000005',
    'Shared cab: Rishikesh → Chopta', 'transport',
-   (((current_date + 2) + time '07:00') at time zone 'Asia/Kolkata'), (((current_date + 2) + time '13:00') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() + 2) + time '07:00') at time zone 'Asia/Kolkata'), (((demo_base_date() + 2) + time '13:00') at time zone 'Asia/Kolkata'),
    30.1080, 78.2940, 2200.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000031}', null),
 
   ('17000000-0000-4000-a000-000000000051', '7a000000-0000-4000-a000-000000000001', 6, 2,
    '29000000-0000-4000-a000-000000000052', '2e000000-0000-4000-a000-000000000005',
    'Deopraag maggi & garhwali dinner', 'restaurant',
-   (((current_date + 2) + time '19:30') at time zone 'Asia/Kolkata'), (((current_date + 2) + time '21:00') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() + 2) + time '19:30') at time zone 'Asia/Kolkata'), (((demo_base_date() + 2) + time '21:00') at time zone 'Asia/Kolkata'),
    30.4890, 79.2170, 350.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000050}', null),
 
@@ -609,7 +609,7 @@ values
   ('17000000-0000-4000-a000-000000000060', '7a000000-0000-4000-a000-000000000001', 7, 1,
    '29000000-0000-4000-a000-000000000051', '2e000000-0000-4000-a000-000000000006',
    'Chandrashila summit trek via Tungnath', 'guide',
-   (((current_date + 3) + time '05:00') at time zone 'Asia/Kolkata'), (((current_date + 3) + time '12:00') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() + 3) + time '05:00') at time zone 'Asia/Kolkata'), (((demo_base_date() + 3) + time '12:00') at time zone 'Asia/Kolkata'),
    30.4890, 79.2170, 1800.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000050}', null),
 
@@ -617,14 +617,14 @@ values
   ('17000000-0000-4000-a000-000000000070', '7a000000-0000-4000-a000-000000000001', 8, 1,
    '29000000-0000-4000-a000-000000000016', '2e000000-0000-4000-a000-000000000009',
    'Shared cab: Chopta → Auli', 'transport',
-   (((current_date + 4) + time '07:00') at time zone 'Asia/Kolkata'), (((current_date + 4) + time '12:30') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() + 4) + time '07:00') at time zone 'Asia/Kolkata'), (((demo_base_date() + 4) + time '12:30') at time zone 'Asia/Kolkata'),
    30.4890, 79.2170, 1900.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000060}', null),
 
   ('17000000-0000-4000-a000-000000000071', '7a000000-0000-4000-a000-000000000001', 8, 2,
    '29000000-0000-4000-a000-000000000061', '2e000000-0000-4000-a000-000000000009',
    'Auli ropeway & Gorson Bugyal walk', 'activity',
-   (((current_date + 4) + time '14:00') at time zone 'Asia/Kolkata'), (((current_date + 4) + time '18:00') at time zone 'Asia/Kolkata'),
+   (((demo_base_date() + 4) + time '14:00') at time zone 'Asia/Kolkata'), (((demo_base_date() + 4) + time '18:00') at time zone 'Asia/Kolkata'),
    30.5280, 79.5660, 1200.00, 'confirmed',
    '{17000000-0000-4000-a000-000000000070}', null);
 

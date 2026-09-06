@@ -22,7 +22,7 @@ import {
 import { getConciergeThread } from "@/lib/agent/thread";
 import { getViewer } from "@/lib/auth/session";
 import { tripStage } from "@/lib/trip/stage";
-import { formatDate, localDay } from "@/lib/format";
+import { formatDate, localDay, now } from "@/lib/format";
 
 /** Always hit the database — an itinerary that re-plans mid-trip must never be
  *  served from a build-time snapshot. */
@@ -78,7 +78,7 @@ export default async function TripPage({
     bookings,
     reviews,
     openDisruptions: disruptions.length,
-    today: localDay(new Date(), trip.time_zone),
+    today: localDay(now(), trip.time_zone),
   });
 
   const money = summarizePayments(items, bookings, payments);

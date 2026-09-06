@@ -67,6 +67,40 @@ function zoneOffsetMs(at: Date, tz: string): number {
 }
 
 /**
+ * Now — unless a demo has pinned the day.
+ *
+ * `DEMO_DATE=YYYY-MM-DD` moves the calendar day the application believes it is,
+ * keeping the wall-clock time. It exists so a demo recorded in two sittings a
+ * fortnight apart shows the same dates in both, which a viewer notices even
+ * when they could not say why.
+ *
+ * The partner half is `demo_base_date()` in Postgres, which anchors the seed to
+ * the same day. **Set one and you must set the other**, and `DEMO_DATE` does
+ * both: `scripts/sql.mjs` turns it into the session setting the SQL function
+ * reads. Pinning only the seed would claim a trip starting on a day the app
+ * still thought was past — an empty run sheet and a lifecycle rail insisting
+ * the trip had finished.
+ *
+ * Unset, this is `new Date()` and nothing anywhere behaves differently. It is
+ * also inert in the browser: Next only inlines `NEXT_PUBLIC_` variables into
+ * the client bundle, so a client component reading this gets the real clock.
+ * Every caller that matters — the run sheet window, the lifecycle stage, the
+ * operator's 72-hour board — renders on the server.
+ */
+export function now(): Date {
+  const pinned = process.env.DEMO_DATE?.trim();
+  if (!pinned || !/^\d{4}-\d{2}-\d{2}$/.test(pinned)) return new Date();
+
+  const [year, month, day] = pinned.split("-").map(Number);
+  const shifted = new Date();
+  // setFullYear takes all three at once on purpose: setting them one at a time
+  // can land on an invalid intermediate date (the 31st of a 30-day month) and
+  // silently roll over into the next one.
+  shifted.setFullYear(year, month - 1, day);
+  return shifted;
+}
+
+/**
  * Midnight in the trip's zone, `offsetDays` from today, as a real instant.
  *
  * The coordinator's run sheet asks "what is happening today", and today is
@@ -75,7 +109,7 @@ function zoneOffsetMs(at: Date, tz: string): number {
  * summer and silently drops the first two hours of the day.
  */
 export function startOfLocalDay(offsetDays = 0, tz = TRIP_TZ): Date {
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: tz });
+  const today = now().toLocaleDateString("en-CA", { timeZone: tz });
   const midnight = new Date(`${today}T00:00:00Z`);
   midnight.setUTCDate(midnight.getUTCDate() + offsetDays);
   return new Date(midnight.getTime() - zoneOffsetMs(midnight, tz));
@@ -89,7 +123,7 @@ export function startOfLocalDay(offsetDays = 0, tz = TRIP_TZ): Date {
  * finished at 23:00 UTC, and comparing `ends_on` against a UTC date says they
  * have. `en-CA` is the shortest route to an ISO-shaped date from `Intl`.
  */
-export function localDay(when: Date | string = new Date(), tz = TRIP_TZ): string {
+export function localDay(when: Date | string = now(), tz = TRIP_TZ): string {
   return new Date(when).toLocaleDateString("en-CA", { timeZone: tz });
 }
 

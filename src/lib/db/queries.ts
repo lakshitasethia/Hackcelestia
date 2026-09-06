@@ -1,5 +1,5 @@
 import { readClient } from "./client";
-import { relativeDayLabel, startOfLocalDay } from "@/lib/format";
+import { now, relativeDayLabel, startOfLocalDay } from "@/lib/format";
 import type {
   AffectedItem,
   AgentRun,
@@ -186,7 +186,7 @@ export async function getVendors(): Promise<Vendor[]> {
 export async function getSchedule(days = 3): Promise<ScheduleEntry[]> {
   const supabase = await readClient();
 
-  const from = new Date();
+  const from = now();
   from.setHours(0, 0, 0, 0);
   const to = new Date(from);
   to.setDate(to.getDate() + days);

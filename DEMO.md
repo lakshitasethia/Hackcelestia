@@ -22,6 +22,31 @@ npm run dev
 > fresh onto another laptop, set it again before you travel rather than while
 > a judge waits.
 
+### If you are recording in more than one sitting
+
+Set **`DEMO_DATE`** in `.env.local` to the day you want the demo anchored to,
+and re-seed:
+
+```bash
+DEMO_DATE=2026-09-06   # in .env.local
+npm run db:seed
+```
+
+Every date in the seed is normally computed from today, so the trip is always in
+progress whenever you run it. That is right for a live demo and wrong for a
+video shot in two sessions: one segment says "Mon 07 Sep" and the next says
+"Sat 26 Sep", and a viewer notices the seam even when they could not say what
+bothered them.
+
+`DEMO_DATE` moves both halves together — the seed anchors to that day, and the
+application's notion of "today" moves with it, so the run sheet still has
+tomorrow on it and the lifecycle rail still says the trip is under way. Pinning
+only the seed would give you an empty run sheet and a trip that claims to have
+finished. `npm run test:demo-date` proves both halves agree.
+
+**Unset it before deploying anything.** A production app that believes it is a
+fixed day in September is a bug with a very confusing signature.
+
 ### Sign the three windows in
 
 This is the step that did not exist before there was a login, and it is the one

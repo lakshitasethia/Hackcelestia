@@ -1,14 +1,14 @@
 -- Voyage — seed data (Phase 2, Day 1)
 --
 -- One operator, one Amalfi Coast group of two, five days. Dates are computed
--- from current_date so the trip is always "starting today" whenever this runs —
+-- from demo_base_date() so the trip is always "starting today" whenever this runs —
 -- a demo that only works on the day it was seeded is a demo that fails on stage.
 --
 -- Fixed UUIDs throughout so the demo is reproducible and the disruption
 -- injector can target a known item. Idempotent: safe to re-run.
 --
 -- Every time is written `... at time zone 'Europe/Rome'`. Without it, a bare
--- `current_date + time '09:00'` is a naive timestamp that Postgres casts using
+-- `demo_base_date() + time '09:00'` is a naive timestamp that Postgres casts using
 -- the *server's* zone (UTC on Supabase), so a 09:00 boat departure silently
 -- becomes 11:00 in Positano.
 
@@ -187,8 +187,8 @@ update inventory set tier = 'luxury'   where id = '19000000-0000-4000-a000-00000
 insert into availability (inventory_id, date, starts_at, slots_total, slots_taken, price)
 select
   inv.id,
-  (current_date + d)::date,
-  ((current_date + d) + inv.default_start) at time zone 'Europe/Rome',
+  (demo_base_date() + d)::date,
+  ((demo_base_date() + d) + inv.default_start) at time zone 'Europe/Rome',
   inv.slots,
   0,
   inv.price
