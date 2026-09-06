@@ -276,6 +276,31 @@
   .animate-twinkle {
     animation: twinkle 4s ease-in-out infinite;
   }
+
+  /* The loader cannot outlive this, whatever JavaScript does.
+     The overlay is opaque and covers the whole viewport, so the one failure it
+     must never have is "still here". The component already carries a 2.6s
+     setTimeout, but a timeout is JavaScript too: a stalled main thread, a
+     backgrounded tab or a cold compile delays passive effects and the failsafe
+     alongside the thing it was meant to save you from. A CSS animation is run
+     by the compositor and is not on that thread, so this fires even when
+     nothing else does. `forwards` holds the end state, and the delay sits past
+     the scripted exit so it never cuts a working animation short. */
+  @keyframes loader-failsafe {
+    to {
+      opacity: 0;
+      visibility: hidden;
+    }
+  }
+  .loader-failsafe {
+    animation: loader-failsafe 0.4s ease-out 3.2s forwards;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .loader-failsafe {
+      animation-duration: 0.01s;
+      animation-delay: 0.01s;
+    }
+  }
 }
 
 @layer utilities {

@@ -309,6 +309,12 @@ Database**:
 `GROQ_MODEL` and `GROQ_CHAT_MODEL` are optional overrides; see `.env.example`
 for why they are two settings and not one.
 
+`MISTRAL_API_KEY` and `GEMINI_API_KEY` are optional but worth setting before a
+demo. Groq's free tier is 200,000 tokens a day **per organization**, and when it
+is gone it stays gone for tens of minutes — so the runtime keeps a provider
+chain and fails over to whichever of these has a key rather than ending the run.
+`npm run test:failover` proves it works.
+
 **Google sign-in** needs two things set up outside this repo, and it is inert
 until both are done:
 

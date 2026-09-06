@@ -44,8 +44,10 @@ export default async function LoginPage({
       <header className="border-b border-line">
         <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 group">
+            {/* W, not V. This monogram was missed by the rename from Voyage and
+                sat next to the word WAYPOINT on the first screen anyone sees. */}
             <div className="w-8 h-8 border border-line bg-fg text-bg flex items-center justify-center font-display font-black">
-              V
+              W
             </div>
             <span className="font-display font-extrabold text-lg tracking-tight text-fg">
               WAYPOINT

@@ -225,15 +225,75 @@ export async function getAllOpenDisruptions(): Promise<
 }
 
 /** Headline numbers for the operator dashboard. */
-export function operatorTotals(trips: Trip[], schedule: ScheduleEntry[]) {
+export function operatorTotals(
+  trips: Trip[],
+  schedule: ScheduleEntry[],
+  /**
+   * What each trip's itinerary actually comes to, from `getTripCosts`.
+   *
+   * Optional so the copilot — which answers questions rather than rendering a
+   * money column — can skip the extra query. When it is absent the value falls
+   * back to the budget, and the caller should not label the result "booked".
+   */
+  costs?: Map<string, number>
+) {
   const live = trips.filter(
     (t) => t.status === "in_progress" || t.status === "confirmed"
   );
   const travellers = live.reduce((sum, t) => sum + t.party_size, 0);
-  const booked = trips.reduce((sum, t) => sum + Number(t.budget ?? 0), 0);
+
+  /**
+   * The value of what is on the itineraries, not the sum of what the travelers
+   * said they were willing to spend.
+   *
+   * This read `trips.budget`, with a comment claiming the two were "the same to
+   * within rounding". They are not: the seeded trip has a EUR 4,500 budget
+   * against a EUR 2,770 itinerary, so the board reported 62% more than the
+   * group had booked — and the traveler's own page, which has always summed the
+   * items, sat next to it in the demo saying something different about the same
+   * trip. A budget is a ceiling the traveler chose; booked value is a fact
+   * about the itinerary, and an operations board has to report the fact.
+   */
+  const booked = trips.reduce(
+    (sum, t) => sum + (costs?.get(t.id) ?? Number(t.budget ?? 0)),
+    0
+  );
   const atRisk = schedule.filter((s) => s.status === "at_risk").length;
 
   return { liveTrips: live.length, travellers, booked, atRisk };
+}
+
+/**
+ * What each trip's live itinerary costs, keyed by trip.
+ *
+ * One query for the whole board rather than one per trip, and it applies the
+ * same definition of "live" as `summarize` — a cancelled or replaced stop is
+ * not money anybody owes. The two must agree, because the traveler reads one
+ * and the operator reads the other about the same trip.
+ */
+export async function getTripCosts(
+  tripIds: string[]
+): Promise<Map<string, number>> {
+  const costs = new Map<string, number>();
+  if (tripIds.length === 0) return costs;
+
+  const supabase = await readClient();
+  const { data, error } = await supabase
+    .from("itinerary_items")
+    .select("trip_id, cost, status")
+    .in("trip_id", tripIds);
+
+  if (error) throw new Error(`getTripCosts: ${error.message}`);
+
+  for (const row of (data ?? []) as {
+    trip_id: string;
+    cost: number;
+    status: string;
+  }[]) {
+    if (row.status === "cancelled" || row.status === "replaced") continue;
+    costs.set(row.trip_id, (costs.get(row.trip_id) ?? 0) + Number(row.cost));
+  }
+  return costs;
 }
 
 /**
@@ -244,10 +304,13 @@ export function operatorTotals(trips: Trip[], schedule: ScheduleEntry[]) {
  * other question, "how much is outstanding across everything". One query
  * rather than one per trip, because the board renders it in a header.
  *
- * Deliberately reads `trips.budget` as the amount owed rather than summing
- * itinerary rows: the board holds the trip list already, and a second pass
- * over every stop of every trip to render one number is a real cost for an
- * answer that is the same to within rounding.
+ * What is owed is the sum of the itineraries, not the sum of the budgets. This
+ * used to read `trips.budget` on the reasoning that the two agreed to within
+ * rounding; they do not, and the gap is not small — the seeded trip owes
+ * EUR 2,770 against a EUR 4,500 budget, so the board told the operator to chase
+ * 62% more than the group had actually booked. `getTripCosts` is one extra
+ * query for the whole board and it makes this agree with the per-trip ledger
+ * the traveler sees on their own page.
  */
 export async function getOperatorMoney(
   trips: Trip[]
@@ -271,9 +334,11 @@ export async function getOperatorMoney(
     paid += row.kind === "refund" ? -Number(row.amount) : Number(row.amount);
   }
 
-  const owed = trips
-    .filter((t) => t.status !== "cancelled" && t.status !== "draft")
-    .reduce((sum, t) => sum + Number(t.budget ?? 0), 0);
+  const billable = trips.filter(
+    (t) => t.status !== "cancelled" && t.status !== "draft"
+  );
+  const costs = await getTripCosts(billable.map((t) => t.id));
+  const owed = billable.reduce((sum, t) => sum + (costs.get(t.id) ?? 0), 0);
 
   return {
     paid,

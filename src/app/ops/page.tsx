@@ -15,6 +15,7 @@ import {
   getOperatorMoney,
   getVendors,
   operatorTotals,
+  getTripCosts,
 } from "@/lib/db/queries";
 import { getCopilotThread } from "@/lib/agent/copilot";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -46,12 +47,19 @@ export default async function OpsPage() {
       getCopilotThread(),
     ]);
 
+  // Both need the trip list, so neither can join the batch above. Booked value
+  // and outstanding are computed from the same itinerary rows the traveler's
+  // own page sums, so the two surfaces cannot disagree about one trip.
+  const [costs, money] = await Promise.all([
+    getTripCosts(trips.map((t) => t.id)),
+    getOperatorMoney(trips),
+  ]);
+
   const { liveTrips, travellers, booked, atRisk } = operatorTotals(
     trips,
-    schedule
+    schedule,
+    costs
   );
-  // Needs the trip list, so it cannot join the batch above.
-  const money = await getOperatorMoney(trips);
 
   return (
     <main

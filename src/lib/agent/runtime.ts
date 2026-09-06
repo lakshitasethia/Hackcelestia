@@ -1,6 +1,13 @@
 import "server-only";
 import Groq from "groq-sdk";
 import { toGroqTool, type AgentTool } from "./tool";
+import {
+  activeProvider,
+  clientFor,
+  demoteProvider,
+  normalizeToolCallIds,
+  type Provider,
+} from "./providers";
 
 /**
  * The agent loop, and the plumbing around it every agent shares.
@@ -99,6 +106,25 @@ export function groqClient(): Groq {
   return new Groq({ apiKey: requireKey() });
 }
 
+/**
+ * The model to send, given who is answering and which surface asked.
+ *
+ * The prompts in this project are tuned against gpt-oss and name Groq models by
+ * string, so `MODEL` and `CHAT_MODEL` stay the answer while Groq is answering.
+ * After a failover those names mean nothing — `openai/gpt-oss-120b` is a 404 at
+ * Mistral — so the provider's own model is used instead, and the *role* is what
+ * carries across: whatever is standing in for `CHAT_MODEL` must still be the
+ * fast one, because somebody is watching a cursor blink.
+ */
+export function resolveModel(
+  provider: Provider,
+  explicit: string | undefined
+): string {
+  if (provider.id === "groq") return explicit ?? MODEL;
+  const isChat = explicit === CHAT_MODEL;
+  return isChat ? provider.chatModel : provider.model;
+}
+
 export type ChatMessage = Groq.Chat.ChatCompletionMessageParam;
 
 // ------------------------------------------------------------ rate limits --
@@ -153,7 +179,14 @@ export function parseDuration(value: string | undefined): number | null {
 
 export async function withRateLimitRetry<T>(
   call: (relaxed: boolean) => Promise<T>,
-  attempts = 4
+  attempts = 4,
+  /**
+   * The live transcript, when there is one. Handed in only so that a failover
+   * to a provider with stricter id rules can rewrite it in place before the
+   * next request goes out. Callers with no transcript — the single-shot
+   * research and intake calls — pass nothing.
+   */
+  carried?: unknown[]
 ): Promise<T> {
   // Once the pinned tool has been refused, stay relaxed for the rest of this
   // call. Flipping back would just reproduce the rejection.
@@ -169,6 +202,22 @@ export async function withRateLimitRetry<T>(
       // A malformed tool call is a one-off generation glitch; retrying costs a
       // little budget and usually succeeds.
       const isBadGeneration = status === 400 && body.includes("tool_use_failed");
+
+      /**
+       * Out of attempts on a rate limit is the other way a provider tells you
+       * it is done — Mistral's tier-locked models answer 429 to every request
+       * with no "per day" anywhere in the body, so waiting is pointless and
+       * only the chain gets you out. Try the next provider before giving up.
+       */
+      if (isRateLimit && attempt >= attempts - 1) {
+        const next = demoteProvider(`exhausted ${attempts} retries: ${body.slice(0, 120)}`);
+        if (next) {
+          if (next.id !== "groq") normalizeToolCallIds(carried ?? []);
+          attempt = -1; // the ++ makes this attempt 0 against the new provider
+          continue;
+        }
+      }
+
       if ((!isRateLimit && !isBadGeneration) || attempt >= attempts - 1) throw error;
 
       if (isBadGeneration) {
@@ -255,13 +304,33 @@ export async function withRateLimitRetry<T>(
        */
       if (/per day|TPD/i.test(body)) {
         const detail = body.match(/Limit (\d+), Used (\d+)[^.]*\. Please try again in ([^"]+?)\./);
+        const spent = detail
+          ? `Groq's daily token budget for this model is spent: ${detail[2]} of ` +
+              `${detail[1]} used, and it frees up in ${detail[3]}.`
+          : `Groq's daily token budget for this model is spent. ${body.slice(0, 300)}`;
+
+        /**
+         * A daily budget is not a queue, so waiting inside a request somebody
+         * is watching will never help. But it is also not the end of the run
+         * any more: another provider is configured, and moving to it costs one
+         * retry where giving up costs the demo.
+         *
+         * The transcript has to be laundered on the way across — Mistral wants
+         * nine-character tool_call ids and Groq's are longer, so a conversation
+         * that had already called a tool would be rejected as malformed on the
+         * first request after the switch.
+         */
+        const next = demoteProvider(spent);
+        if (next) {
+          if (next.id !== "groq") normalizeToolCallIds(carried ?? []);
+          continue;
+        }
+
         throw new Error(
-          detail
-            ? `Groq's daily token budget for this model is spent: ${detail[2]} of ` +
-                `${detail[1]} used, and it frees up in ${detail[3]}. This is a ` +
-                `budget, not a queue — waiting inside the request will not help. ` +
-                `Either pause, or raise the cap at console.groq.com/settings/billing.`
-            : `Groq's daily token budget for this model is spent. ${body.slice(0, 300)}`
+          `${spent} This is a budget, not a queue — waiting inside the request ` +
+            `will not help, and no fallback provider is configured. Set ` +
+            `MISTRAL_API_KEY in .env.local, or raise the cap at ` +
+            `console.groq.com/settings/billing.`
         );
       }
 
@@ -350,7 +419,6 @@ export async function runToolLoop(opts: {
    */
   onIdle?: (text: string) => Promise<string | null>;
 }): Promise<ToolLoopResult> {
-  const groq = groqClient();
   const byName = new Map(opts.tools.map((tool) => [tool.name, tool]));
   const wire = opts.tools.map(toGroqTool);
 
@@ -366,9 +434,15 @@ export async function runToolLoop(opts: {
 
     const pinned = opts.pin?.(iteration) ?? null;
 
-    const completion = await withRateLimitRetry((relaxed) =>
-      groq.chat.completions.create({
-        model: opts.model ?? MODEL,
+    const completion = await withRateLimitRetry((relaxed) => {
+      /**
+       * Resolved per attempt, not once per loop. A failover happens *inside*
+       * `withRateLimitRetry`, so a client captured before the loop would keep
+       * talking to the provider that had already said no.
+       */
+      const provider = activeProvider();
+      return clientFor(provider).chat.completions.create({
+        model: resolveModel(provider, opts.model),
         // A proposal with five operations serialises to well over 2k, and a
         // truncated tool call comes back as a 400 tool_use_failed with the
         // half-written JSON attached — the output cap has to clear the largest
@@ -377,7 +451,10 @@ export async function runToolLoop(opts: {
         temperature: opts.temperature ?? 0.4,
         messages: opts.messages,
         tools: wire,
-        ...(opts.reasoningEffort
+        // `reasoning_effort` is a gpt-oss concept; Mistral 400s on it, and a
+        // 400 on the first request after a failover looks exactly like the
+        // failover itself not working. Only send it to a provider that has it.
+        ...(opts.reasoningEffort && !provider.drop.includes("reasoning_effort")
           ? { reasoning_effort: opts.reasoningEffort }
           : {}),
         // `relaxed` lifts the pin. Groq validates tool_choice server-side and
@@ -389,8 +466,9 @@ export async function runToolLoop(opts: {
           !relaxed && pinned
             ? { type: "function", function: { name: pinned } }
             : "auto",
-      })
-    );
+      });
+      // The transcript goes in so a failover can rewrite its tool_call ids.
+    }, 4, opts.messages);
 
     inputTokens += completion.usage?.prompt_tokens ?? 0;
     outputTokens += completion.usage?.completion_tokens ?? 0;

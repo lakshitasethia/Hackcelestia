@@ -57,8 +57,36 @@ query measured 153,000 prompt tokens against a 200,000 daily allowance. Right
 answer on a paid tier, unusable on the free one.
 
 **Gemini was tried.** The key works and plain generation works, but Google Search
-grounding returns 429 on the free tier — it needs billing enabled. Without
-grounding there is no reason to switch.
+grounding returns 429 on the free tier — it needs billing enabled. So it does
+not close the verification gap. It is still in the chain below, because a
+provider that can only generate is worth a great deal at the moment the primary
+cannot do anything at all.
+
+**The day Groq runs dry no longer ends the run.** `agent/providers.ts` holds a
+chain — Groq → Mistral → Gemini — and `withRateLimitRetry` moves along it when
+Groq reports the *daily* budget spent, or when a rate limit outlives its
+retries. A per-minute breach is still waited out rather than failed over; only
+an exhausted day is worth leaving for a slower model. Three things about it are
+load-bearing:
+
+- **The chain is only providers with keys.** One without is not a fallback, it
+  is a second failure.
+- **Model names do not survive the handover; roles do.** `openai/gpt-oss-120b`
+  is a 404 at Mistral, so `resolveModel` swaps in the provider's own model and
+  keeps the *fast* one fast, because a chat surface has somebody watching a
+  cursor blink. `reasoning_effort` is a gpt-oss concept and Mistral 400s on it,
+  so it is dropped rather than forwarded.
+- **The transcript is laundered on the way across.** Mistral requires
+  `tool_call_id` to be exactly nine alphanumeric characters and Groq's are
+  longer, so a conversation that had already called a tool would be rejected as
+  malformed on the first request after the switch — surviving the budget and
+  dying on the handover is the same lost demo by another route.
+
+Measured on the keys in this checkout, 6 Sep 2026: `ministral-14b-latest` works
+and calls tools; `mistral-small` and `mistral-medium` answer 429 to everything
+and are tier-locked rather than bursting, so they are deliberately not in the
+chain. `npm run test:failover` proves the offline parts and then spends a few
+hundred real tokens proving a tool loop completes on the fallback.
 
 ## Ranked backlog
 
@@ -87,23 +115,47 @@ grounding there is no reason to switch.
    month, must-dos and currency, so the two entries came from differently
    worded asks.
 
-3. **No test covers the traveller UI flow.** Every bug in the last stretch —
-   stale verified prices, duplicate landmarks, the budget in the wrong currency,
-   the missing link to the confirm step — was found by clicking, not by a suite.
-   A Playwright pass over plan -> proposal -> accept -> confirm would have caught
-   all four.
-
-4. **The demo needs two trips.** Switzerland shows planning; Amalfi shows
+3. **The demo needs two trips.** Switzerland shows planning; Amalfi shows
    disruption and re-planning, because it has seeded availability and spare
    alternatives. One trip doing both is downstream of item 1.
 
-5. **Invented places.** The planner prompt now names this as the worst thing it
+4. **Invented places.** The planner prompt now names this as the worst thing it
    can produce and lists real examples, after it emitted a "Schweizer Schokolade
    Factory Tour" in Bern. Hardened, not eliminated. Verification is the only real
    defence and see item 2.
 
 
 ## Closed since this was written
+
+- **Nothing covered the screens, so every recent bug was found by clicking.**
+  `npm run test:screens` now drives real HTTP against the dev server as a
+  signed-in traveler, operator and guide: the middleware, RLS, the server
+  components and the rendered HTML. It deliberately does not script a browser —
+  the failure worth guarding is "the primary action vanished from the page",
+  and that is visible in the markup. It immediately found three things that had
+  passed everything in `test:all`: a `V` monogram the rename missed, sitting
+  next to the word WAYPOINT on the first screen anyone sees; the splash overlay
+  server-rendered on top of every page and removed only by a client effect; and
+  the operator's booked value disagreeing with the traveler's own total.
+
+- **The operator's board reported budgets and called them bookings.**
+  `operatorTotals` and `getOperatorMoney` summed `trips.budget` on a comment
+  claiming it matched the itinerary "to within rounding". The seeded trip is
+  EUR 4,500 of budget against EUR 2,770 of itinerary, so the board overstated
+  booked value and outstanding by 62% — next to a traveler's page, in the same
+  demo, saying something different about the same trip. Both now sum live
+  itinerary rows via `getTripCosts`, which applies the same definition of
+  "live" as `summarize` does.
+
+- **The splash could strand itself over a live itinerary.** `ConstellationLoader`
+  opened `visible = true` everywhere and relied on an effect to hide it on app
+  routes, so the server-rendered HTML of every page contained a full-screen
+  opaque overlay. A cold compile, a slow device or a backgrounded tab delays
+  passive effects, and every one of those put a black rectangle over somebody's
+  trip. It is now seeded from `usePathname` during server rendering, so the
+  overlay is never in the HTML of a page it does not belong on, and it carries
+  a CSS-animation failsafe — run by the compositor, not the main thread — so a
+  stalled thread cannot keep it there either.
 
 - **`npm run test:apply`'s 2 failures were dirty seed state, not code.** After
   `npm run db:seed` the suite passes in full, every time. The note here said
@@ -164,6 +216,8 @@ grounding there is no reason to switch.
     npm run test:lifecycle   # the eleven stages, payments, closing out, reviews
     npm run test:assignment  # the trip reaches operator and guide, via real RLS
     npm run test:rls
+    npm run test:screens     # every screen renders, for the right person (needs dev)
+    npm run test:failover    # the agents survive Groq running out of budget
     npm run research:warm -- "<prompt>"   # offline price verification, minutes
 
 Demo accounts are `waypoint-demo-2026`. **Sign in, never Create account** — signing

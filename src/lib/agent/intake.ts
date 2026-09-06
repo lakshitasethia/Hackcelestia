@@ -2,7 +2,8 @@ import "server-only";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getInterestTags } from "@/lib/db/queries";
-import { CHAT_MODEL, groqClient, withRateLimitRetry } from "./runtime";
+import { CHAT_MODEL, resolveModel, withRateLimitRetry } from "./runtime";
+import { activeProvider, clientFor } from "./providers";
 import { TRIP_TZ } from "@/lib/format";
 import type { LodgingTier } from "@/lib/db/types";
 
@@ -99,11 +100,13 @@ export async function extractTripSpec(
   const runId = (run as { id: string } | null)?.id ?? null;
 
   try {
-    const groq = groqClient();
-
-    const completion = await withRateLimitRetry(() =>
-      groq.chat.completions.create({
-        model: CHAT_MODEL,
+    const completion = await withRateLimitRetry(() => {
+      // Resolved per attempt so a mid-call failover is picked up. Intake is on
+      // the demo path — /plan calls it before anything else exists — so it is
+      // the worst single call in the product to lose to a spent budget.
+      const provider = activeProvider();
+      return clientFor(provider).chat.completions.create({
+        model: resolveModel(provider, CHAT_MODEL),
         // Extraction is not a judgement call: the same paragraph should give the
         // same spec twice.
         temperature: 0,
@@ -178,8 +181,12 @@ preference, and null is the right answer when they did not mention a room.`,
           },
           { role: "user", content: prose },
         ],
-      })
-    );
+        // gpt-oss's reasoning knob; Mistral rejects it outright.
+        ...(provider.drop.includes("reasoning_effort")
+          ? { reasoning_effort: undefined }
+          : {}),
+      });
+    });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
 

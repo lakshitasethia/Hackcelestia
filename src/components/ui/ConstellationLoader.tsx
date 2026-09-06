@@ -12,7 +12,22 @@ export default function ConstellationLoader() {
   const pathname = usePathname();
   const isLandingPage = pathname === "/";
 
-  const [visible, setVisible] = useState(true);
+  /**
+   * Seeded from the route rather than starting `true` and correcting itself.
+   *
+   * This used to open `true` everywhere and rely on the effect below to hide it
+   * on app routes — which means the *server-rendered HTML of every page*
+   * contained a full-screen opaque overlay, and the only thing that ever took
+   * it away was a client effect. Hydration is not a guarantee: a cold dev
+   * compile, a slow device, a stalled main thread or a backgrounded tab all
+   * delay passive effects, and every one of those showed a black rectangle over
+   * a traveler's live itinerary until React caught up.
+   *
+   * `usePathname` is available during server rendering in a client component,
+   * so deciding here means the overlay is never in the HTML of a page it does
+   * not belong on, and no amount of JavaScript going wrong can put it there.
+   */
+  const [visible, setVisible] = useState(isLandingPage);
   const [phaseText, setPhaseText] = useState("CHARTING YOUR COURSE");
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -157,7 +172,7 @@ export default function ConstellationLoader() {
       // `print:hidden` because this is a full-screen fixed overlay, and a
       // printed page has no concept of a splash that fades: it renders as a
       // dark rectangle over the first sheet of anything anyone prints.
-      className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-umber-900 text-tan-500 select-none overflow-hidden print:hidden"
+      className="loader-failsafe fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-umber-900 text-tan-500 select-none overflow-hidden print:hidden"
     >
       {/* Background Starfield */}
       <div className="absolute inset-0 pointer-events-none opacity-60">
