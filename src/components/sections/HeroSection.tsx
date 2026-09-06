@@ -144,7 +144,7 @@ export default function HeroSection() {
                 <span className="w-3 h-3 rounded-full bg-fg border border-line" />
                 <span className="w-3 h-3 rounded-full bg-fg border border-line" />
                 <span className="ml-3 font-sans text-xs font-bold uppercase tracking-wider text-fg hidden sm:inline">
-                  WAYPOINT — Dynamic Itinerary Studio
+                  VOYAGE — Dynamic Itinerary Studio
                 </span>
               </div>
               <div className="flex items-center gap-2">

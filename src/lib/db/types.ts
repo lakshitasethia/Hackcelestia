@@ -1,5 +1,5 @@
 /**
- * Domain types for the Waypoint schema.
+ * Domain types for the Voyage schema.
  *
  * Row shapes and the status/type unions are derived from `generated.ts`, which
  * is read straight off the live database — so they cannot drift from Postgres.

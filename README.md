@@ -1,10 +1,10 @@
-# Waypoint
+# Voyage
 
 **Personalized dynamic tour planning and tour operations.** HackCelestia PS-7.
 
 A tour operator's week does not fall apart at the planning stage. It falls apart
 at 07:40 on the second morning, when the skipper calls to say the swell is too
-high, and four other bookings quietly depend on that boat. Waypoint is built
+high, and four other bookings quietly depend on that boat. Voyage is built
 around that moment: an itinerary modelled as a dependency graph, a deterministic
 engine that computes exactly what a break costs, and an agent that proposes ways
 out for a human to accept.
@@ -355,7 +355,7 @@ doing the filtering.
 | Operator | `ops@costiera-dmc.example` | The board, every group and vendor |
 | Coordinator | `marco@costiera-dmc.example` | The run sheet for her group |
 
-All three use `waypoint-demo-2026` (override with `DEMO_PASSWORD`). They are
+All three use `voyage-demo-2026` (override with `DEMO_PASSWORD`). They are
 recreated on every re-seed, so a password changed in the dashboard is undone
 rather than remembered.
 

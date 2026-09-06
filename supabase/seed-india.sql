@@ -1,4 +1,4 @@
--- Waypoint — North India catalogue.
+-- Voyage — North India catalogue.
 --
 -- Seeded ALONGSIDE the Amalfi rows, not instead of them. The disruption demo
 -- targets fixed Amalfi UUIDs (19000000-…) and every re-planner test asserts

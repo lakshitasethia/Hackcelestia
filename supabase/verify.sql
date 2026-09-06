@@ -1,4 +1,4 @@
--- Waypoint — schema and seed verification.
+-- Voyage — schema and seed verification.
 --
 --   node scripts/sql.mjs supabase/verify.sql
 --

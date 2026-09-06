@@ -1,7 +1,7 @@
 # Build execution — what happens between now and the finale
 
 Written 6 Sep 2026, at the end of the session that closed the remaining PS-7
-gaps and renamed the project to Waypoint.
+gaps and renamed the project to Voyage.
 
 This is the **execution plan**: what to do, in what order, and by when.
 It deliberately does not repeat what is already written down elsewhere:
@@ -11,13 +11,13 @@ It deliberately does not repeat what is already written down elsewhere:
 | What the product is and how it is built | `README.md` |
 | Constraints that cost a day to rediscover, and the ranked backlog | `NEXT.md` |
 | How to run the three-browser demo | `DEMO.md` |
-| Why the repo is called Waypoint and what the password is now | `NEXT.md`, and the memory note |
+| Why the repo is called Voyage and what the password is now | `NEXT.md`, and the memory note |
 
 ---
 
 ## Restore context in sixty seconds
 
-Waypoint is a personalized dynamic tour planning and operations platform, built
+Voyage is a personalized dynamic tour planning and operations platform, built
 for **HackCelestial 3.0, PS-7** (Tech Alegria, Pillai University). Three people
 see the same trip — traveler, operator, coordinator — and an itinerary is a
 **DAG, not a list**, so "identify the impact of a change" is a graph traversal
@@ -35,7 +35,7 @@ Anything else means the database drifted, not that the code broke — re-seed
 before you read a diff. (That mistake already cost one session: `test:apply`'s
 two "pre-existing, never investigated" failures were dirty seed state.)
 
-Demo accounts are all password **`waypoint-demo-2026`**, and you must **sign in,
+Demo accounts are all password **`voyage-demo-2026`**, and you must **sign in,
 never Create account** — signing up over a seeded operator email demotes it to a
 traveller and the guide's run sheet silently empties.
 

@@ -52,7 +52,7 @@ Visual system borrows from:
 
 **Layout**: logo left, nav links center-left or center, CTA buttons right. Transparent background over the hero, transitions to solid warm-white background with a bottom border once user scrolls past hero (~80px).
 
-**Left**: Logo/wordmark (product name — placeholder: "WAYPOINT" or similar; treat as a text logo for now, styled like Encrova's stacked wordmark with a small tagline underneath, e.g. "PERSONALIZED TOUR PLANNING")
+**Left**: Logo/wordmark (product name — placeholder: "VOYAGE" or similar; treat as a text logo for now, styled like Encrova's stacked wordmark with a small tagline underneath, e.g. "PERSONALIZED TOUR PLANNING")
 
 **Center nav links**:
 - Discover (destinations/experiences)

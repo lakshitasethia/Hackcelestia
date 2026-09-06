@@ -1,4 +1,4 @@
--- Waypoint — seed data (Phase 2, Day 1)
+-- Voyage — seed data (Phase 2, Day 1)
 --
 -- One operator, one Amalfi Coast group of two, five days. Dates are computed
 -- from current_date so the trip is always "starting today" whenever this runs —

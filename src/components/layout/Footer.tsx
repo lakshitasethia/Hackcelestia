@@ -46,13 +46,13 @@ export default function Footer() {
           <div className="md:col-span-5 flex flex-col justify-between">
             <div>
               {/* Stacked Wordmark */}
-              <a href={isHome ? "#top" : "/"} aria-label={isHome ? "WAYPOINT — back to top" : "WAYPOINT — home"} className="flex items-center gap-3 group mb-4">
+              <a href={isHome ? "#top" : "/"} aria-label={isHome ? "VOYAGE — back to top" : "VOYAGE — home"} className="flex items-center gap-3 group mb-4">
                 <div className="w-10 h-10 border border-line bg-fg text-bg flex items-center justify-center font-display font-black text-xl">
-                  W
+                  V
                 </div>
                 <div className="flex flex-col">
                   <span className="font-display font-extrabold text-2xl tracking-tight text-fg">
-                    WAYPOINT
+                    VOYAGE
                   </span>
                   <span className="font-sans text-xs uppercase tracking-[0.25em] font-semibold text-accent">
                     Personalized Tour Planning
@@ -192,7 +192,7 @@ export default function Footer() {
         {/* Bottom Bar */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 font-sans text-xs text-muted">
           <div className="flex items-center gap-2">
-            <span>© 2026 WAYPOINT Inc. All rights reserved.</span>
+            <span>© 2026 VOYAGE Inc. All rights reserved.</span>
           </div>
 
         </div>

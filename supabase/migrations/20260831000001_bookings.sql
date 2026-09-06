@@ -1,4 +1,4 @@
--- Waypoint — make bookings and availability follow the itinerary (Phase 2, Day 7)
+-- Voyage — make bookings and availability follow the itinerary (Phase 2, Day 7)
 --
 -- Accepting a re-plan used to change `itinerary_items` and nothing else. The
 -- boat was marked `replaced`, but its booking stayed `confirmed` and its slot

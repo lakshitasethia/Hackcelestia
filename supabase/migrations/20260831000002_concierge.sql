@@ -1,4 +1,4 @@
--- Waypoint — the concierge (Phase 2, Day 7)
+-- Voyage — the concierge (Phase 2, Day 7)
 --
 -- A traveler asking "add a wine tasting on day three" wants the same thing an
 -- operator wants after a storm: a plan they can look at before it is real. The

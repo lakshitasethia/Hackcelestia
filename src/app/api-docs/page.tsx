@@ -4,7 +4,7 @@ import ContentPage, { Section, List } from "@/components/layout/ContentPage";
 export const metadata: Metadata = {
   title: "API Documentation",
   description:
-    "The Waypoint operator API — authentication, inventory and availability, booking, and disruption webhooks. Currently in private preview.",
+    "The Voyage operator API — authentication, inventory and availability, booking, and disruption webhooks. Currently in private preview.",
 };
 
 /** Small monospace block for request/response examples. */
@@ -21,7 +21,7 @@ export default function ApiPage() {
     <ContentPage
       eyebrow="API Documentation"
       title="Put your inventory on the graph."
-      intro="The operator API is how tour operators, DMCs, and transport providers expose live inventory to Waypoint and receive bookings back. It is a REST API over HTTPS with JSON payloads."
+      intro="The operator API is how tour operators, DMCs, and transport providers expose live inventory to Voyage and receive bookings back. It is a REST API over HTTPS with JSON payloads."
       updated="23 Aug 2026"
     >
       <Section number="00" heading="Private preview">
@@ -35,10 +35,10 @@ export default function ApiPage() {
           To request access, get in touch through the operator section of the
           home page or email{" "}
           <a
-            href="mailto:api@waypoint.travel"
+            href="mailto:api@voyage.travel"
             className="text-fg underline underline-offset-4 hover:text-accent transition-colors"
           >
-            api@waypoint.travel
+            api@voyage.travel
           </a>
           .
         </p>
@@ -50,12 +50,12 @@ export default function ApiPage() {
           Tokens are issued per environment — sandbox inventory never reaches
           live travelers.
         </p>
-        <Code>{`curl https://api.waypoint.travel/v1/products \\
-  -H "Authorization: Bearer $WAYPOINT_API_KEY" \\
-  -H "Waypoint-Version: 2026-08-01"`}</Code>
+        <Code>{`curl https://api.voyage.travel/v1/products \\
+  -H "Authorization: Bearer $VOYAGE_API_KEY" \\
+  -H "Voyage-Version: 2026-08-01"`}</Code>
         <p>
           Pin the API version with the{" "}
-          <code className="text-fg">Waypoint-Version</code> header. Requests
+          <code className="text-fg">Voyage-Version</code> header. Requests
           without it resolve to the version current when your key was issued.
         </p>
       </Section>
@@ -94,7 +94,7 @@ export default function ApiPage() {
 
       <Section number="03" heading="Bookings">
         <p>
-          Bookings are two-phase: Waypoint holds capacity while a traveler
+          Bookings are two-phase: Voyage holds capacity while a traveler
           completes checkout, then confirms or releases it. Holds expire
           automatically, so a dropped checkout never strands your inventory.
         </p>
@@ -127,7 +127,7 @@ export default function ApiPage() {
           is delayed into or out of one of your slots, we tell you — and when you
           cannot deliver, you tell us, and the itinerary re-solves around it.
         </p>
-        <Code>{`POST https://your-endpoint.example/waypoint
+        <Code>{`POST https://your-endpoint.example/voyage
 
 {
   "type": "itinerary.disrupted",
@@ -139,7 +139,7 @@ export default function ApiPage() {
 }`}</Code>
         <p>
           Webhooks are signed with an HMAC-SHA256 signature in the{" "}
-          <code className="text-fg">Waypoint-Signature</code> header. Verify it
+          <code className="text-fg">Voyage-Signature</code> header. Verify it
           before acting on the payload. Delivery retries with exponential backoff
           for 24 hours.
         </p>

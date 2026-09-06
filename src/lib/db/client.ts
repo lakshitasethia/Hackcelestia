@@ -13,7 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * Outside a request there is no cookie and no `auth.uid()`, so the same code
  * would return empty lists rather than an error — the failure mode that makes
  * RLS bugs expensive to find. The test scripts genuinely need to read as
- * nobody, so they opt in explicitly with WAYPOINT_SERVICE_ROLE=1. Anything else
+ * nobody, so they opt in explicitly with VOYAGE_SERVICE_ROLE=1. Anything else
  * calling from outside a request gets a thrown error naming the problem
  * instead of silence.
  */
@@ -25,7 +25,7 @@ export async function readClient() {
    * where the test scripts live. Short-circuiting here means a script that has
    * opted into the service role never loads the module that cannot load.
    */
-  if (process.env.WAYPOINT_SERVICE_ROLE === "1") return createAdminClient();
+  if (process.env.VOYAGE_SERVICE_ROLE === "1") return createAdminClient();
 
   /**
    * The stage escape hatch, and it has to be honoured *here* as well as in the
@@ -65,7 +65,7 @@ export async function readClient() {
     throw new Error(
       "readClient() was called outside a request, where there is no session " +
         "for RLS to key off. A script that means to read as the service role " +
-        "must set WAYPOINT_SERVICE_ROLE=1."
+        "must set VOYAGE_SERVICE_ROLE=1."
     );
   }
 }

@@ -32,8 +32,8 @@ export const viewport = {
   initialScale: 1,
 };
 
-const SITE_NAME = "WAYPOINT";
-const TITLE = "WAYPOINT — Personalized Dynamic Tour Planning Platform";
+const SITE_NAME = "VOYAGE";
+const TITLE = "VOYAGE — Personalized Dynamic Tour Planning Platform";
 const DESCRIPTION =
   "Build your custom itinerary from real hotels, transport and guides — priced live at supplier rates, and re-routed automatically when weather or delays hit mid-trip.";
 
@@ -60,7 +60,7 @@ export const metadata: Metadata = {
     "real-time travel pricing",
     "adaptive itinerary",
   ],
-  authors: [{ name: "Waypoint Team" }],
+  authors: [{ name: "Voyage Team" }],
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",

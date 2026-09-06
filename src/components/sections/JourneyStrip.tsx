@@ -27,7 +27,7 @@ const steps = [
     icon: CalendarRange,
     title: "Plan",
     desc: "Build day-by-day itineraries, swap hotels, and reorder activities.",
-    detail: "Drag and drop schedule blocks with automated transit time validation between waypoints.",
+    detail: "Drag and drop schedule blocks with automated transit time validation between voyages.",
     tag: "Dynamic Builder",
   },
   {
@@ -147,7 +147,7 @@ export default function JourneyStrip() {
               From first spark to mid-trip adaptation.
             </h2>
             <p className="mt-6 text-body-lg text-muted max-w-2xl">
-              Unlike fixed agency packages that lock you into rigid templates, Waypoint
+              Unlike fixed agency packages that lock you into rigid templates, Voyage
               treats your trip as an interconnected, living itinerary constellation
               that responds in real time.
             </p>

@@ -1,11 +1,11 @@
-# Hero Image Brief — WAYPOINT cinematic opening shot
+# Hero Image Brief — VOYAGE cinematic opening shot
 
 Copy everything below the line into Gemini.
 
 ---
 
 You are generating **one** photograph for the opening shot of a luxury travel
-platform called **WAYPOINT**. The site's design, CSS, and layout are already
+platform called **VOYAGE**. The site's design, CSS, and layout are already
 finished and approved. Your job is **only** to produce this one image file.
 
 ## HARD CONSTRAINTS — READ FIRST

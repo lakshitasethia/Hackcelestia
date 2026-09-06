@@ -35,7 +35,7 @@ const TRIP_ID = "7a000000-0000-4000-a000-000000000001";
  * database with no real data behind them, and three passwords to mistype on
  * stage is three chances to lose ninety seconds.
  */
-export const DEMO_PASSWORD = process.env.DEMO_PASSWORD?.trim() || "waypoint-demo-2026";
+export const DEMO_PASSWORD = process.env.DEMO_PASSWORD?.trim() || "voyage-demo-2026";
 
 /** Emails match what the seed already wrote into the trip's contact fields and
  *  the operator's contact, so the two halves of the demo agree. */

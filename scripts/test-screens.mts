@@ -28,7 +28,7 @@ for (const l of fs.readFileSync(".env.local", "utf8").split("\n")) {
 import { createServerClient } from "@supabase/ssr";
 
 const BASE = process.env.SCREENS_BASE_URL ?? "http://localhost:3000";
-const PASSWORD = process.env.DEMO_PASSWORD ?? "waypoint-demo-2026";
+const PASSWORD = process.env.DEMO_PASSWORD ?? "voyage-demo-2026";
 const TRIP = "7a000000-0000-4000-a000-000000000001";
 
 let failures = 0;
@@ -111,15 +111,16 @@ const landing = await page(anon, "/");
 check(landing.status === 200, "the pitch stays open to everyone — a judge should reach it without an account");
 
 /**
- * The rename from Voyage left a "V" monogram sitting next to the word WAYPOINT
- * on the login screen — the first thing a judge, or anyone following a shared
- * link, ever sees. Cheap to check, embarrassing to miss twice.
+ * A rename leaves a monogram behind. It happened once — a "V" sitting next to
+ * the word WAYPOINT on the login screen, the first thing a judge or anyone
+ * following a shared link ever sees — so it is pinned in both directions now.
+ * Cheap to check, embarrassing to miss twice.
  */
 const login = await page(anon, "/login");
-check(!/>\s*V\s*</.test(login.html),
-  "the login page carries no leftover V monogram from the rename");
-check(!has(login.html, "voyage"),
-  "and nothing anywhere still calls the product Voyage");
+check(!/>\s*W\s*</.test(login.html),
+  "the login page carries no leftover W monogram from the rename");
+check(!has(login.html, "waypoint"),
+  "and nothing anywhere still calls the product Waypoint");
 
 console.log("\n\x1b[1m2. Discover\x1b[0m");
 

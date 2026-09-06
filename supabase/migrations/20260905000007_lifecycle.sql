@@ -1,4 +1,4 @@
--- Waypoint — the rest of the lifecycle the brief prints.
+-- Voyage — the rest of the lifecycle the brief prints.
 --
 -- PS-7 draws the journey as
 --

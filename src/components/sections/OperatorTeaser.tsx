@@ -43,7 +43,7 @@ export default function OperatorTeaser() {
             <span className="text-accent">We handle the operations.</span>
           </h2>
           <p className="mt-4 text-base sm:text-lg text-muted leading-relaxed font-medium">
-            Waypoint isn’t just for travelers. For destination management companies (DMCs) and tour operators, our back-office OS turns chaotic WhatsApp threads and spreadsheet hell into an automated dynamic operations center.
+            Voyage isn’t just for travelers. For destination management companies (DMCs) and tour operators, our back-office OS turns chaotic WhatsApp threads and spreadsheet hell into an automated dynamic operations center.
           </p>
         </div>
 
@@ -87,7 +87,7 @@ export default function OperatorTeaser() {
                 Bespoke Partner Integrations & White-label Engine
               </h4>
               <p className="text-xs text-muted font-sans mt-0.5">
-                Join 140+ tour operators currently modernizing on the Waypoint API.
+                Join 140+ tour operators currently modernizing on the Voyage API.
               </p>
             </div>
           </div>

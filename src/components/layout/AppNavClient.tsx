@@ -84,10 +84,10 @@ export default function AppNavClient({
       <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 h-16 flex items-center justify-between gap-6">
         <Link href="/app" className="flex items-center gap-3 group shrink-0">
           <div className="w-8 h-8 border border-line bg-fg text-bg flex items-center justify-center font-display font-black">
-            W
+            V
           </div>
           <span className="font-display font-extrabold text-lg tracking-tight text-fg hidden sm:block">
-            WAYPOINT
+            VOYAGE
           </span>
         </Link>
 

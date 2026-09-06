@@ -4,7 +4,7 @@ import ContentPage, { Section, List } from "@/components/layout/ContentPage";
 export const metadata: Metadata = {
   title: "Traveler Security",
   description:
-    "How Waypoint protects traveler data and bookings — encryption, access control, payment handling, supplier vetting, and how to report a vulnerability.",
+    "How Voyage protects traveler data and bookings — encryption, access control, payment handling, supplier vetting, and how to report a vulnerability.",
 };
 
 export default function SecurityPage() {
@@ -17,7 +17,7 @@ export default function SecurityPage() {
     >
       <Section number="01" heading="Data in transit and at rest">
         <p>
-          All traffic to Waypoint runs over TLS 1.3. Traveler records, itinerary
+          All traffic to Voyage runs over TLS 1.3. Traveler records, itinerary
           data, and document details are encrypted at rest with AES-256, and
           encryption keys are managed separately from the systems that read
           them.
@@ -27,7 +27,7 @@ export default function SecurityPage() {
       <Section number="02" heading="Payment handling">
         <p>
           Card details are captured by a PCI-DSS compliant processor and never
-          touch Waypoint servers. We store a token that lets us charge or refund a
+          touch Voyage servers. We store a token that lets us charge or refund a
           booking; we cannot read your card number, and neither can our
           suppliers.
         </p>
@@ -74,10 +74,10 @@ export default function SecurityPage() {
           If you find a security issue, tell us before you tell anyone else and
           we will work it through with you. Send details to{" "}
           <a
-            href="mailto:security@waypoint.travel"
+            href="mailto:security@voyage.travel"
             className="text-fg underline underline-offset-4 hover:text-accent transition-colors"
           >
-            security@waypoint.travel
+            security@voyage.travel
           </a>
           . We acknowledge reports within two business days.
         </p>

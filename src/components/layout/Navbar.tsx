@@ -94,7 +94,7 @@ export default function Navbar({ viewer = null }: { viewer?: NavViewer }) {
           {/* Logo / Wordmark */}
           <a
             href={homeHref}
-            aria-label={isHome ? "WAYPOINT — back to top" : "WAYPOINT — home"}
+            aria-label={isHome ? "VOYAGE — back to top" : "VOYAGE — home"}
             className="flex items-center gap-3 group focus:outline-none"
           >
             <div
@@ -104,7 +104,7 @@ export default function Navbar({ viewer = null }: { viewer?: NavViewer }) {
  : "bg-surface text-fg"
  }`}
             >
-              W
+              V
             </div>
             <div className="flex flex-col">
               <span
@@ -112,7 +112,7 @@ export default function Navbar({ viewer = null }: { viewer?: NavViewer }) {
  isScrolled ? "text-fg" : "text-fg"
  }`}
               >
-                WAYPOINT
+                VOYAGE
               </span>
               <span
                 className={`font-sans text-xs uppercase tracking-[0.25em] font-semibold mt-0.5 transition-colors ${

@@ -4,7 +4,7 @@ import ContentPage, { Section, List } from "@/components/layout/ContentPage";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "What Waypoint collects when you plan a trip, why each piece is needed, who it is shared with, and the control you keep over it.",
+    "What Voyage collects when you plan a trip, why each piece is needed, who it is shared with, and the control you keep over it.",
 };
 
 export default function PrivacyPage() {
@@ -17,7 +17,7 @@ export default function PrivacyPage() {
     >
       <Section number="01" heading="What we collect">
         <p>
-          Waypoint collects three kinds of information, and nothing beyond what a
+          Voyage collects three kinds of information, and nothing beyond what a
           booking actually requires:
         </p>
         <List
@@ -42,7 +42,7 @@ export default function PrivacyPage() {
         />
         <p>
           Payment card details are handled by our payment processor and are never
-          stored on Waypoint servers.
+          stored on Voyage servers.
         </p>
       </Section>
 
@@ -50,7 +50,7 @@ export default function PrivacyPage() {
         <p>
           Trip and traveler details exist to place and maintain your bookings —
           including the adaptive re-routing the platform is built around. When a
-          delay or cancellation hits, Waypoint needs your live itinerary and
+          delay or cancellation hits, Voyage needs your live itinerary and
           contact details to find an alternative and confirm it with the
           supplier on your behalf.
         </p>
@@ -62,7 +62,7 @@ export default function PrivacyPage() {
 
       <Section number="03" heading="Who it is shared with">
         <p>
-          Waypoint is a direct-to-supplier platform, so your details reach the
+          Voyage is a direct-to-supplier platform, so your details reach the
           parties who actually deliver the trip and no one else:
         </p>
         <List
@@ -98,10 +98,10 @@ export default function PrivacyPage() {
         <p>
           Requests go to{" "}
           <a
-            href="mailto:privacy@waypoint.travel"
+            href="mailto:privacy@voyage.travel"
             className="text-fg underline underline-offset-4 hover:text-accent transition-colors"
           >
-            privacy@waypoint.travel
+            privacy@voyage.travel
           </a>{" "}
           and are answered within 30 days.
         </p>

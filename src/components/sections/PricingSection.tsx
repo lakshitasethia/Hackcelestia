@@ -23,7 +23,7 @@ export default function PricingSection() {
       highlight: false,
     },
     {
-      name: "Waypoint Sentinel Plus",
+      name: "Voyage Sentinel Plus",
       eyebrow: "FOR FREQUENT TRAVELERS",
       price: "$29",
       period: "per trip",

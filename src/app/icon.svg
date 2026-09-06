@@ -1,8 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <title>Waypoint</title>
-  <!-- Mark matches the site logo: tan field, dark waypoint pin. Drawn rather
-       than set as a glyph — a "W" at 16px is four strokes in a space with room
-       for two, and reads as noise in a browser tab. A pin does not. -->
+  <title>Voyage</title>
+  <!-- Mark matches the site logo: tan field, dark map pin. Drawn rather than
+       set as a glyph — a single letter at 16px carries none of the wordmark's
+       weight and reads as noise in a browser tab. A pin does not, and it says
+       the same thing the name does. -->
   <rect width="64" height="64" fill="#A89474"/>
   <path
     d="M32 13c-7.18 0-13 5.82-13 13 0 9.75 13 25 13 25s13-15.25 13-25c0-7.18-5.82-13-13-13Zm0 17.8a4.8 4.8 0 1 1 0-9.6 4.8 4.8 0 0 1 0 9.6Z"

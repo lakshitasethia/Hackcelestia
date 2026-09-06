@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Sign in",
   description:
-    "Sign in to Waypoint — the itinerary, the operations board and the field run sheet, on one trip.",
+    "Sign in to Voyage — the itinerary, the operations board and the field run sheet, on one trip.",
   robots: { index: false, follow: false },
 };
 
@@ -44,13 +44,14 @@ export default async function LoginPage({
       <header className="border-b border-line">
         <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 group">
-            {/* W, not V. This monogram was missed by the rename from Voyage and
-                sat next to the word WAYPOINT on the first screen anyone sees. */}
+            {/* V, and it has to stay in step with the wordmark beside it: a
+                monogram that disagrees with the name is the first thing anyone
+                sees on a shared link. `npm run test:screens` asserts both. */}
             <div className="w-8 h-8 border border-line bg-fg text-bg flex items-center justify-center font-display font-black">
-              W
+              V
             </div>
             <span className="font-display font-extrabold text-lg tracking-tight text-fg">
-              WAYPOINT
+              VOYAGE
             </span>
           </Link>
           <Link
@@ -114,7 +115,7 @@ export default async function LoginPage({
 
       <footer className="border-t border-line">
         <div className="max-w-[110rem] mx-auto px-5 sm:px-8 lg:px-12 py-6 flex flex-wrap gap-x-8 gap-y-2 font-sans text-xs uppercase tracking-wider text-muted">
-          <span>Waypoint — HackCelestia PS-7</span>
+          <span>Voyage — HackCelestia PS-7</span>
           <Link href="/privacy" className="hover:text-accent transition-colors">
             Privacy
           </Link>

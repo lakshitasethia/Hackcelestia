@@ -8,7 +8,7 @@
 Written across two sessions: the one that added web research, the propose/confirm
 gate and the PDF export, and the one that closed the remaining PS-7 gaps
 (accommodation preferences, comparing alternatives, payments, Complete and
-Review) and renamed the project to Waypoint. It exists so the next session does
+Review) and renamed the project to Voyage. It exists so the next session does
 not have to rediscover things that cost real time and tokens to learn.
 
 ## The shape of the thing
@@ -88,6 +88,36 @@ and are tier-locked rather than bursting, so they are deliberately not in the
 chain. `npm run test:failover` proves the offline parts and then spends a few
 hundred real tokens proving a tool loop completes on the fallback.
 
+## The demo database is Amalfi only, on purpose
+
+As of 6 Sep 2026 the database holds **one trip** — Ananya Sharma's Amalfi Coast
+group — and **one catalogue**, Positano's. The north India catalogue (Delhi,
+Manali, Auli, Chopta, Rishikesh, Amritsar, Haridwar, Chandigarh) and the cached
+Switzerland research were deleted, and `supabase/seed-india.sql` was taken out
+of `npm run db:seed` so a re-seed does not bring them back. The file is still in
+the repo; putting it back in that script restores everything.
+
+`scripts/purge-to-amalfi.sql` is the cut, if it has to be made again.
+
+**This knowingly breaks `npm run test:lodging`.** That suite composes
+Delhi → Rishikesh → Chopta and proves the accommodation-preference path,
+including the case where a town has no room in the bracket asked for. With no
+India catalogue it dies at `compose.ts:310` with "Nothing in the catalogue
+matches those places yet". It is the only suite affected — everything else
+passes. Two ways out when it matters: restore the India seed, or write a
+second Amalfi-area town so the composer has somewhere to fail over to. It
+cannot be ported to Positano alone, because the whole point of the test is a
+choice between towns.
+
+`/plan` itself still works. `app/plan/actions.ts` researches the destinations
+and calls `ingestResearch` *before* `planItinerary`, so a named destination is
+stocked on demand — which is exactly how the Switzerland trip in
+`npm run test:abroad` is composed, with no India rows involved. What changed is
+that every plan now pays for a research pass rather than composing instantly
+from stock, and `/explore` shows Positano and nothing else. `test:lodging`
+breaks because it calls `planItinerary` directly and skips the research step
+that would have stocked it.
+
 ## Ranked backlog
 
 1. **Catalogue depth.** The biggest single limitation. Zurich has 7 activities
@@ -134,7 +164,7 @@ hundred real tokens proving a tool loop completes on the fallback.
   the failure worth guarding is "the primary action vanished from the page",
   and that is visible in the markup. It immediately found three things that had
   passed everything in `test:all`: a `V` monogram the rename missed, sitting
-  next to the word WAYPOINT on the first screen anyone sees; the splash overlay
+  next to the word VOYAGE on the first screen anyone sees; the splash overlay
   server-rendered on top of every page and removed only by a client effect; and
   the operator's booked value disagreeing with the traveler's own total.
 
@@ -220,7 +250,7 @@ hundred real tokens proving a tool loop completes on the fallback.
     npm run test:failover    # the agents survive Groq running out of budget
     npm run research:warm -- "<prompt>"   # offline price verification, minutes
 
-Demo accounts are `waypoint-demo-2026`. **Sign in, never Create account** — signing
+Demo accounts are `voyage-demo-2026`. **Sign in, never Create account** — signing
 up over a seeded operator email demotes it to a traveller and the guide's run
 sheet silently empties. `npm run db:seed:auth` restores it.
 
