@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 430" width="960" height="430" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-label="Five agents propose; one deterministic function writes. Every proposal passes the same validator and the same apply step, behind a human button.">
+  <style>
+    .head  { fill:#171717; font-weight:700 }
+    .meta  { fill:#7a7a7a; font-size:11px; letter-spacing:.06em }
+    .body  { fill:#4a4a4a; font-size:12px }
+    .nodetx{ fill:#171717; font-size:13px; font-weight:600 }
+    .box   { fill:none; stroke:#b8b8b8; stroke-width:1.25 }
+    .edge  { stroke:#c2c2c2; stroke-width:1.5; fill:none }
+    .gate  { fill:none; stroke:#171717; stroke-width:1.75 }
+    .write { fill:none; stroke:#3f7d58; stroke-width:2 }
+    .wtx   { fill:#3f7d58 }
+    .ro    { fill:none; stroke:#b8b8b8; stroke-width:1.25; stroke-dasharray:4 3 }
+    @media (prefers-color-scheme: dark){
+      .head,.nodetx{fill:#f0ece4}.meta{fill:#8d8d8d}.body{fill:#b9b4aa}
+      .box,.edge,.ro{stroke:#4a463f}.gate{stroke:#f0ece4}
+      .write{stroke:#6cab84}.wtx{fill:#6cab84}
+    }
+  </style>
+
+  <text class="head" x="0" y="16" font-size="15">The agent proposes. A person accepts. One function writes.</text>
+  <text class="meta" x="0" y="36">FIVE AGENTS · ONE VALIDATOR · ONE WRITE PATH</text>
+
+  <!-- agents -->
+  <rect class="box" x="0" y="70" width="180" height="44" rx="3"/>
+  <text class="nodetx" x="12" y="90">Re-planner</text><text class="meta" x="12" y="106">TOOL LOOP · 5 TOOLS · TRACED</text>
+
+  <rect class="box" x="0" y="126" width="180" height="44" rx="3"/>
+  <text class="nodetx" x="12" y="146">Vela — concierge</text><text class="meta" x="12" y="162">TRAVELER · DRAFTS ONLY</text>
+
+  <rect class="box" x="0" y="182" width="180" height="44" rx="3"/>
+  <text class="nodetx" x="12" y="202">Vendor reply parser</text><text class="meta" x="12" y="218">PROSE → STRUCTURED FACT</text>
+
+  <rect class="ro" x="0" y="248" width="180" height="44" rx="3"/>
+  <text class="nodetx" x="12" y="268">Ops copilot</text><text class="meta" x="12" y="284">READ-ONLY TOOLS</text>
+
+  <rect class="ro" x="0" y="304" width="180" height="44" rx="3"/>
+  <text class="nodetx" x="12" y="324">Intake</text><text class="meta" x="12" y="340">ONE CALL · RETURNS A SPEC</text>
+
+  <!-- ops -->
+  <rect class="box" x="256" y="126" width="150" height="100" rx="3"/>
+  <text class="nodetx" x="268" y="150">Four operations</text>
+  <text class="body" x="268" y="172">drop · move</text>
+  <text class="body" x="268" y="190">replace · add</text>
+  <text class="meta" x="268" y="212">THE ONLY VOCABULARY</text>
+
+  <!-- validator -->
+  <rect class="gate" x="470" y="118" width="164" height="116" rx="3"/>
+  <text class="nodetx" x="482" y="142">validateOps</text>
+  <text class="body" x="482" y="164">invented ids rejected</text>
+  <text class="body" x="482" y="182">locked stops protected</text>
+  <text class="body" x="482" y="200">cost delta recomputed,</text>
+  <text class="body" x="482" y="216">never believed</text>
+
+  <!-- human -->
+  <rect class="gate" x="698" y="126" width="120" height="44" rx="3"/>
+  <text class="nodetx" x="710" y="146">A human</text><text class="meta" x="710" y="162">PRESSES ACCEPT</text>
+
+  <!-- apply -->
+  <rect class="write" x="698" y="196" width="240" height="86" rx="3"/>
+  <text class="nodetx wtx" x="710" y="220">applyProposal</text>
+  <text class="body" x="710" y="240">rewires edges · cancels and books</text>
+  <text class="body" x="710" y="258">moves availability atomically</text>
+  <text class="meta" x="710" y="274">ORDINARY DETERMINISTIC TYPESCRIPT</text>
+
+  <path class="edge" d="M180 92 C 218 92, 218 160, 256 160"/>
+  <path class="edge" d="M180 148 H256"/>
+  <path class="edge" d="M180 204 C 218 204, 218 186, 256 186"/>
+  <path class="edge" d="M406 176 H470"/>
+  <path class="edge" d="M634 160 C 660 160, 672 148, 698 148"/>
+  <path class="edge" d="M758 170 V196"/>
+
+  <text class="meta" x="0" y="392">THE DASHED AGENTS CANNOT WRITE ANYTHING ANYWHERE — EVERY TOOL BEHIND THEM IS A READ</text>
+  <text class="body" x="0" y="414">The worst a bad generation can do is put a bad suggestion in front of someone who declines it.</text>
+</svg>

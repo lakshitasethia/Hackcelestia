@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 300" width="960" height="300" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-label="The disruption path end to end: something breaks, the deterministic engine assesses it, the agent proposes plans, an operator accepts one, and all three screens update in place.">
+  <style>
+    .head{fill:#171717;font-weight:700}
+    .meta{fill:#7a7a7a;font-size:10.5px;letter-spacing:.06em}
+    .body{fill:#4a4a4a;font-size:11.5px}
+    .nodetx{fill:#171717;font-size:12.5px;font-weight:600}
+    .box{fill:none;stroke:#b8b8b8;stroke-width:1.25}
+    .det{fill:none;stroke:#171717;stroke-width:1.75}
+    .edge{stroke:#c2c2c2;stroke-width:1.5;fill:none}
+    .num{fill:#7a7a7a;font-size:10px;font-weight:700;letter-spacing:.1em}
+    @media (prefers-color-scheme: dark){
+      .head,.nodetx{fill:#f0ece4}.meta,.num{fill:#8d8d8d}.body{fill:#b9b4aa}
+      .box,.edge{stroke:#4a463f}.det{stroke:#f0ece4}
+    }
+  </style>
+
+  <text class="head" x="0" y="16" font-size="15">What happens between the river guide's phone call and the guide's phone updating</text>
+  <text class="meta" x="0" y="36">DETERMINISTIC WHERE IT MATTERS · GENERATED ONLY WHERE JUDGEMENT IS THE POINT</text>
+
+  <text class="num" x="0" y="76">01</text>
+  <rect class="box" x="0" y="86" width="168" height="80" rx="3"/>
+  <text class="nodetx" x="12" y="108">Something breaks</text>
+  <text class="body" x="12" y="128">a seeded scenario, or a</text>
+  <text class="body" x="12" y="145">coordinator flagging a stop</text>
+  <text class="meta" x="12" y="160">FROM THE FIELD</text>
+
+  <text class="num" x="198" y="76">02</text>
+  <rect class="det" x="198" y="86" width="180" height="80" rx="3"/>
+  <text class="nodetx" x="210" y="108">The engine assesses</text>
+  <text class="body" x="210" y="128">traverses the graph, totals</text>
+  <text class="body" x="210" y="145">exposure, finds substitutes</text>
+  <text class="meta" x="210" y="160">NO MODEL INVOLVED</text>
+
+  <text class="num" x="408" y="76">03</text>
+  <rect class="box" x="408" y="86" width="168" height="80" rx="3"/>
+  <text class="nodetx" x="420" y="108">The agent proposes</text>
+  <text class="body" x="420" y="128">reads that assessment,</text>
+  <text class="body" x="420" y="145">writes 2–3 real options</text>
+  <text class="meta" x="420" y="160">EVERY TOOL CALL TRACED</text>
+
+  <text class="num" x="606" y="76">04</text>
+  <rect class="det" x="606" y="86" width="160" height="80" rx="3"/>
+  <text class="nodetx" x="618" y="108">A person accepts</text>
+  <text class="body" x="618" y="128">applyProposal checks the</text>
+  <text class="body" x="618" y="145">whole plan, then writes</text>
+  <text class="meta" x="618" y="160">ALL OR NOTHING</text>
+
+  <text class="num" x="796" y="76">05</text>
+  <rect class="box" x="796" y="86" width="164" height="80" rx="3"/>
+  <text class="nodetx" x="808" y="108">Three screens move</text>
+  <text class="body" x="808" y="128">traveler, operator, guide</text>
+  <text class="body" x="808" y="145">— without a refresh</text>
+  <text class="meta" x="808" y="160">BROADCAST, NOT ROW DATA</text>
+
+  <path class="edge" d="M168 126 H198"/>
+  <path class="edge" d="M378 126 H408"/>
+  <path class="edge" d="M576 126 H606"/>
+  <path class="edge" d="M766 126 H796"/>
+
+  <text class="meta" x="0" y="222">A STORM RULES OUT ANYTHING WEATHER_SENSITIVE, SO A RAINED-OFF RIVER TRIP IS NEVER REPLACED WITH ANOTHER THING THE RAIN HAS ALSO STOPPED</text>
+  <text class="body" x="0" y="252" font-size="12.5">The traveler's concierge is this same path with step 01 removed: "add a massage on day four" emits the same four operations,</text>
+  <text class="body" x="0" y="272" font-size="12.5">passes the same validator, and is applied by the same function. One approval path, not one per agent.</text>
+</svg>

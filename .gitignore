@@ -9,6 +9,7 @@
 
 # next.js
 /.next/
+/.next-buildcheck/
 /out/
 next-env.d.ts
 
@@ -17,6 +18,7 @@ next-env.d.ts
 
 # misc
 .DS_Store
+**/.DS_Store
 *.pem
 
 # debug

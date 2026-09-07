@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" width="960" height="420" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-label="An itinerary as a dependency graph: killing the rafting takes the lunch, the yoga and the aarti with it, and leaves the hotel and the next morning's cab untouched.">
+  <style>
+    .ink   { fill: #6b6b6b; }
+    .head  { fill: #171717; font-weight: 700; }
+    .node  { fill: none; stroke: #b8b8b8; stroke-width: 1.25; }
+    .nodetx{ fill: #171717; font-size: 13px; font-weight: 600; }
+    .meta  { fill: #7a7a7a; font-size: 11px; letter-spacing: .06em; }
+    .edge  { stroke: #c2c2c2; stroke-width: 1.5; fill: none; }
+    .hit   { stroke: #c2593a; }
+    .hitbx { fill: none; stroke: #c2593a; stroke-width: 1.75; }
+    .hittx { fill: #c2593a; }
+    .safe  { stroke-dasharray: 4 3; }
+    .cause { fill: none; stroke: #c2593a; stroke-width: 2.25; }
+    @media (prefers-color-scheme: dark) {
+      .ink{fill:#9a9a9a}.head{fill:#f0ece4}.nodetx{fill:#f0ece4}.meta{fill:#8d8d8d}
+      .node{stroke:#4a463f}.edge{stroke:#4a463f}
+      .hit,.hitbx,.cause{stroke:#d97757}.hittx{fill:#d97757}
+    }
+  </style>
+
+  <text class="head" x="0" y="16" font-size="15">An itinerary is a graph, so "what does this break" is a traversal</text>
+  <text class="meta" x="0" y="36">ITINERARY_ITEMS.DEPENDS_ON — THE EDGE THAT MAKES BLAST_RADIUS() POSSIBLE</text>
+
+  <!-- hotel -->
+  <rect class="node" x="0" y="150" width="136" height="52" rx="3"/>
+  <text class="nodetx" x="14" y="172">Hotel, Rishikesh</text>
+  <text class="meta" x="14" y="190">DAY 1 · ₹4,200</text>
+
+  <!-- shuttle -->
+  <rect class="node" x="180" y="150" width="136" height="52" rx="3"/>
+  <text class="nodetx" x="194" y="172">Transfer to put-in</text>
+  <text class="meta" x="194" y="190">DAY 4 · 08:30</text>
+
+  <!-- rafting: the cause -->
+  <rect class="cause" x="360" y="150" width="136" height="52" rx="3"/>
+  <text class="nodetx hittx" x="374" y="172">White-water rafting</text>
+  <text class="meta" x="374" y="190">THE CAUSE · ₹1,200</text>
+
+  <!-- lunch -->
+  <rect class="hitbx" x="540" y="80" width="136" height="52" rx="3"/>
+  <text class="nodetx hittx" x="554" y="102">Riverside lunch</text>
+  <text class="meta" x="554" y="120">DEPTH 1</text>
+
+  <!-- yoga -->
+  <rect class="hitbx" x="540" y="150" width="136" height="52" rx="3"/>
+  <text class="nodetx hittx" x="554" y="172">Yoga, Parmarth</text>
+  <text class="meta" x="554" y="190">DEPTH 1</text>
+
+  <!-- aarti -->
+  <rect class="hitbx" x="720" y="115" width="136" height="52" rx="3"/>
+  <text class="nodetx hittx" x="734" y="137">Ganga aarti</text>
+  <text class="meta" x="734" y="155">DEPTH 2</text>
+
+  <!-- cab to chopta: survives -->
+  <rect class="node" x="180" y="290" width="136" height="52" rx="3"/>
+  <text class="nodetx" x="194" y="312">Cab to Chopta</text>
+  <text class="meta" x="194" y="330">DAY 5 · SURVIVES</text>
+
+  <rect class="node" x="360" y="290" width="200" height="52" rx="3"/>
+  <text class="nodetx" x="374" y="312">…the rest of the trip</text>
+  <text class="meta" x="374" y="330">UNTOUCHED</text>
+
+  <!-- edges -->
+  <path class="edge" d="M136 176 H180"/>
+  <path class="edge hit" d="M316 176 H360"/>
+  <path class="edge hit" d="M496 176 C 518 176, 518 106, 540 106"/>
+  <path class="edge hit" d="M496 176 H540"/>
+  <path class="edge hit" d="M676 106 C 698 106, 698 141, 720 141"/>
+  <path class="edge hit" d="M676 176 C 698 176, 698 141, 720 141"/>
+  <path class="edge safe" d="M68 202 V 316 H180"/>
+  <path class="edge safe" d="M316 316 H360"/>
+
+  <!-- legend -->
+  <text class="meta" x="0" y="386">SOLID = REACHED BY THE TRAVERSAL   ·   DASHED = HANGS OFF THE HOTEL, NOT THE RIVER</text>
+  <text class="ink" x="0" y="408" font-size="12.5">select * from blast_radius('…the rafting…')  →  4 items, max depth 2. The hotel does not move; neither does the next morning.</text>
+</svg>
