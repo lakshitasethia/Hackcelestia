@@ -139,7 +139,7 @@ export default async function PlanPage() {
 
             <div>
               <label className={label} htmlFor="budget">
-                Budget (EUR, optional)
+                Budget (optional)
               </label>
               <input
                 id="budget"
@@ -147,7 +147,7 @@ export default async function PlanPage() {
                 type="number"
                 min={0}
                 step={100}
-                placeholder="4500"
+                placeholder="35000"
                 className={field}
               />
             </div>

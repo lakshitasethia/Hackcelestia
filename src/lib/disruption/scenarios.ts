@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { injectDisruption } from "./engine";
+import { now } from "@/lib/format";
 import type { Disruption } from "@/lib/db/types";
 
 /**
@@ -46,7 +47,19 @@ export async function runScenario(
     .from("itinerary_items")
     .select("*, inventory(weather_sensitive)")
     .eq("trip_id", tripId)
-    .gte("starts_at", new Date().toISOString())
+    /**
+     * The application's clock, not the machine's.
+     *
+     * This was `new Date()`, which quietly broke the demo it exists for. With
+     * `DEMO_DATE` pinned a day behind the real one, every stop between the two
+     * counted as past, so the storm scanned a shorter list and picked the next
+     * weather-sensitive thing it found — the free evening aarti, a leaf with no
+     * dependants and no deposit. The operator's board then reported one item
+     * and zero exposure, which is the assessment the whole product is built to
+     * make interesting, arriving empty. Worse, it depended on the time of day
+     * the button was pressed, so it looked intermittent rather than wrong.
+     */
+    .gte("starts_at", now().toISOString())
     .neq("status", "cancelled")
     .order("starts_at");
 
@@ -71,9 +84,9 @@ export async function runScenario(
       rootItemId: target.id,
       source: "weather",
       severity: "high",
-      headline: `Storm warning — ${target.title} cannot sail`,
+      headline: `Storm warning — ${target.title} cannot run`,
       payload: {
-        condition: "Force 6 gale, 2.5m swell",
+        condition: "Heavy upstream rain, flow too high to put in",
         wind_kts: 28,
         rain_mm: 14,
       },
@@ -89,7 +102,7 @@ export async function runScenario(
       severity: "high",
       headline: `Supplier cancelled — ${target.title}`,
       payload: {
-        vendor_message: "Skipper unwell, no replacement crew available.",
+        vendor_message: "Lead guide unwell, no replacement crew available.",
       },
     });
   }

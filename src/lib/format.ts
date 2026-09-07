@@ -48,7 +48,18 @@ export function formatDateLong(iso: string, tz = TRIP_TZ): string {
   });
 }
 
-export function formatMoney(amount: number, currency = "EUR"): string {
+/**
+ * The default is the seeded demo's currency, not the schema's original one.
+ *
+ * `trips.currency` defaulted to EUR until the multi-destination migration moved
+ * it to INR, and every trip-scoped caller passes the trip's own column. What is
+ * left are the callers with no trip in scope — the operator board's schedule,
+ * the customer list, the impact assessment's exposure tiles, the copilot's
+ * brief — which took the parameter default and rendered euros next to rupee
+ * totals computed from the same rows. Two currencies for one number on one
+ * screen is worse than either being wrong.
+ */
+export function formatMoney(amount: number, currency = "INR"): string {
   return new Intl.NumberFormat("en-GB", {
     style: "currency",
     currency,

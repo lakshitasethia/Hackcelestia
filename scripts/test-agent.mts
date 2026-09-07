@@ -167,10 +167,24 @@ if (!chosen) {
   check("nothing is left flagged at risk", !after.some((i) => i.status === "at_risk"));
 
   const { penaltyIfCancelled } = summarize(after, bookings);
-  // The prepaid Rishikesh hotel, and nothing else: the rafting's deposit is
-  // spent once the stop is stood down, not still pending.
+  /**
+   * Derived, not a constant. It used to assert a flat 4200 — the prepaid
+   * Rishikesh hotel alone — which only holds when the scenario happens to break
+   * the rafting and spend its deposit. `runScenario` picks whichever
+   * weather-sensitive stop it finds, so a run that broke the aarti instead left
+   * the rafting live and legitimately still pending its 300, and a correct
+   * figure failed. What the label actually claims is that a stop which has been
+   * stood down stops contributing, so that is what is checked.
+   */
+  const liveIds = new Set(
+    after.filter((i) => i.status !== "cancelled" && i.status !== "replaced").map((i) => i.id)
+  );
+  const expectedPenalty = bookings
+    .filter((b) => (b.state === "confirmed" || b.state === "held") && liveIds.has(b.item_id))
+    .reduce((sum, b) => sum + Number(b.penalty), 0);
   check("pending penalties exclude what was already cancelled",
-    penaltyIfCancelled === 4200, `INR ${penaltyIfCancelled}`);
+    penaltyIfCancelled === expectedPenalty,
+    `INR ${penaltyIfCancelled} vs ${expectedPenalty} on live stops`);
 
   console.log("\nThis suite leaves the trip re-planned. Run `npm run db:seed` to reset.");
 }

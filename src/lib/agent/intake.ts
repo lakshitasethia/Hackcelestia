@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getInterestTags } from "@/lib/db/queries";
 import { CHAT_MODEL, resolveModel, withRateLimitRetry } from "./runtime";
 import { activeProvider, clientFor } from "./providers";
-import { TRIP_TZ } from "@/lib/format";
+import { TRIP_TZ, now } from "@/lib/format";
 import type { LodgingTier } from "@/lib/db/types";
 
 /**
@@ -85,7 +85,9 @@ export async function extractTripSpec(
 
   const supabase = createAdminClient();
   const tags = await getInterestTags();
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: TRIP_TZ });
+  // Relative dates in a prompt ("next Tuesday", "in three weeks") resolve
+  // against the day the rest of the application believes it is.
+  const today = now().toLocaleDateString("en-CA", { timeZone: TRIP_TZ });
 
   const { data: run } = await supabase
     .from("agent_runs")

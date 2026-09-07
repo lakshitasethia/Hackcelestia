@@ -11,7 +11,7 @@ import {
 import { CHAT_MODEL, runToolLoop, type ChatMessage } from "./runtime";
 import type { StepRecorder } from "./tool";
 import { buildConciergeTools, dateOfDay } from "./concierge-tools";
-import { TRIP_TZ, formatMoney, formatTime } from "@/lib/format";
+import { TRIP_TZ, formatMoney, formatTime, now } from "@/lib/format";
 import type { ItineraryItem, Trip } from "@/lib/db/types";
 
 /**
@@ -340,7 +340,14 @@ function briefFor(
   // The trip's own zone, not the module default. Vela quoting "09:00" for a
   // stop the itinerary shows at 12:30 is worse than her not knowing the time.
   const tz = trip.time_zone || TRIP_TZ;
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: tz });
+  /**
+   * The pinned demo day, when there is one. Vela is asked "what are we doing
+   * tomorrow?" more than any other question, and she answered it off the
+   * machine's clock while the run sheet, the lifecycle rail and the seed all
+   * answered off `DEMO_DATE` — so on any day those two disagreed she named the
+   * wrong day's stops, confidently, next to a screen showing the right ones.
+   */
+  const today = now().toLocaleDateString("en-CA", { timeZone: tz });
   const dayNumber = trip.starts_on
     ? Math.floor(
         (new Date(`${today}T00:00:00Z`).getTime() -

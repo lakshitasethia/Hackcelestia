@@ -10,7 +10,7 @@ import {
 } from "@/lib/db/queries";
 import { CHAT_MODEL, runToolLoop, type ChatMessage } from "./runtime";
 import { defineTool, traced, type StepRecorder } from "./tool";
-import { formatDate, formatMoney, formatTime } from "@/lib/format";
+import { formatDate, formatMoney, formatTime, now } from "@/lib/format";
 import type { ThreadMessage } from "./thread-types";
 
 /**
@@ -259,7 +259,8 @@ async function briefForConsole(): Promise<string> {
     `CONSOLE — ${totals.liveTrips} live group(s), ${totals.travellers} travellers, ` +
       `${formatMoney(totals.booked)} booked, ${totals.atRisk} stop(s) at risk.`
   );
-  lines.push(`Today is ${new Date().toISOString().slice(0, 10)}.`);
+  // The application's day, so the copilot and the board it reads agree.
+  lines.push(`Today is ${now().toISOString().slice(0, 10)}.`);
 
   lines.push("");
   lines.push("GROUPS:");
