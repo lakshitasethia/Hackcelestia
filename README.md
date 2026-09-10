@@ -15,7 +15,7 @@ human being.
 
 <br/>
 
-### **[ Experience Voyage live → ](https://REPLACE-ME.vercel.app)**
+### **[ Experience Voyage live → ](https://voyage-three-tawny.vercel.app/)**
 
 <sub>↑ replace this URL after the first deploy — it appears twice in this file</sub>
 
